@@ -19,7 +19,8 @@ impl Point {
 
     /// Linear interpolation: `self` at `t = 0`, `other` at `t = 1`.
     pub fn lerp(self, other: Self, t: f64) -> Self {
-        self + (other - self) * t
+        // Written so t = 0 gives `self` and t = 1 gives `other` exactly.
+        self * (1.0 - t) + other * t
     }
 
     pub fn distance(self, other: Self) -> f64 {

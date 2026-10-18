@@ -23,3 +23,11 @@ Append new entries; never silently change old ones. Format: `D<n> (date): decisi
 **D10 (2026-10-18): PNG and JPEG via the `image` crate with only the `png` and `jpeg` features** (MIT/Apache-2.0). Decode checks the header against limits first (side at most 32,768, at most 100,000,000 pixels). 16-bit PNGs reduce to 8-bit. JPEG output has no alpha, so it composites over white. The `codecs` crate has no workspace dependencies; file helpers are `cfg(not(wasm32))`.
 
 **D11 (2026-10-18): `cargo xtask wasm` checks every registered L0 to L5 crate for `wasm32-unknown-unknown`,** and runs in `xtask ci` and GitHub Actions.
+
+**D12 (2026-10-18): Dot coordinates live in output-frame pixels** (y down, origin top-left). Sources of other sizes are fitted to the output first, so dots are placed on the fitted images. Fit modes: `stretch` (default; each axis scaled independently), `contain` (uniform, transparent bars) and `cover` (uniform, cropped). Only `contain` reads transparent outside the source; the others repeat edge pixels. Same-size sources fit as an exact identity.
+
+**D13 (2026-10-18): One shared mesh, built from Image 1's dots; the last frame uses a mesh from Image 2's dots.** The default policy (`frame0`) triangulates once and reuses the connectivity, interpolating vertex positions. When dots move far the shared mesh can fold in the middle of the sequence, but frame 0 is Image 1 and the last frame is Image 2 exactly because the end frames use their own meshes. `per_frame` re-triangulates each interpolated frame, falling back to the shared mesh on frames where two dots coincide. Duplicate dots on either image are an error that names the image.
+
+**D14 (2026-10-18): Frame time is `i / (n - 1)`; a one-frame sequence is Image 1.** `Point::lerp` is now written `a*(1-t) + b*t` so it returns `a` at t=0 and `b` at t=1 bit-exactly.
+
+**D15 (2026-10-18): Deterministic parallel rendering.** Each mesh triangle renders into its own buffer (rayon `par_iter().collect()` keeps order); buffers merge sequentially in triangle order, so overlapping or shared-edge pixels resolve the same way on any thread count. Pixel centres count as inside a triangle with `1e-9` slack so shared edges leave no gaps; any pixel still unclaimed (folded meshes) is sampled unwarped. If the inverse map for a layer is singular, that layer is sampled unwarped in that triangle.

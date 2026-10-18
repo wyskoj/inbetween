@@ -1,0 +1,21 @@
+[package]
+name = "inbetween-render-cpu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+inbetween-doc = { path = "../doc" }
+inbetween-geom = { path = "../geom" }
+inbetween-morph = { path = "../morph" }
+inbetween-raster = { path = "../raster" }
+rayon = "1"
+
+[dev-dependencies]
+inbetween-testkit = { path = "../testkit" }
+proptest = "1"
+
+[lints]
+workspace = true

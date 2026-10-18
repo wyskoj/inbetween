@@ -15,20 +15,20 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [~] | `engine.triangulate` | Triangulate paired dots, auto-adding the 4 image corners | P0 |
-| [ ] | `engine.warp` | Per-triangle affine warp of each source toward the interpolated dot positions | P0 |
-| [ ] | `engine.dissolve` | Cross-dissolve the two warped images by the feature amount | P0 |
-| [ ] | `engine.alpha` | Full alpha pipeline: 32-bit RGBA sources in, RGBA frames out | P0 |
+| [~] | `engine.warp` | Per-triangle affine warp of each source toward the interpolated dot positions | P0 |
+| [~] | `engine.dissolve` | Cross-dissolve the two warped images by the feature amount | P0 |
+| [~] | `engine.alpha` | Full alpha pipeline: 32-bit RGBA sources in, RGBA frames out | P0 |
 | [ ] | `morph.option.dropCornerTris` | Option: discard triangles touching the 4 corners (backdrop effect on non-alpha images) | P1 |
-| [ ] | `morph.option.retriangulate` | Option: re-triangulate every intermediate frame instead of only frame 0 | P1 |
+| [~] | `morph.option.retriangulate` | Option: re-triangulate every intermediate frame instead of only frame 0 | P1 |
 | [~] | `engine.outsideDots` | Dots may sit outside the image bounds | P1 |
 
 ### Morph types (per sequence)
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `morph.type.morph` | Image 1 morphs into Image 2 (default) | P0 |
+| [~] | `morph.type.morph` | Image 1 morphs into Image 2 (default) | P0 |
 | [ ] | `morph.type.morphHold` | Morph while Image 1 never fades (partial morph using an alpha Image 2) | P1 |
-| [ ] | `morph.type.warp1` | Image 1 deforms into Image 2's shape; Image 2's colours never appear | P0 |
+| [~] | `morph.type.warp1` | Image 1 deforms into Image 2's shape; Image 2's colours never appear | P0 |
 | [ ] | `morph.type.warp2` | Image 2 deforms from Image 1's shape; Image 1's colours never appear | P1 |
 | [ ] | `morph.type.fadeOut1` | Image 1 fades to black | P1 |
 | [ ] | `morph.type.fadeIn2` | Image 2 fades in from black | P1 |

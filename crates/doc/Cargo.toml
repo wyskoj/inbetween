@@ -1,0 +1,14 @@
+[package]
+name = "inbetween-doc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+inbetween-geom = { path = "../geom" }
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true
