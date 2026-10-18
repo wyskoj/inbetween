@@ -27,8 +27,16 @@ jobs:
         run: cargo fmt --all --check
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # No GPU on the hosted runners, so Linux uses lavapipe (software Vulkan) and the GPU
+      # tests must run there. On Windows and macOS they skip when no adapter exists.
+      - name: software Vulkan (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
       - name: test
         run: cargo test --workspace
+        env:
+          INBETWEEN_REQUIRE_GPU: ${{ runner.os == 'Linux' && '1' || '0' }}
+          WGPU_BACKEND: ${{ runner.os == 'Linux' && 'vulkan' || '' }}
       - name: layers
         run: cargo xtask layers
       - name: wasm

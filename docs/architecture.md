@@ -51,3 +51,7 @@ Every crate has its own error type and returns it with `?`. Non-test code never 
 `inbetween-engine` holds `Session` (project, its file path, an image cache) and `Registry` (the `CommandSpec` list). Shells never edit a project directly: they call `registry.run(session, "export.frame", params)` with JSON parameters and get JSON back, or a `CommandError` whose message says what to change and whose `code()` is stable for scripts. `Registry::describe()` serialises every command and its parameter schema, which is what `ib commands --json` prints and what MCP will expose.
 
 `ib` (`apps/inbetween-cli`) is a thin shell: each subcommand opens a session with `project.open` and runs one or two commands. `ib run <id> --params '{...}'` reaches any command, so every feature is scriptable the day it is added.
+
+## GPU renderer (as built in M7)
+
+`inbetween-render-gpu` (L3) mirrors `render-cpu`'s shape: `GpuContext` (device and queue, shareable and cloneable) and `GpuRenderer::new(ctx, sequence, output, image1, image2)`, which uploads the sources once as `Rgba32Float` textures. `draw(t)` plans on the CPU with `morph::Planner`, uploads one vertex buffer and draws the mesh into a texture exposed by `texture()`, which a live preview can show directly; `render_t` / `render_frame` also read the frame back into a raster `Image`. It compiles for wasm32 (checked by `cargo xtask wasm`). The CPU renderer remains the oracle: see D24 for the tolerance and `crates/render-gpu/tests/matches_cpu.rs` for the scenes.

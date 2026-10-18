@@ -1,18 +1,19 @@
 //! `cargo xtask perf [--quick] [--threads N]`: time a 1920x1080 frame with 1,000 dot pairs
-//! (release build, CPU renderer, 4 worker threads unless told otherwise).
+//! in a release build, first on the CPU renderer (4 worker threads unless told otherwise),
+//! then on the GPU renderer when an adapter exists.
 
 use std::process::Command;
 
-pub fn run(args: &[String]) -> Result<(), String> {
+fn example(package: &str, example: &str, args: &[&str]) -> Result<(), String> {
     let mut cmd = Command::new("cargo");
     cmd.args([
         "run",
         "--quiet",
         "--release",
         "-p",
-        "inbetween-render-cpu",
+        package,
         "--example",
-        "perf",
+        example,
     ]);
     if !args.is_empty() {
         cmd.arg("--").args(args);
@@ -23,6 +24,22 @@ pub fn run(args: &[String]) -> Result<(), String> {
     if status.success() {
         Ok(())
     } else {
-        Err("performance budget missed (or the harness failed); see the numbers above".to_string())
+        Err(format!(
+            "`{package}` missed its performance budget (or the harness failed); see above"
+        ))
     }
+}
+
+pub fn run(args: &[String]) -> Result<(), String> {
+    let cpu_args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let gpu_args: Vec<&str> = args
+        .iter()
+        .map(String::as_str)
+        .filter(|a| *a == "--quick")
+        .collect();
+    println!("== CPU renderer ==");
+    let cpu = example("inbetween-render-cpu", "perf_cpu", &cpu_args);
+    println!("\n== GPU renderer ==");
+    let gpu = example("inbetween-render-gpu", "perf_gpu", &gpu_args);
+    cpu.and(gpu)
 }

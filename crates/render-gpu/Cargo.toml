@@ -1,0 +1,23 @@
+[package]
+name = "inbetween-render-gpu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+inbetween-doc = { path = "../doc" }
+inbetween-geom = { path = "../geom" }
+inbetween-morph = { path = "../morph" }
+inbetween-raster = { path = "../raster" }
+pollster = "1"
+wgpu = "24"
+
+[dev-dependencies]
+inbetween-render-cpu = { path = "../render-cpu" }
+inbetween-testkit = { path = "../testkit" }
+
+[lints]
+workspace = true

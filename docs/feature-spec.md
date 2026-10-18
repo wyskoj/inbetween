@@ -273,6 +273,6 @@ Built on open landmark models (e.g. MediaPipe Face Mesh, dlib). Inbetween's face
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [ ] | `cli.*` / `mcp.*` | Every command drivable headlessly from the CLI and over MCP | P1 |
-| [ ] |  | Deterministic rendering: same project and frame always give the same bytes | P0 |
-| [ ] |  | GPU and CPU renderers cross-checked on every test scene | P1 |
+| [x] |  | Deterministic rendering: same project and frame always give the same bytes | P0 |
+| [x] |  | GPU and CPU renderers cross-checked on every test scene | P1 |
 | [ ] | `dots.autoLandmarks` | Landmark-based auto-dots for non-face subjects | P2 |

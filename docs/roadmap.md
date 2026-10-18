@@ -4,7 +4,7 @@
 
 **P0 is complete (tagged v0.1.0): a headless morph engine.** `ib` turns two images and a dot set into a correct, deterministic PNG frame sequence, and the morph invariants (AGENTS.md §3) pass. M0 to M6 are done; the baseline is in `docs/perf.md`.
 
-**Next: M7** (wgpu renderer matching the CPU oracle), then M8 (egui shell).
+**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **Next: M8** (egui shell).
 
 *Original P0 goal, for reference:* a headless morph engine with no UI.
 

@@ -19,8 +19,18 @@ allow = [
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Our own crates are unpublished path dependencies, so they carry no version.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[advisories]
+ignore = [
+    # `paste` is unmaintained but is only a compile-time macro crate. It comes in through
+    # `metal`, wgpu 24's macOS backend, and has no known vulnerability. Remove this when we
+    # move to a wgpu release that no longer depends on it.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained build-time macro, pulled in by wgpu's Metal backend" },
+]

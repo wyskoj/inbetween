@@ -1,6 +1,6 @@
 //! Timing harness behind `cargo xtask perf`: one 1920x1080 frame, 1,000 dot pairs, CPU.
 //!
-//! Run in release mode: `cargo run --release -p inbetween-render-cpu --example perf`.
+//! Run in release mode: `cargo run --release -p inbetween-render-cpu --example perf_cpu`.
 //! Flags: `--quick` (fewer iterations), `--threads N` (default 4, the budget's reference
 //! machine). `INBETWEEN_PERF_BUDGET_MS` overrides the budget.
 
@@ -8,46 +8,22 @@ use inbetween_doc::{DotPair, DotSet, Sequence};
 use inbetween_geom::Point;
 use inbetween_morph::Planner;
 use inbetween_render_cpu::Renderer;
-use inbetween_testkit::{gradient, labelled_grid};
+use inbetween_testkit::{gradient, labelled_grid, perf};
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-const W: u32 = 1920;
-const H: u32 = 1080;
-const COLS: u32 = 40;
-const ROWS: u32 = 25; // 40 x 25 = 1,000 dots
+const W: u32 = perf::WIDTH;
+const H: u32 = perf::HEIGHT;
 const DEFAULT_BUDGET_MS: f64 = 100.0;
 
-/// Deterministic jitter so every run times exactly the same scene.
-struct Rng(u64);
-
-impl Rng {
-    fn unit(&mut self) -> f64 {
-        self.0 ^= self.0 >> 12;
-        self.0 ^= self.0 << 25;
-        self.0 ^= self.0 >> 27;
-        (self.0.wrapping_mul(0x2545_F491_4F6C_DD1D) >> 11) as f64 / (1u64 << 53) as f64
-    }
-}
-
-/// Jittered grid of dots on Image 1, each nudged smoothly on Image 2 (no folds).
+/// The shared perf scene (see `inbetween_testkit::perf`): 1,000 dots, no folds.
 fn dots() -> DotSet {
-    let (cw, ch) = (
-        f64::from(W) / f64::from(COLS),
-        f64::from(H) / f64::from(ROWS),
-    );
-    let mut rng = Rng(0x5EED_1234_ABCD_9876);
-    let mut pairs = Vec::new();
-    for row in 0..ROWS {
-        for col in 0..COLS {
-            let x = (f64::from(col) + 0.5 + (rng.unit() - 0.5) * 0.5) * cw;
-            let y = (f64::from(row) + 0.5 + (rng.unit() - 0.5) * 0.5) * ch;
-            let dx = (y / 140.0).sin() * 0.3 * cw;
-            let dy = (x / 170.0).cos() * 0.3 * ch;
-            pairs.push(DotPair::new(Point::new(x, y), Point::new(x + dx, y + dy)));
-        }
-    }
-    DotSet::new(pairs)
+    DotSet::new(
+        perf::dot_pairs()
+            .into_iter()
+            .map(|((x1, y1), (x2, y2))| DotPair::new(Point::new(x1, y1), Point::new(x2, y2)))
+            .collect(),
+    )
 }
 
 fn ms(d: Duration) -> f64 {

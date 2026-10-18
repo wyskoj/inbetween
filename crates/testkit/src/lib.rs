@@ -10,6 +10,7 @@
 )]
 
 pub mod demo;
+pub mod perf;
 
 use inbetween_raster::{Image, RasterError};
 
