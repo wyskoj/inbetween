@@ -14,13 +14,13 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `engine.triangulate` | Triangulate paired dots, auto-adding the 4 image corners | P0 |
+| [~] | `engine.triangulate` | Triangulate paired dots, auto-adding the 4 image corners | P0 |
 | [ ] | `engine.warp` | Per-triangle affine warp of each source toward the interpolated dot positions | P0 |
 | [ ] | `engine.dissolve` | Cross-dissolve the two warped images by the feature amount | P0 |
 | [ ] | `engine.alpha` | Full alpha pipeline: 32-bit RGBA sources in, RGBA frames out | P0 |
 | [ ] | `morph.option.dropCornerTris` | Option: discard triangles touching the 4 corners (backdrop effect on non-alpha images) | P1 |
 | [ ] | `morph.option.retriangulate` | Option: re-triangulate every intermediate frame instead of only frame 0 | P1 |
-| [ ] | `engine.outsideDots` | Dots may sit outside the image bounds | P1 |
+| [~] | `engine.outsideDots` | Dots may sit outside the image bounds | P1 |
 
 ### Morph types (per sequence)
 

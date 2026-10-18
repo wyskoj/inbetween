@@ -13,3 +13,5 @@ Append new entries; never silently change old ones. Format: `D<n> (date): decisi
 **D5 (2026-10-18): Licences restricted to permissive ones.** `deny.toml` allows MIT, Apache-2.0, BSD, Zlib, ISC (plus Unicode and CC0 for data crates).
 
 **D6 (2026-10-18): `xtask` uses `serde` and `serde_json` to read `cargo metadata`.** Both are MIT/Apache-2.0 and avoid hand-parsing manifests.
+
+**D7 (2026-10-18): Delaunay via `spade` (MIT/Apache-2.0), geometry in `f64`.** Exact predicates make the triangulation robust to collinear and near-degenerate dots, so we do not write our own. Duplicate dots are rejected with `DuplicateDot { first, second }` rather than silently merged, so paired dot sets keep their indices. Collinear dots and fewer than three dots are accepted because the four frame corners always give the mesh area. A dot on a frame corner replaces that corner. Dots outside the frame are allowed; the mesh then covers their convex hull, which contains the frame. `MAX_DOTS` is 100,000.
