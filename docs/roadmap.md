@@ -2,7 +2,11 @@
 
 ## Current focus
 
-**P0: a headless morph engine.** No UI yet. Done when `inbetween-cli` can turn two images and a dot set into a correct, deterministic PNG frame sequence, with the morph invariants (AGENTS.md §3) passing in CI.
+**P0 is complete (tagged v0.1.0): a headless morph engine.** `ib` turns two images and a dot set into a correct, deterministic PNG frame sequence, and the morph invariants (AGENTS.md §3) pass. M0 to M6 are done; the baseline is in `docs/perf.md`.
+
+**Next: M7** (wgpu renderer matching the CPU oracle), then M8 (egui shell).
+
+*Original P0 goal, for reference:* a headless morph engine with no UI.
 
 ## P0 milestones
 

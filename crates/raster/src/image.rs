@@ -116,6 +116,12 @@ impl Image {
         &self.data
     }
 
+    /// Mutable access to the raw premultiplied f32 values, four per pixel, row by row. For
+    /// renderers that fill whole rows in parallel.
+    pub fn as_mut_slice(&mut self) -> &mut [f32] {
+        &mut self.data
+    }
+
     fn index(&self, x: u32, y: u32) -> Option<usize> {
         if x >= self.width || y >= self.height {
             return None;
