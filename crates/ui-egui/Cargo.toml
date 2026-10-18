@@ -1,0 +1,33 @@
+[package]
+name = "inbetween-ui-egui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["wgpu", "persistence", "x11", "wayland"] }
+egui = { version = "0.31", default-features = false }
+inbetween-codecs = { path = "../codecs" }
+inbetween-doc = { path = "../doc" }
+inbetween-engine = { path = "../engine" }
+inbetween-geom = { path = "../geom" }
+inbetween-morph = { path = "../morph" }
+inbetween-raster = { path = "../raster" }
+inbetween-render-cpu = { path = "../render-cpu" }
+inbetween-render-gpu = { path = "../render-gpu" }
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+# The headless test harness needs egui and egui-winit to agree on AccessKit, so the feature is
+# on for test builds only; the shipped app does not link the AT-SPI stack (see D27).
+eframe = { version = "0.31", default-features = false, features = ["accesskit"] }
+egui_kittest = { version = "0.31", features = ["wgpu"] }
+inbetween-testkit = { path = "../testkit" }
+inbetween-format = { path = "../format" }
+
+[lints]
+workspace = true

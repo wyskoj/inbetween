@@ -55,3 +55,7 @@ Every crate has its own error type and returns it with `?`. Non-test code never 
 ## GPU renderer (as built in M7)
 
 `inbetween-render-gpu` (L3) mirrors `render-cpu`'s shape: `GpuContext` (device and queue, shareable and cloneable) and `GpuRenderer::new(ctx, sequence, output, image1, image2)`, which uploads the sources once as `Rgba32Float` textures. `draw(t)` plans on the CPU with `morph::Planner`, uploads one vertex buffer and draws the mesh into a texture exposed by `texture()`, which a live preview can show directly; `render_t` / `render_frame` also read the frame back into a raster `Image`. It compiles for wasm32 (checked by `cargo xtask wasm`). The CPU renderer remains the oracle: see D24 for the tolerance and `crates/render-gpu/tests/matches_cpu.rs` for the scenes.
+
+## The desktop shell (as built in M8)
+
+`ui-egui` (L6) plus `apps/inbetween` (the `inbetween` binary). `InbetweenApp::show(&egui::Context)` draws everything for one frame and works with or without a GPU handle, so the same code runs in the window and in egui_kittest tests. Data flows one way: the `Session` is read into a per-frame snapshot (dots, mesh triangles, textures), panels draw the snapshot and return `Action`s, and the app dispatches them as commands. The preview refreshes only when `(session.revision(), frame)` changes. `inbetween project.inbetween --screenshot out.png` captures the real window, including the GPU path, for visual checks.

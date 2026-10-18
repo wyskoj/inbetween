@@ -1,0 +1,19 @@
+[package]
+name = "inbetween"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Inbetween: native image morphing and warping."
+
+[[bin]]
+name = "inbetween"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["wgpu", "persistence", "x11", "wayland"] }
+inbetween-ui-egui = { path = "../../crates/ui-egui" }
+
+[lints]
+workspace = true

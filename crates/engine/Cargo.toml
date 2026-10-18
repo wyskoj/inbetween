@@ -10,13 +10,13 @@ publish = false
 inbetween-codecs = { path = "../codecs" }
 inbetween-doc = { path = "../doc" }
 inbetween-format = { path = "../format" }
+inbetween-geom = { path = "../geom" }
 inbetween-raster = { path = "../raster" }
 inbetween-render-cpu = { path = "../render-cpu" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
-inbetween-geom = { path = "../geom" }
 inbetween-testkit = { path = "../testkit" }
 
 [lints]

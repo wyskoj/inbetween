@@ -7,6 +7,9 @@ use inbetween_raster::Image;
 use wgpu::util::DeviceExt;
 
 const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
+/// The 8-bit target a preview shows. egui expects sRGB-encoded premultiplied values in a plain
+/// `Rgba8Unorm` texture, which is exactly what the shader writes (the working space is sRGB).
+pub const PREVIEW_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const BYTES_PER_PIXEL: u32 = 16;
 const FLAG_TRANSPARENT_1: u32 = 1;
 const FLAG_TRANSPARENT_2: u32 = 2;
@@ -34,12 +37,17 @@ pub struct GpuRenderer {
     fit2: Affine,
     base_params: Params,
     pipeline: wgpu::RenderPipeline,
+    preview_pipeline: wgpu::RenderPipeline,
+    src1_size: (u32, u32),
+    src2_size: Option<(u32, u32)>,
     bind_group: wgpu::BindGroup,
     params_buffer: wgpu::Buffer,
     vertex_buffer: wgpu::Buffer,
     vertex_capacity: u64,
     target: wgpu::Texture,
     target_view: wgpu::TextureView,
+    preview: wgpu::Texture,
+    preview_view: wgpu::TextureView,
     readback: wgpu::Buffer,
     padded_row_bytes: u32,
 }
@@ -196,7 +204,8 @@ impl GpuRenderer {
             bind_group_layouts: &[&layout],
             push_constant_ranges: &[],
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let make_pipeline = |format: wgpu::TextureFormat| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("inbetween pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
@@ -214,7 +223,7 @@ impl GpuRenderer {
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: TARGET_FORMAT,
+                    format,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -229,7 +238,10 @@ impl GpuRenderer {
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
-        });
+        })
+        };
+        let pipeline = make_pipeline(TARGET_FORMAT);
+        let preview_pipeline = make_pipeline(PREVIEW_FORMAT);
 
         let target = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("frame"),
@@ -248,6 +260,22 @@ impl GpuRenderer {
             view_formats: &[],
         });
         let target_view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let preview = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("preview"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: PREVIEW_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            // egui decodes the textures it shows as sRGB, so it needs this second view.
+            view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
+        });
+        let preview_view = preview.create_view(&wgpu::TextureViewDescriptor::default());
         let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
         let padded_row_bytes = (width * BYTES_PER_PIXEL).div_ceil(align) * align;
         let readback = device.create_buffer(&wgpu::BufferDescriptor {
@@ -273,12 +301,17 @@ impl GpuRenderer {
             fit2,
             base_params,
             pipeline,
+            preview_pipeline,
+            src1_size: (image1.width(), image1.height()),
+            src2_size: image2.map(|i| (i.width(), i.height())),
             bind_group,
             params_buffer,
             vertex_buffer,
             vertex_capacity,
             target,
             target_view,
+            preview,
+            preview_view,
             readback,
             padded_row_bytes,
         })
@@ -301,6 +334,58 @@ impl GpuRenderer {
     /// Render at morph time `t` into [`GpuRenderer::texture`]. Returns once the work is
     /// submitted; call [`GpuRenderer::wait`] before reading the texture on the CPU.
     pub fn draw(&mut self, t: f64) -> Result<(), GpuError> {
+        self.submit(t, false)
+    }
+
+    /// Like [`GpuRenderer::draw`], but into the 8-bit [`GpuRenderer::preview_texture`] that a
+    /// UI can show without any conversion. About the same cost; no readback.
+    pub fn draw_preview(&mut self, t: f64) -> Result<(), GpuError> {
+        self.submit(t, true)
+    }
+
+    /// The 8-bit texture [`GpuRenderer::draw_preview`] renders into (`Rgba8Unorm`, holding
+    /// sRGB-encoded premultiplied colour, which is how egui reads its textures).
+    pub fn preview_texture(&self) -> &wgpu::Texture {
+        &self.preview
+    }
+
+    /// A view of [`GpuRenderer::preview_texture`] that reads the stored bytes as sRGB. egui
+    /// (like most UI toolkits) expects to decode sRGB textures to linear while sampling and to
+    /// re-encode on output; with this view the colours come out exactly as the source images.
+    pub fn preview_view_srgb(&self) -> wgpu::TextureView {
+        self.preview.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            ..Default::default()
+        })
+    }
+
+    /// Use a changed sequence (moved dots, a new frame count or fit mode) without uploading
+    /// the source images again. The sources must be the ones this renderer was built with;
+    /// build a new renderer when the images or the output size change.
+    pub fn set_sequence(&mut self, seq: &Sequence) -> Result<(), GpuError> {
+        if self.src2_size.is_none() && seq.morph.uses_image2() {
+            return Err(GpuError::MissingImage2);
+        }
+        let (width, height) = self.size;
+        let planner = Planner::new(seq, width, height)?;
+        let fit1 = fit_transform(self.src1_size.0, self.src1_size.1, width, height, seq.fit)?;
+        let fit2 = match self.src2_size {
+            Some((w, h)) => fit_transform(w, h, width, height, seq.fit)?,
+            None => Affine::IDENTITY,
+        };
+        let mut flags = self.base_params.flags & !(FLAG_TRANSPARENT_1 | FLAG_TRANSPARENT_2);
+        if transparent_outside(seq.fit) {
+            flags |= FLAG_TRANSPARENT_1 | FLAG_TRANSPARENT_2;
+        }
+        self.planner = planner;
+        self.fit1 = fit1;
+        self.fit2 = fit2;
+        self.base_params.flags = flags;
+        self.frames = seq.frames;
+        Ok(())
+    }
+
+    fn submit(&mut self, t: f64, preview: bool) -> Result<(), GpuError> {
         let plan = self.planner.plan(t)?;
         let vertices = build_vertices(&plan, &self.fit1, &self.fit2, self.size.0, self.size.1);
         let bytes: &[u8] = bytemuck::cast_slice(&vertices);
@@ -330,7 +415,11 @@ impl GpuRenderer {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("frame pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.target_view,
+                    view: if preview {
+                        &self.preview_view
+                    } else {
+                        &self.target_view
+                    },
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
@@ -341,7 +430,11 @@ impl GpuRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(if preview {
+                &self.preview_pipeline
+            } else {
+                &self.pipeline
+            });
             pass.set_bind_group(0, &self.bind_group, &[]);
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..bytes.len() as u64));
             pass.draw(0..vertices.len() as u32, 0..1);

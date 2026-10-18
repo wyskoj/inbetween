@@ -17,6 +17,18 @@ pub enum ParamKind {
     Bool,
 }
 
+/// How a `Path` parameter is used, so a shell can offer the right file dialog.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PathUse {
+    /// An existing file to read.
+    OpenFile,
+    /// A file to create or overwrite.
+    SaveFile,
+    /// A folder (created if missing).
+    Folder,
+}
+
 /// One parameter in a command's schema. Built with `const fn`s so each command can keep its
 /// schema in a `static`.
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -29,6 +41,10 @@ pub struct ParamSpec {
     pub max: Option<f64>,
     /// What happens when the parameter is left out, in words.
     pub default: Option<&'static str>,
+    /// For `Path` parameters: what the path is for.
+    pub path_use: Option<PathUse>,
+    /// For `Path` parameters: file extensions a dialog should offer, without the dot.
+    pub extensions: &'static [&'static str],
 }
 
 impl ParamSpec {
@@ -46,7 +62,29 @@ impl ParamSpec {
             min: None,
             max: None,
             default: None,
+            path_use: None,
+            extensions: &[],
         }
+    }
+
+    /// A path to an existing file with one of `extensions`.
+    pub const fn open_file(mut self, extensions: &'static [&'static str]) -> Self {
+        self.path_use = Some(PathUse::OpenFile);
+        self.extensions = extensions;
+        self
+    }
+
+    /// A path to a file to write, with one of `extensions`.
+    pub const fn save_file(mut self, extensions: &'static [&'static str]) -> Self {
+        self.path_use = Some(PathUse::SaveFile);
+        self.extensions = extensions;
+        self
+    }
+
+    /// A folder to write into.
+    pub const fn folder(mut self) -> Self {
+        self.path_use = Some(PathUse::Folder);
+        self
     }
 
     /// Inclusive limits for `Integer` and `Number` parameters.

@@ -77,12 +77,12 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `dots.add` | Click to add; partner dot auto-created on the other image | P0 |
+| [x] | `dots.add` | Click to add; partner dot auto-created on the other image | P0 |
 | [ ] | `dots.option.autoPartner` | Toggle auto-creating the partner dot; when off, dots are added per image and shown as unpaired | P1 |
 | [ ] | `dots.addSamePos` | Modifier (Alt) puts the partner at identical coordinates (boundary/anchor dots for warps) | P1 |
 | [ ] | `dots.option.autoJump` | Toggle moving the cursor to the partner position after adding | P2 |
-| [ ] | `dots.move` | Drag a dot; preview updates live | P0 |
-| [ ] | `dots.delete` | Delete tool, or right-click any dot with any tool | P0 |
+| [x] | `dots.move` | Drag a dot; preview updates live | P0 |
+| [x] | `dots.delete` | Delete tool, or right-click any dot with any tool | P0 |
 | [ ] | `dots.select` | Marquee select; Shift adds, Alt subtracts; clicking a line selects its connected dots | P1 |
 | [ ] | `dots.transform` | Move, scale, rotate, skew, flip a selection | P1 |
 | [ ] | `dots.nudge` | Arrow keys move selection 1 px; Ctrl+arrow 10 px | P1 |
@@ -106,7 +106,7 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `view.toggle.dots/lines/triangles/track/grid` | Show/hide dots, lines, triangle mesh, morph track, grid | P1 |
+| [~] | `view.toggle.dots/lines/triangles/track/grid` | Show/hide dots, lines, triangle mesh, morph track, grid | P1 |
 | [ ] | `prefs.dotStyle` | Several dot styles plus highlighted variants | P2 |
 | [ ] | `prefs.dotColor` | Single colour, or cycle 8 colours per pair; dot opacity 64–255; antialiased | P2 |
 | [ ] |  | Hover highlights a dot pair; hovering a line highlights everything connected | P1 |
@@ -195,9 +195,9 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [ ] | `movie.size` | Match source size, presets, or custom | P0 |
-| [ ] | `preview.scrub` | Scrub 0–100% in 1% steps; mouse wheel steps one frame; preview one sequence or all | P0 |
-| [ ] | `play.*` | Play/pause, first, last, previous, next frame, loop, ping-pong; 1–60 fps | P1 |
-| [ ] |  | Live preview updates while dragging dots, curves, camera, effects | P0 |
+| [~] | `preview.scrub` | Scrub 0–100% in 1% steps; mouse wheel steps one frame; preview one sequence or all | P0 |
+| [~] | `play.*` | Play/pause, first, last, previous, next frame, loop, ping-pong; 1–60 fps | P1 |
+| [~] |  | Live preview updates while dragging dots, curves, camera, effects | P0 |
 | [ ] |  | Checkerboard behind transparent preview areas | P1 |
 
 ---
@@ -241,10 +241,10 @@ Built on open landmark models (e.g. MediaPipe Face Mesh, dlib). Inbetween's face
 |---|---|---|---|
 | [ ] | `view.mode.full/edit/preview/frames/dual/fullscreen` | Six layouts (F5–F9, F11); dual-monitor split of editor and preview | P1 |
 | [ ] | `view.split` | Resizable split between Image 1, Image 2, Preview | P1 |
-| [ ] | `view.zoom` | 12.5%–800% via tools, up to 1600% via wheel; best fit, actual size, fit width/height | P1 |
-| [ ] | `view.syncSources` / `view.syncPreview` | Zoom/pan both sources together, and the preview with them | P1 |
+| [~] | `view.zoom` | 12.5%–800% via tools, up to 1600% via wheel; best fit, actual size, fit width/height | P1 |
+| [~] | `view.syncSources` / `view.syncPreview` | Zoom/pan both sources together, and the preview with them | P1 |
 | [ ] | `view.frameStrip` | Frame Sequence mode: thumbnail grid of every frame; thumb size adjustable | P1 |
-| [ ] | `edit.undo/redo` | Unlimited, covering images, dots, sequences, curves | P0 |
+| [~] | `edit.undo/redo` | Unlimited, covering images, dots, sequences, curves | P0 |
 | [ ] | `export.pdf` | Contact sheet of sources, preview or all frames, with captions | P2 |
 | [ ] | `tools.benchmark` | Measure preview and export throughput | P2 |
 | [ ] | `tools.sequencePacker` | Pack an arbitrary image list into a movie | P2 |

@@ -35,7 +35,8 @@ mod files {
             ParamKind::Path,
             true,
             "Image file to write (.png or .jpg)",
-        ),
+        )
+        .save_file(&["png", "jpg", "jpeg"]),
         ParamSpec::new(
             "t",
             ParamKind::Number,
@@ -59,7 +60,8 @@ mod files {
             ParamKind::Path,
             true,
             "Folder for the PNG frames (created if missing)",
-        ),
+        )
+        .folder(),
         ParamSpec::new(
             "prefix",
             ParamKind::String,
@@ -178,6 +180,7 @@ mod files {
                 params: FRAME_PARAMS,
                 enabled: has_sequence,
                 disabled_reason: "the project has no sequences to render",
+                edits: false,
                 run: frame,
             },
             CommandSpec {
@@ -189,6 +192,7 @@ mod files {
                 params: SEQUENCE_PARAMS,
                 enabled: has_sequence,
                 disabled_reason: "the project has no sequences to render",
+                edits: false,
                 run: sequence,
             },
         ]

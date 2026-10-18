@@ -14,6 +14,7 @@
 )]
 
 mod dots_cmds;
+mod edit_cmds;
 mod error;
 mod export_cmds;
 mod params;
@@ -23,6 +24,6 @@ mod sequence_cmds;
 mod session;
 
 pub use error::CommandError;
-pub use params::{ParamKind, ParamSpec, Params, MAX_STRING_BYTES};
+pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_STRING_BYTES};
 pub use registry::{CommandInfo, CommandSpec, Registry};
 pub use session::{Prepared, Session};

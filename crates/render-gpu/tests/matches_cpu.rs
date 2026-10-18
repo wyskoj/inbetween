@@ -428,3 +428,68 @@ fn the_1080p_perf_scene_matches() {
         &[0, 15, 29],
     );
 }
+
+#[test]
+fn set_sequence_matches_a_fresh_renderer_without_re_uploading() {
+    let Some(ctx) = context() else { return };
+    let (a, b) = (gradient(48, 32).unwrap(), labelled_grid(48, 32, 8).unwrap());
+    let before = sequence(&moved(), 12);
+    let mut after = sequence(&moved(), 20);
+    after
+        .dots
+        .pairs
+        .push(DotPair::new(Point::new(30.0, 30.0), Point::new(31.0, 29.0)));
+    after.dots.pairs[0].second = Point::new(20.0, 12.0);
+
+    let mut reused = GpuRenderer::new(ctx, &before, (48, 32), &a, Some(&b)).unwrap();
+    let _ = reused.render_frame(5).unwrap();
+    reused.set_sequence(&after).unwrap();
+    assert_eq!(reused.frame_count(), 20);
+    let mut fresh = GpuRenderer::new(ctx, &after, (48, 32), &a, Some(&b)).unwrap();
+    for i in [0, 7, 19] {
+        let (x, y) = (
+            reused.render_frame(i).unwrap(),
+            fresh.render_frame(i).unwrap(),
+        );
+        assert_eq!(x, y, "frame {i}");
+    }
+
+    // A sequence the planner refuses leaves the renderer exactly as it was.
+    let mut bad = after.clone();
+    bad.dots
+        .pairs
+        .push(DotPair::new(Point::new(30.0, 30.0), Point::new(1.0, 1.0))); // duplicate
+    assert!(reused.set_sequence(&bad).is_err());
+    assert_eq!(reused.frame_count(), 20);
+    assert_eq!(
+        reused.render_frame(7).unwrap(),
+        fresh.render_frame(7).unwrap()
+    );
+
+    // Fit modes can change in place, too.
+    let mut contain = after.clone();
+    contain.fit = FitMode::Contain;
+    reused.set_sequence(&contain).unwrap();
+    let cpu = Renderer::new(&contain, (48, 32), &a, Some(&b)).unwrap();
+    let d = diff(
+        &cpu.render_frame(7).unwrap(),
+        &reused.render_frame(7).unwrap(),
+        STRICT.visible,
+    );
+    assert!(d.max <= STRICT.max, "{}", d.max);
+}
+
+#[test]
+fn preview_target_can_be_drawn_and_waited_on() {
+    let Some(ctx) = context() else { return };
+    let (a, b) = (gradient(64, 48).unwrap(), labelled_grid(64, 48, 8).unwrap());
+    let seq = sequence(&moved(), 12);
+    let mut gpu = GpuRenderer::new(ctx, &seq, (64, 48), &a, Some(&b)).unwrap();
+    for t in [0.0, 0.5, 1.0] {
+        gpu.draw_preview(t).unwrap();
+    }
+    gpu.wait();
+    let tex = gpu.preview_texture();
+    assert_eq!((tex.width(), tex.height()), (64, 48));
+    assert_eq!(tex.format(), wgpu::TextureFormat::Rgba8Unorm);
+}

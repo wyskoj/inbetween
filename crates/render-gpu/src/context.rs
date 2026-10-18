@@ -50,6 +50,28 @@ impl GpuContext {
         })
     }
 
+    /// Wrap a device and queue that something else already opened, such as the ones eframe
+    /// creates. Textures made by a renderer built on it can then be shown by that program
+    /// directly, with no copy.
+    pub fn from_parts(
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        adapter_name: impl Into<String>,
+        backend: impl Into<String>,
+    ) -> Self {
+        Self {
+            device,
+            queue,
+            adapter_name: adapter_name.into(),
+            backend: backend.into(),
+        }
+    }
+
+    /// The device, for code that needs to register textures with another library.
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
     /// The adapter's name, e.g. "NVIDIA GeForce RTX 5080".
     pub fn adapter_name(&self) -> &str {
         &self.adapter_name

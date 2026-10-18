@@ -18,6 +18,9 @@ pub struct CommandSpec {
     pub enabled: fn(&Session) -> bool,
     /// Why it is unavailable when `enabled` is false.
     pub disabled_reason: &'static str,
+    /// Whether the command changes the project. The registry then snapshots the project first,
+    /// records an undo step when the command succeeds, and restores the snapshot if it fails.
+    pub edits: bool,
     pub run: fn(&mut Session, &Params) -> Result<Value, CommandError>,
 }
 
@@ -41,6 +44,7 @@ impl Registry {
     pub fn standard() -> Self {
         let mut specs = Vec::new();
         specs.extend(crate::project_cmds::specs());
+        specs.extend(crate::edit_cmds::specs());
         specs.extend(crate::dots_cmds::specs());
         specs.extend(crate::sequence_cmds::specs());
         specs.extend(crate::export_cmds::specs());
@@ -91,7 +95,15 @@ impl Registry {
                 reason: spec.disabled_reason,
             });
         }
-        (spec.run)(session, &params)
+        let before = spec.edits.then(|| session.project().clone());
+        let result = (spec.run)(session, &params);
+        if let Some(before) = before {
+            match &result {
+                Ok(_) => session.record_edit(before),
+                Err(_) => session.restore(before),
+            }
+        }
+        result
     }
 
     /// Like [`Registry::run`], but turns a panic into [`CommandError::Internal`] so a shell

@@ -1,6 +1,8 @@
 # Permissive licences only (AGENTS.md rule 8).
 [graph]
 all-features = true
+# Dev-dependencies (test harnesses) never ship, so they are not held to the shipping policy.
+exclude-dev = true
 
 [licenses]
 confidence-threshold = 0.9
@@ -14,6 +16,8 @@ allow = [
     "ISC",
     "Unicode-3.0",
     "CC0-1.0",
+    # Boost Software License: permissive, comparable to MIT. Used by the clipboard crates.
+    "BSL-1.0",
 ]
 
 [bans]
@@ -28,9 +32,7 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 
 [advisories]
-ignore = [
-    # `paste` is unmaintained but is only a compile-time macro crate. It comes in through
-    # `metal`, wgpu 24's macOS backend, and has no known vulnerability. Remove this when we
-    # move to a wgpu release that no longer depends on it.
-    { id = "RUSTSEC-2024-0436", reason = "unmaintained build-time macro, pulled in by wgpu's Metal backend" },
-]
+# Known vulnerabilities in anything we build always fail. "Unmaintained" notices are only fatal
+# for crates we depend on directly; for transitive ones they are reported but do not block
+# (egui, wgpu and rfd pull in several, and we cannot replace them ourselves).
+unmaintained = "workspace"

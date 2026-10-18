@@ -64,7 +64,7 @@ pub fn make_relative(base: &str, target: &str) -> Option<String> {
         .take_while(|(a, b)| a == b)
         .count();
     let mut out: Vec<&str> = Vec::new();
-    out.extend(std::iter::repeat("..").take(base_parts.len() - common));
+    out.extend(std::iter::repeat_n("..", base_parts.len() - common));
     out.extend(target_parts.iter().skip(common).map(String::as_str));
     Some(out.join("/"))
 }
