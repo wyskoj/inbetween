@@ -17,6 +17,7 @@ pub fn run() -> Result<(), String> {
     )?;
     step("test", &["test", "--workspace"])?;
     step("layers", &["xtask", "layers"])?;
+    step("wasm", &["xtask", "wasm"])?;
     deny()
 }
 

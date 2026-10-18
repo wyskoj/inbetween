@@ -57,7 +57,8 @@ pub struct Member {
     pub deps: Vec<String>,
 }
 
-pub fn run() -> Result<(), String> {
+/// Every workspace package with its direct dependency names.
+pub fn workspace_members() -> Result<Vec<Member>, String> {
     let out = Command::new("cargo")
         .args(["metadata", "--format-version", "1", "--no-deps"])
         .output()
@@ -68,7 +69,11 @@ pub fn run() -> Result<(), String> {
             String::from_utf8_lossy(&out.stderr)
         ));
     }
-    let members = parse_members(&out.stdout)?;
+    parse_members(&out.stdout)
+}
+
+pub fn run() -> Result<(), String> {
+    let members = workspace_members()?;
     let problems = check(&members);
     if problems.is_empty() {
         println!("layers: ok ({} crates checked)", members.len());

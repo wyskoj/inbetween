@@ -1,0 +1,16 @@
+[package]
+name = "inbetween-testkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+inbetween-raster = { path = "../raster" }
+
+[dev-dependencies]
+inbetween-codecs = { path = "../codecs" }
+
+[lints]
+workspace = true

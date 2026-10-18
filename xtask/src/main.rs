@@ -10,16 +10,18 @@
 
 mod ci;
 mod layers;
+mod wasm;
 
 use std::process::ExitCode;
 
 const USAGE: &str =
-    "usage: cargo xtask <task>\n  layers  check crate layering\n  ci      run every CI gate locally";
+    "usage: cargo xtask <task>\n  layers  check crate layering\n  wasm    check L0 to L5 build for wasm32\n  ci     run every CI gate locally";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("layers") => layers::run(),
+        Some("wasm") => wasm::run(),
         Some("ci") => ci::run(),
         Some(other) => Err(format!("unknown task `{other}`\n{USAGE}")),
         None => Err(USAGE.to_string()),
