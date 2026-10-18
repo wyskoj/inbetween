@@ -208,8 +208,15 @@ mod files {
 
     /// Read and decode an image file.
     pub fn read_file(path: &Path) -> Result<Rgba8Image, CodecError> {
-        let bytes =
-            std::fs::read(path).map_err(|e| CodecError::Io(format!("{}: {e}", path.display())))?;
+        let io = |e: std::io::Error| CodecError::Io(format!("{}: {e}", path.display()));
+        // Only regular files: opening a device such as `CON` could block forever.
+        if !std::fs::metadata(path).map_err(io)?.is_file() {
+            return Err(CodecError::Io(format!(
+                "{}: not a regular file",
+                path.display()
+            )));
+        }
+        let bytes = std::fs::read(path).map_err(io)?;
         decode(&bytes)
     }
 
@@ -390,5 +397,28 @@ mod tests {
             Err(CodecError::Io(_))
         ));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod device_tests {
+    use super::*;
+    use std::path::Path;
+
+    /// Regression: on Windows `CON` is the console, and reading it blocked forever.
+    #[test]
+    fn devices_and_directories_are_errors_not_hangs() {
+        let mut paths: Vec<&str> = vec!["."];
+        if cfg!(windows) {
+            paths.extend(["CON", "NUL", "AUX", "PRN", "COM1"]);
+        } else {
+            paths.extend(["/dev/null", "/dev/zero"]);
+        }
+        for p in paths {
+            assert!(
+                matches!(read_file(Path::new(p)), Err(CodecError::Io(_))),
+                "{p} should be rejected"
+            );
+        }
     }
 }

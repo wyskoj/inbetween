@@ -13,6 +13,15 @@ fn io(path: &Path, e: std::io::Error) -> FormatError {
 /// Read at most the size limit (plus one byte, to notice an oversized file) without ever
 /// loading a huge file into memory.
 fn read_limited(path: &Path) -> Result<Vec<u8>, FormatError> {
+    // Only regular files: opening a device (CON or NUL on Windows, /dev/zero or a
+    // FIFO elsewhere) could block forever or never end.
+    let meta = std::fs::metadata(path).map_err(|e| io(path, e))?;
+    if !meta.is_file() {
+        return Err(FormatError::Io(format!(
+            "{}: not a regular file",
+            path.display()
+        )));
+    }
     let file = std::fs::File::open(path).map_err(|e| io(path, e))?;
     let mut bytes = Vec::new();
     file.take(MAX_FILE_BYTES as u64 + 1)
@@ -157,5 +166,31 @@ mod tests {
         assert!(read_project(&path).is_err());
         std::fs::write(&path, b"").unwrap();
         assert!(read_project(&path).is_err());
+    }
+}
+
+#[cfg(test)]
+mod device_tests {
+    use super::*;
+
+    /// Regression: on Windows `CON` is the console, and reading it blocked forever.
+    #[test]
+    fn devices_and_directories_are_errors_not_hangs() {
+        let mut paths: Vec<&str> = vec!["."];
+        if cfg!(windows) {
+            paths.extend(["CON", "NUL", "AUX", "PRN", "COM1"]);
+        } else {
+            paths.extend(["/dev/null", "/dev/zero"]);
+        }
+        for p in paths {
+            assert!(
+                matches!(read_project(Path::new(p)), Err(FormatError::Io(_))),
+                "{p}"
+            );
+            assert!(
+                matches!(read_dots(Path::new(p)), Err(FormatError::Io(_))),
+                "{p}"
+            );
+        }
     }
 }

@@ -1,0 +1,153 @@
+use crate::{CommandError, Params};
+use inbetween_doc::{Project, Sequence};
+use inbetween_raster::Image;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::SystemTime;
+
+/// An open project plus the caches that make repeated commands cheap.
+///
+/// Shells (the CLI, the GUI, MCP) hold one `Session` and change it only by running
+/// commands from a [`crate::Registry`].
+#[derive(Default)]
+pub struct Session {
+    project: Project,
+    path: Option<PathBuf>,
+    images: HashMap<PathBuf, CachedImage>,
+}
+
+// Only read by the file-backed image loader, which does not exist on wasm.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+struct CachedImage {
+    /// File modification time and length when it was loaded; a change reloads it.
+    stamp: (Option<SystemTime>, u64),
+    image: Arc<Image>,
+}
+
+/// Everything needed to render one sequence, resolved and loaded.
+pub struct Prepared {
+    pub sequence: Sequence,
+    pub output: (u32, u32),
+    pub image1: Arc<Image>,
+    pub image2: Option<Arc<Image>>,
+}
+
+impl Session {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn project(&self) -> &Project {
+        &self.project
+    }
+
+    /// The file the project was opened from or last saved to.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    pub fn has_sequences(&self) -> bool {
+        !self.project.sequences.is_empty()
+    }
+
+    /// Replace the whole project (used by `project.open`).
+    pub fn set_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.project = project;
+        self.path = path;
+        self.images.clear();
+    }
+
+    pub fn set_path(&mut self, path: PathBuf) {
+        if self.path.as_ref() != Some(&path) {
+            self.images.clear();
+        }
+        self.path = Some(path);
+    }
+
+    /// Read the optional `sequence` parameter (default 0) and check it exists.
+    pub fn sequence_index(&self, params: &Params) -> Result<usize, CommandError> {
+        let index = params.integer("sequence").map_or(0, |n| n.max(0) as usize);
+        if index >= self.project.sequences.len() {
+            return Err(CommandError::NoSuchSequence {
+                index,
+                count: self.project.sequences.len(),
+            });
+        }
+        Ok(index)
+    }
+
+    pub fn sequence(&self, index: usize) -> Result<&Sequence, CommandError> {
+        self.project
+            .sequences
+            .get(index)
+            .ok_or(CommandError::NoSuchSequence {
+                index,
+                count: self.project.sequences.len(),
+            })
+    }
+
+    pub fn sequence_mut(&mut self, index: usize) -> Result<&mut Sequence, CommandError> {
+        let count = self.project.sequences.len();
+        self.project
+            .sequences
+            .get_mut(index)
+            .ok_or(CommandError::NoSuchSequence { index, count })
+    }
+
+    /// Load (or reuse) the images for a sequence and bundle them for the renderer.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn prepare(&mut self, index: usize) -> Result<Prepared, CommandError> {
+        let sequence = self.sequence(index)?.clone();
+        let output = (self.project.output.width, self.project.output.height);
+        let image1 = self.load_image(&sequence.image1.0, 1, index)?;
+        let image2 = if sequence.morph.uses_image2() {
+            Some(self.load_image(&sequence.image2.0, 2, index)?)
+        } else {
+            None
+        };
+        Ok(Prepared {
+            sequence,
+            output,
+            image1,
+            image2,
+        })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_image(&mut self, rel: &str, which: u8, seq: usize) -> Result<Arc<Image>, CommandError> {
+        if rel.is_empty() {
+            return Err(CommandError::Image(format!(
+                "Image {which} of sequence {seq} has no file set; set it in the project file"
+            )));
+        }
+        inbetween_format::check_relative(rel)?;
+        let base = self
+            .path
+            .as_deref()
+            .and_then(Path::parent)
+            .unwrap_or_else(|| Path::new("."));
+        let full = base.join(rel);
+        let meta = std::fs::metadata(&full)
+            .map_err(|e| CommandError::Image(format!("Image {which}: {}: {e}", full.display())))?;
+        let stamp = (meta.modified().ok(), meta.len());
+        if let Some(hit) = self.images.get(&full).filter(|c| c.stamp == stamp) {
+            return Ok(Arc::clone(&hit.image));
+        }
+        let rgba = inbetween_codecs::read_file(&full)?;
+        let image = Arc::new(Image::from_rgba8(rgba.width, rgba.height, &rgba.data)?);
+        self.images.insert(
+            full,
+            CachedImage {
+                stamp,
+                image: Arc::clone(&image),
+            },
+        );
+        Ok(image)
+    }
+
+    /// How many images are cached (for tests and diagnostics).
+    pub fn cached_images(&self) -> usize {
+        self.images.len()
+    }
+}

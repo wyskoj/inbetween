@@ -45,3 +45,9 @@ Every crate has its own error type and returns it with `?`. Non-test code never 
 ## Frame pipeline (as built in M3)
 
 `morph::Planner::new(sequence, w, h)` validates the sequence and triangulates the dots on Image 1 (the shared mesh) and on Image 2 (used only for the last frame) once. `plan(t)` then returns a `FramePlan`: for each mesh triangle its position on Image 1, on Image 2 and in this frame, plus the dissolve weight. `render_cpu::Renderer` turns a plan into pixels: for every pixel centre inside a frame triangle, the inverse affine map finds the matching point on each source, which is fitted to the output size, sampled bilinearly and dissolved. Triangles render in parallel and merge in triangle order.
+
+## Engine and command registry (as built in M5)
+
+`inbetween-engine` holds `Session` (project, its file path, an image cache) and `Registry` (the `CommandSpec` list). Shells never edit a project directly: they call `registry.run(session, "export.frame", params)` with JSON parameters and get JSON back, or a `CommandError` whose message says what to change and whose `code()` is stable for scripts. `Registry::describe()` serialises every command and its parameter schema, which is what `ib commands --json` prints and what MCP will expose.
+
+`ib` (`apps/inbetween-cli`) is a thin shell: each subcommand opens a session with `project.open` and runs one or two commands. `ib run <id> --params '{...}'` reaches any command, so every feature is scriptable the day it is added.

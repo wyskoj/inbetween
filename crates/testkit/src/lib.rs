@@ -9,6 +9,8 @@
     clippy::unreachable
 )]
 
+pub mod demo;
+
 use inbetween_raster::{Image, RasterError};
 
 /// Opaque gradient: red grows left to right, green grows top to bottom, blue is constant.

@@ -222,3 +222,40 @@ fn committed_fuzz_seeds_are_valid_files() {
         2
     );
 }
+
+/// Regression: without serde_json's `float_roundtrip` feature, parsing can be one bit off,
+/// so dot positions drifted when a project was saved and loaded.
+#[test]
+fn floats_survive_a_save_and_load_bit_for_bit() {
+    let mut rng = Rng(0xFEED_FACE_CAFE_BEEF);
+    let mut pairs = Vec::new();
+    while pairs.len() < 20_000 {
+        let mut coord = || {
+            let v = f64::from_bits(rng.next());
+            // Any finite value, plus plenty of "ordinary" magnitudes.
+            if v.is_finite() && rng.below(2) == 0 {
+                v
+            } else {
+                (rng.next() >> 11) as f64 / (1u64 << 53) as f64 * 4096.0 - 2048.0
+            }
+        };
+        let (a, b, c, d) = (coord(), coord(), coord(), coord());
+        pairs.push(DotPair::new(Point::new(a, b), Point::new(c, d)));
+    }
+    let set = DotSet::new(pairs);
+    let back = dots_from_bytes(dots_to_string(&set).unwrap().as_bytes()).unwrap();
+    for (i, (want, got)) in set.pairs.iter().zip(&back.pairs).enumerate() {
+        for (w, g) in [
+            (want.first.x, got.first.x),
+            (want.first.y, got.first.y),
+            (want.second.x, got.second.x),
+            (want.second.y, got.second.y),
+        ] {
+            assert_eq!(
+                w.to_bits(),
+                g.to_bits(),
+                "pair {i}: {w:e} came back as {g:e}"
+            );
+        }
+    }
+}

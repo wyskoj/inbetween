@@ -42,11 +42,11 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `file.new` / `file.open` / `file.save` | `.inbetween` project file | P0 |
+| [~] | `file.new` / `project.open` / `project.save` | `.inbetween` project file | P0 |
 | [ ] | `file.openVisual` | Open dialog that shows project thumbnails | P2 |
 | [ ] | `file.appendProject` | Merge another project's sequences into this one | P1 |
 | [ ] | `file.wizard` | New-project wizard: pick type, pick an ordered image list, build sequences | P1 |
-| [~] | `dots.export` / `dots.import` | Export/import a dot set on its own (`.inbetweendots`) | P1 |
+| [x] | `dots.export` / `dots.import` | Export/import a dot set on its own (`.inbetweendots`) | P1 |
 | [ ] | `frame.exportEdit` | Export a single frame together with its dot set | P2 |
 | [ ] | `file.dragDrop` | Drop images onto either source panel or effect slots | P1 |
 
@@ -118,7 +118,7 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `sequence.length` | 2–999 morph frames, plus 0–999 hold frames on each end, set separately; enter as frames or seconds; optional apply-to-all | P0 |
+| [~] | `sequence.length` | 2–999 morph frames, plus 0–999 hold frames on each end, set separately; enter as frames or seconds; optional apply-to-all | P0 |
 | [ ] | `sequence.add` | Add a continued sequence (previous Image 2 becomes new Image 1) | P1 |
 | [ ] | `sequence.addBlank` | Add an empty sequence | P1 |
 | [ ] | `sequence.delete/duplicate/rename` | | P1 |
@@ -221,8 +221,8 @@ Built on open landmark models (e.g. MediaPipe Face Mesh, dlib). Inbetween's face
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `export.frame` | Current frame to an image file | P0 |
-| [ ] | `export.sequence` | Image sequence (PNG with alpha first) | P0 |
+| [x] | `export.frame` | Current frame to an image file | P0 |
+| [x] | `export.sequence` | Image sequence (PNG with alpha first) | P0 |
 | [ ] | `export.range` | All sequences, current one, or a range | P1 |
 | [ ] | `export.video` | Modern targets: MP4/H.264, WebM (with alpha), ProRes 4444 optional | P1 |
 | [ ] | `export.gif` | Animated GIF, loop or once, opaque or transparent (also APNG/animated WebP) | P1 |
