@@ -1,0 +1,29 @@
+[package]
+name = "inbetween-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Not part of the main workspace: libFuzzer needs nightly and its own lockfile.
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+inbetween-format = { path = "../crates/format" }
+
+[[bin]]
+name = "project"
+path = "fuzz_targets/project.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dots"
+path = "fuzz_targets/dots.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,1 @@
+{"format":"inbetween-project","version":1,"project":{"output":{"width":640,"height":480},"sequences":[{"name":"demo","image1":"a.png","image2":"b.png","frames":12,"morph":"morph","fit":"stretch","mesh":"frame0","dots":{"pairs":[{"first":{"x":10.5,"y":20.25},"second":{"x":30,"y":40}}]}}]}}

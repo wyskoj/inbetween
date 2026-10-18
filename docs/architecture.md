@@ -17,7 +17,7 @@ A crate depends only on crates in a strictly lower layer. `cargo xtask layers` e
 | L6 | `ui-egui`, `mcp` | Shells over the engine. The only layer allowed egui, eframe, winit, rfd. |
 | apps | `inbetween` (desktop), `inbetween-cli` (binary `ib`) | Entry points. |
 
-Crate directories drop the `inbetween-` prefix (`crates/geom` is package `inbetween-geom`). `inbetween-testkit` and `xtask` sit outside the stack. Crates are added when a milestone needs them. Present so far: `geom`, `raster`, `codecs`, `doc`, `morph`, `render-cpu`, `testkit`.
+Crate directories drop the `inbetween-` prefix (`crates/geom` is package `inbetween-geom`). `inbetween-testkit` and `xtask` sit outside the stack. Crates are added when a milestone needs them. Present so far: `geom`, `raster`, `codecs`, `doc`, `morph`, `render-cpu`, `format`, `testkit`.
 
 L0 to L5 stay wasm-clean (file-system code is gated behind `cfg(not(target_arch = "wasm32"))` or a platform service).
 

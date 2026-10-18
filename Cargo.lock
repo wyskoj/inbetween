@@ -279,6 +279,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "inbetween-format"
+version = "0.0.0"
+dependencies = [
+ "inbetween-doc",
+ "inbetween-geom",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "inbetween-geom"
 version = "0.0.0"
 dependencies = [

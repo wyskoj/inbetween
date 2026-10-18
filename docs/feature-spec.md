@@ -42,11 +42,11 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `file.new` / `file.open` / `file.save` | `.inbetween` project file | P0 |
+| [~] | `file.new` / `file.open` / `file.save` | `.inbetween` project file | P0 |
 | [ ] | `file.openVisual` | Open dialog that shows project thumbnails | P2 |
 | [ ] | `file.appendProject` | Merge another project's sequences into this one | P1 |
 | [ ] | `file.wizard` | New-project wizard: pick type, pick an ordered image list, build sequences | P1 |
-| [ ] | `dots.export` / `dots.import` | Export/import a dot set on its own (`.inbetweendots`) | P1 |
+| [~] | `dots.export` / `dots.import` | Export/import a dot set on its own (`.inbetweendots`) | P1 |
 | [ ] | `frame.exportEdit` | Export a single frame together with its dot set | P2 |
 | [ ] | `file.dragDrop` | Drop images onto either source panel or effect slots | P1 |
 
