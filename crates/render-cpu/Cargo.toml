@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+ab_glyph = "0.2"
 inbetween-doc = { path = "../doc" }
 inbetween-geom = { path = "../geom" }
 inbetween-morph = { path = "../morph" }

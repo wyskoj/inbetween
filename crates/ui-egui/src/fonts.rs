@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-const ROBOTO: &[u8] = include_bytes!("../assets/Roboto-Regular.ttf");
+const ROBOTO: &[u8] = inbetween_render_cpu::caption::DEFAULT_FONT;
 
 pub fn install(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();

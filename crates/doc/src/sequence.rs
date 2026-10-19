@@ -267,9 +267,12 @@ impl Sequence {
     }
 
     /// Whether the frame needs more than the plain morph that the GPU renderer draws: any
-    /// effect, a camera move or a master fade. (The track bends the mesh, so the GPU draws it.)
+    /// effect, a camera move, a master fade or a caption. (The track bends the mesh, so the GPU draws it.)
     pub fn needs_post_pass(&self) -> bool {
-        self.effects.any_active() || self.camera.is_active() || !self.master_curve.is_opaque()
+        self.effects.any_active()
+            || self.camera.is_active()
+            || !self.master_curve.is_opaque()
+            || self.caption.as_ref().is_some_and(Caption::is_visible)
     }
 
     /// Every frame the sequence renders: hold, morph, hold.

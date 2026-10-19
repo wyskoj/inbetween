@@ -587,8 +587,8 @@ fn edited_sources_match() {
         filters: vec![Filter::Gaussian { sigma: 1.5 }],
         ..ImageEdit::default()
     };
-    let a2 = apply_edit(&a, &edit).unwrap().unwrap();
-    let b2 = apply_edit(&b, &edit).unwrap().unwrap();
+    let a2 = apply_edit(&a, &edit, None).unwrap().unwrap();
+    let b2 = apply_edit(&b, &edit, None).unwrap().unwrap();
     assert_eq!(a2.size(), (26, 40));
     let pairs: Vec<(Xy, Xy)> = vec![
         ((6.0, 6.0), (8.0, 7.0)),

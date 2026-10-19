@@ -3,6 +3,7 @@
 //! The order is fixed: geometry, then colour adjustment, then the filter list, then the
 //! caption. An identity edit returns `None` so the caller keeps the original image untouched.
 
+use crate::caption::{self, Font};
 use crate::RenderError;
 use inbetween_doc::{AdjustSettings, Filter, ImageEdit};
 use inbetween_raster::{filter, transform, Adjust, Image};
@@ -50,8 +51,13 @@ pub fn apply_filter(img: &Image, f: &Filter) -> Result<Image, RenderError> {
     })
 }
 
-/// The edited image, or `None` when `edit` is the identity.
-pub fn apply_edit(img: &Image, edit: &ImageEdit) -> Result<Option<Image>, RenderError> {
+/// The edited image, or `None` when the edit changes no pixel. `font` is the font file of the
+/// edit's caption (`None` uses the bundled font).
+pub fn apply_edit(
+    img: &Image,
+    edit: &ImageEdit,
+    font: Option<&Font>,
+) -> Result<Option<Image>, RenderError> {
     if edit.is_identity() {
         return Ok(None);
     }
@@ -76,6 +82,22 @@ pub fn apply_edit(img: &Image, edit: &ImageEdit) -> Result<Option<Image>, Render
         let next = apply_filter(cur.as_ref().unwrap_or(img), f)?;
         cur = Some(next);
     }
+    if let Some(c) = edit.caption.as_ref().filter(|c| c.is_visible()) {
+        let mut target = match cur {
+            Some(image) => image,
+            None => img.clone(),
+        };
+        let bundled;
+        let font = match font {
+            Some(f) => f,
+            None => {
+                bundled = Font::bundled()?;
+                &bundled
+            }
+        };
+        caption::draw_caption(&mut target, c, font)?;
+        cur = Some(target);
+    }
     Ok(cur)
 }
 
@@ -97,7 +119,7 @@ mod tests {
 
     #[test]
     fn identity_returns_none() {
-        assert!(apply_edit(&ramp(4, 3), &ImageEdit::default())
+        assert!(apply_edit(&ramp(4, 3), &ImageEdit::default(), None)
             .unwrap()
             .is_none());
     }
@@ -110,7 +132,7 @@ mod tests {
             flip_h: true,
             ..ImageEdit::default()
         };
-        let out = apply_edit(&img, &edit).unwrap().unwrap();
+        let out = apply_edit(&img, &edit, None).unwrap().unwrap();
         let want =
             transform::flip(&transform::rotate_quarter(&img, 1).unwrap(), true, false).unwrap();
         assert_eq!(out, want);
@@ -128,7 +150,7 @@ mod tests {
                     flip_v: fv,
                     ..ImageEdit::default()
                 };
-                let Some(want) = apply_edit(&img, &exact).unwrap() else {
+                let Some(want) = apply_edit(&img, &exact, None).unwrap() else {
                     continue;
                 };
                 let g = exact.geometry(7, 5).unwrap();
@@ -150,7 +172,7 @@ mod tests {
             }),
             ..ImageEdit::default()
         };
-        let out = apply_edit(&img, &edit).unwrap().unwrap();
+        let out = apply_edit(&img, &edit, None).unwrap().unwrap();
         assert_eq!(out.size(), (3, 2));
         assert_eq!(out.get(0, 0), img.get(2, 1));
         let past = ImageEdit {
@@ -162,7 +184,7 @@ mod tests {
             }),
             ..ImageEdit::default()
         };
-        let out = apply_edit(&img, &past).unwrap().unwrap();
+        let out = apply_edit(&img, &past, None).unwrap().unwrap();
         assert_eq!(out.get(0, 0), img.get(4, 0));
         assert_eq!(out.get(3, 0), Some([0.0; 4]));
     }
@@ -178,7 +200,7 @@ mod tests {
             filters: vec![Filter::Blur { radius: 1 }],
             ..ImageEdit::default()
         };
-        let out = apply_edit(&img, &edit).unwrap().unwrap();
+        let out = apply_edit(&img, &edit, None).unwrap().unwrap();
         let want = filter::box_blur(
             &inbetween_raster::adjust(
                 &img,
@@ -201,7 +223,7 @@ mod tests {
             angle: f64::NAN,
             ..ImageEdit::default()
         };
-        assert!(apply_edit(&img, &bad).is_err());
+        assert!(apply_edit(&img, &bad, None).is_err());
         let giant = ImageEdit {
             crop: Some(Crop {
                 x: 0.0,
@@ -211,6 +233,6 @@ mod tests {
             }),
             ..ImageEdit::default()
         };
-        assert!(apply_edit(&img, &giant).is_err());
+        assert!(apply_edit(&img, &giant, None).is_err());
     }
 }

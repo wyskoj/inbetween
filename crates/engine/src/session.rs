@@ -1,6 +1,9 @@
 use crate::{CommandError, Params};
+#[cfg(not(target_arch = "wasm32"))]
+use inbetween_doc::Caption;
 use inbetween_doc::{Project, Sequence};
 use inbetween_raster::Image;
+use inbetween_render_cpu::caption::Font;
 use inbetween_render_cpu::{EffectImages, RenderError, Renderer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -21,7 +24,13 @@ pub struct Session {
     images: HashMap<PathBuf, CachedImage>,
     /// Edited sources by resolved path and a hash of the edit, so undo and redo reuse them.
     processed: HashMap<(PathBuf, u64), CachedProcessed>,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     processed_clock: u64,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    fonts: HashMap<PathBuf, CachedFont>,
+    /// Drawn caption layers by caption, frame size and font.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    layers: HashMap<u64, Arc<Image>>,
     undo: Vec<Project>,
     redo: Vec<Project>,
     /// Depth of nested `edit.beginGroup` calls. While above zero, edits merge into one undo step.
@@ -38,6 +47,17 @@ struct CachedImage {
     /// File modification time and length when it was loaded; a change reloads it.
     stamp: (Option<SystemTime>, u64),
     image: Arc<Image>,
+}
+
+/// Modification time and length of a file, to notice when it changes.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+type FileStamp = (Option<SystemTime>, u64);
+
+/// A parsed caption font file; a change to the file reloads it.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+struct CachedFont {
+    stamp: (Option<SystemTime>, u64),
+    font: Font,
 }
 
 /// An edited source, valid while the raw image it was made from is still the cached one.
@@ -64,6 +84,8 @@ pub struct Prepared {
     pub foreground: Option<Arc<Image>>,
     pub transition: Option<Arc<Image>>,
     pub light: Option<Arc<Image>>,
+    /// The sequence's caption, already drawn at the output size.
+    pub caption: Option<Arc<Image>>,
 }
 
 impl Prepared {
@@ -75,6 +97,7 @@ impl Prepared {
             &self.image1,
             self.image2.as_deref(),
         )?
+        .with_caption(self.caption.as_deref())
         .with_effect_images(EffectImages {
             background: self.background.as_deref(),
             mask: self.mask.as_deref(),
@@ -283,6 +306,10 @@ impl Session {
             index,
         )?;
         let light = self.load_effect(fx.light.enabled, &fx.light.image.0, "light", index)?;
+        let caption = match &sequence.caption {
+            Some(c) => self.caption_layer(c, output)?,
+            None => None,
+        };
         Ok(Prepared {
             sequence,
             output,
@@ -293,6 +320,7 @@ impl Session {
             foreground,
             transition,
             light,
+            caption,
         })
     }
 
@@ -335,8 +363,13 @@ impl Session {
         }
         let json =
             serde_json::to_string(&edit).map_err(|e| CommandError::Internal(e.to_string()))?;
+        let font = match edit.caption.as_ref().filter(|c| c.is_visible()) {
+            Some(c) => self.caption_font(c)?,
+            None => None,
+        };
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         std::hash::Hash::hash(&json, &mut hasher);
+        std::hash::Hash::hash(&font.as_ref().map(|f| f.1), &mut hasher);
         let key = (
             self.resolve_image_path(&reference),
             std::hash::Hasher::finish(&hasher),
@@ -349,7 +382,11 @@ impl Session {
                 return Ok(Arc::clone(&hit.image));
             }
         }
-        let image = match inbetween_render_cpu::source::apply_edit(&raw, &edit) {
+        let image = match inbetween_render_cpu::source::apply_edit(
+            &raw,
+            &edit,
+            font.as_ref().map(|f| &f.0),
+        ) {
             Ok(Some(image)) => Arc::new(image),
             Ok(None) => return Ok(raw),
             Err(e) => {
@@ -377,6 +414,90 @@ impl Session {
             },
         );
         Ok(image)
+    }
+
+    /// The caption's own font file, loaded through the cache, with its file stamp. `None` when
+    /// the caption uses the bundled font.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn caption_font(
+        &mut self,
+        caption: &Caption,
+    ) -> Result<Option<(Font, FileStamp)>, CommandError> {
+        let Some(reference) = caption.font.as_ref().filter(|r| !r.0.is_empty()) else {
+            return Ok(None);
+        };
+        inbetween_format::check_image_path(&reference.0)?;
+        let full = self.resolve_image_path(&reference.0);
+        let meta = std::fs::metadata(&full)
+            .map_err(|e| CommandError::Image(format!("caption font {}: {e}", full.display())))?;
+        let stamp = (meta.modified().ok(), meta.len());
+        if let Some(hit) = self.fonts.get(&full).filter(|c| c.stamp == stamp) {
+            return Ok(Some((hit.font.clone(), stamp)));
+        }
+        if meta.len() > inbetween_render_cpu::caption::MAX_FONT_BYTES as u64 {
+            return Err(CommandError::Image(format!(
+                "caption font {}: the file is larger than {} MiB",
+                full.display(),
+                inbetween_render_cpu::caption::MAX_FONT_BYTES >> 20
+            )));
+        }
+        let bytes = std::fs::read(&full)
+            .map_err(|e| CommandError::Image(format!("caption font {}: {e}", full.display())))?;
+        let font = Font::from_bytes(bytes)
+            .map_err(|e| CommandError::Image(format!("caption font {}: {e}", full.display())))?;
+        self.fonts.insert(
+            full,
+            CachedFont {
+                stamp,
+                font: font.clone(),
+            },
+        );
+        Ok(Some((font, stamp)))
+    }
+
+    /// `caption` drawn as a layer of `frame` size, cached. `None` when it draws nothing.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn caption_layer(
+        &mut self,
+        caption: &Caption,
+        frame: (u32, u32),
+    ) -> Result<Option<Arc<Image>>, CommandError> {
+        if !caption.is_visible() {
+            return Ok(None);
+        }
+        let font = self.caption_font(caption)?;
+        let json =
+            serde_json::to_string(caption).map_err(|e| CommandError::Internal(e.to_string()))?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&(&json, frame, font.as_ref().map(|f| f.1)), &mut hasher);
+        let key = std::hash::Hasher::finish(&hasher);
+        if let Some(hit) = self.layers.get(&key) {
+            return Ok(Some(Arc::clone(hit)));
+        }
+        let font = match font {
+            Some((f, _)) => f,
+            None => Font::bundled()?,
+        };
+        let layer = inbetween_render_cpu::caption::render_layer(caption, &font, frame)?;
+        let Some(layer) = layer else {
+            return Ok(None);
+        };
+        if self.layers.len() >= 16 {
+            self.layers.clear();
+        }
+        let layer = Arc::new(layer);
+        self.layers.insert(key, Arc::clone(&layer));
+        Ok(Some(layer))
+    }
+
+    /// The movie-wide caption drawn at the output size, if there is one.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn movie_caption(&mut self) -> Result<Option<Arc<Image>>, CommandError> {
+        let Some(caption) = self.project.caption.clone() else {
+            return Ok(None);
+        };
+        let output = (self.project.output.width, self.project.output.height);
+        self.caption_layer(&caption, output)
     }
 
     /// How many edited sources are cached (for tests and diagnostics).

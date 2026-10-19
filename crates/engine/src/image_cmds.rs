@@ -43,6 +43,15 @@ pub(crate) fn target(session: &Session, params: &Params) -> Result<(usize, u8), 
 }
 
 /// Size of the source file of an image.
+#[cfg(target_arch = "wasm32")]
+fn source_size(_: &mut Session, _: usize, _: u8) -> Result<(u32, u32), CommandError> {
+    Err(CommandError::Image(
+        "image files cannot be read in this build".into(),
+    ))
+}
+
+/// Size of the source file of an image.
+#[cfg(not(target_arch = "wasm32"))]
 fn source_size(session: &mut Session, index: usize, which: u8) -> Result<(u32, u32), CommandError> {
     let seq = session.sequence(index)?;
     let reference = if which == 1 { &seq.image1 } else { &seq.image2 }.0.clone();

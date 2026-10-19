@@ -53,6 +53,7 @@ impl Registry {
         specs.extend(crate::fx_cmds::specs());
         specs.extend(crate::image_cmds::specs());
         specs.extend(crate::filter_cmds::specs());
+        specs.extend(crate::caption_cmds::specs());
         specs.extend(crate::camera_cmds::specs());
         specs.extend(crate::track_cmds::specs());
         specs.extend(crate::layer_cmds::specs());
@@ -181,6 +182,9 @@ mod tests {
             "image.adjust",
             "image.reset",
             "image.swap",
+            "image.caption",
+            "caption.sequence",
+            "caption.movie",
             "image.filter.smooth",
             "image.filter.blur",
             "image.filter.gaussian",

@@ -15,6 +15,7 @@
 
 mod anim_cmds;
 mod camera_cmds;
+mod caption_cmds;
 mod curve_cmds;
 mod dots_cmds;
 mod edit_cmds;

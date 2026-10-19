@@ -15,6 +15,7 @@
 )]
 
 pub mod camera;
+pub mod caption;
 mod effects;
 pub mod source;
 mod trail;
@@ -44,6 +45,8 @@ pub enum RenderError {
     MissingEffectImage(&'static str),
     /// An image edit is out of range.
     Edit(inbetween_doc::DocError),
+    /// A caption font file could not be used.
+    Font(String),
 }
 
 impl fmt::Display for RenderError {
@@ -56,6 +59,7 @@ impl fmt::Display for RenderError {
                 write!(f, "the {which} effect is on but its image is not loaded")
             }
             Self::Edit(e) => write!(f, "{e}"),
+            Self::Font(why) => write!(f, "caption font: {why}"),
         }
     }
 }
@@ -113,6 +117,8 @@ pub struct Renderer<'a> {
     source2: Option<Source<'a>>,
     effects: Effects,
     effect_images: EffectImages<'a>,
+    /// The sequence's caption, drawn once at the output size.
+    caption: Option<&'a Image>,
     morph: MorphType,
     /// Frame counts and holds only, for frame times.
     timing: Sequence,
@@ -163,6 +169,7 @@ impl<'a> Renderer<'a> {
             source2,
             effects: seq.effects.clone(),
             effect_images: EffectImages::default(),
+            caption: None,
             morph: seq.morph,
             timing: Sequence {
                 frames: seq.frames,
@@ -180,6 +187,13 @@ impl<'a> Renderer<'a> {
     /// `MissingEffectImage` if an enabled effect has none.
     pub fn with_effect_images(mut self, images: EffectImages<'a>) -> Self {
         self.effect_images = images;
+        self
+    }
+
+    /// Lay a drawn caption layer (see [`caption::render_layer`], at the output size) over every
+    /// frame, after the effects and before the master fade.
+    pub fn with_caption(mut self, layer: Option<&'a Image>) -> Self {
+        self.caption = layer;
         self
     }
 
@@ -209,6 +223,9 @@ impl<'a> Renderer<'a> {
             image = self.with_trail(image, index, plan.t)?;
         }
         effects::apply(&self.effects, &self.effect_images, &mut image, plan.t)?;
+        if let Some(layer) = self.caption {
+            caption::composite(&mut image, layer);
+        }
         if !self.master.is_opaque() {
             let k = self.master.eval(plan.t) as f32;
             for v in image.as_mut_slice() {

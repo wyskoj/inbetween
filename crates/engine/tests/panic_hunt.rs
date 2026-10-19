@@ -5,8 +5,8 @@
 //! hostile relative output paths land in a scratch folder.
 
 use inbetween_doc::{
-    AdjustSettings, Crop, DotPair, DotSet, Filter, ImageEdit, ImageRef, MorphType, OutputSettings,
-    Project, Sequence, MAX_FRAMES,
+    AdjustSettings, Caption, Crop, DotPair, DotSet, Filter, ImageEdit, ImageRef, MorphType,
+    OutputSettings, Project, Sequence, Shadow, MAX_FRAMES,
 };
 use inbetween_engine::{CommandError, CommandSpec, ParamKind, Registry, Session};
 use inbetween_geom::Point;
@@ -262,6 +262,59 @@ fn broken_project() -> Project {
             },
         ),
     ];
+    let hostile_captions = [
+        Caption {
+            size: f64::NAN,
+            text: "nan".into(),
+            ..Caption::default()
+        },
+        Caption {
+            size: 4000.0,
+            border_size: 4000.0,
+            text: "W".repeat(4000),
+            ..Caption::default()
+        },
+        Caption {
+            x: 1e300,
+            y: -1e300,
+            text: "far".into(),
+            ..Caption::default()
+        },
+        Caption {
+            text: "\u{0}\u{202e}\r\n\n\t".into(),
+            size: 0.5,
+            ..Caption::default()
+        },
+        Caption {
+            text: "shadow".into(),
+            shadow: Shadow {
+                size: 1e9,
+                distance: f64::INFINITY,
+                ..Shadow::default()
+            },
+            ..Caption::default()
+        },
+        Caption {
+            text: "font".into(),
+            font: Some(ImageRef::new("garbage.bin")),
+            ..Caption::default()
+        },
+        Caption {
+            text: "font".into(),
+            font: Some(ImageRef::new("a")),
+            ..Caption::default()
+        },
+    ];
+    for (i, caption) in hostile_captions.into_iter().enumerate() {
+        seqs.push(Sequence {
+            caption: Some(caption.clone()),
+            edit1: ImageEdit {
+                caption: Some(caption),
+                ..ImageEdit::default()
+            },
+            ..sequence(&format!("hostile caption {i}"), DotSet::default())
+        });
+    }
     for (name, edit) in hostile_edits {
         seqs.push(Sequence {
             edit1: edit.clone(),

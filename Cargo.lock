@@ -2012,6 +2012,7 @@ dependencies = [
 name = "inbetween-render-cpu"
 version = "0.0.0"
 dependencies = [
+ "ab_glyph",
  "inbetween-doc",
  "inbetween-geom",
  "inbetween-morph",

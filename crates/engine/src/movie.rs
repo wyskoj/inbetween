@@ -49,9 +49,24 @@ pub(crate) fn range_from(
     })
 }
 
-/// Render the frames in `range` and hand each to `each` with its movie frame number. Returns
-/// how many frames were handed over.
+/// Render the frames in `range` and hand each to `each` with its movie frame number, with the
+/// movie caption (if any) drawn over it. Returns how many frames were handed over.
 pub(crate) fn render_movie(
+    session: &mut Session,
+    range: MovieRange,
+    each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
+) -> Result<u64, CommandError> {
+    match session.movie_caption()? {
+        None => render_frames(session, range, each),
+        Some(layer) => render_frames(session, range, &mut |n, image| {
+            let mut captioned = image.clone();
+            inbetween_render_cpu::caption::composite(&mut captioned, &layer);
+            each(n, &captioned)
+        }),
+    }
+}
+
+fn render_frames(
     session: &mut Session,
     range: MovieRange,
     each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
