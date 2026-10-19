@@ -182,7 +182,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             id: "curve.shape",
             label: "Shape Curve",
             menu: "Sequence/Shape Curve",
-            shortcut: Some("Shift+Ctrl+S"),
+            shortcut: Some("Shift+Ctrl+H"),
             description: "Edit (or report) the shape curve, which remaps how far the dots have moved over time. Points run left to right; the ends stay at (0, 0) and (1, 1).",
             params: PARAMS,
             enabled: Session::has_sequences,
