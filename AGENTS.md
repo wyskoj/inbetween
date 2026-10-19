@@ -112,3 +112,24 @@ Commit messages: short imperative subject, a body of one or two lines at most.
 - Put new commands in a new module (`engine/src/<area>_cmds.rs` with a `specs()` function) instead of growing a shared file. Shared files get small, surgical edits; re-read before editing.
 - If someone else's in-progress edit breaks the build, wait and retry; don't fix their files.
 - Write `Cargo.toml` changes atomically (temp file, then `mv`) so a half-written manifest never breaks other builds.
+
+## 8. Lessons learned
+
+**Tooling**
+- Set `CARGO_TARGET_DIR` as an absolute path. A relative one creates a stray `crates/target` when you run from a subfolder, and the workspace then fails to load.
+- On Windows, write multi-line files and patch scripts with the Write tool, not Bash heredocs; heredocs containing quotes failed repeatedly.
+- `cargo fmt --all` reformats files under you. Patch with Edit or exact-match replacement after reading the current text.
+- `cargo xtask wasm` fails when file-reading code is not behind `cfg(not(target_arch = "wasm32"))`. Add the cfg when you add the function.
+
+**Workflow**
+- Run `cargo check -p <crate>` after each file; run clippy, wasm and the full tests at the end of a step.
+- `cargo test -p inbetween-format` takes about 2 minutes (the robustness test). Run it once per step and filter by test name while iterating.
+- Put new shell UI in submodules under `crates/ui-egui/src/app/`. `app.rs` is about 2000 lines and string patches to it are brittle.
+
+**Testing the shell (egui_kittest)**
+- egui reports a drag only after the pointer has moved, so use `pointer.press_origin()` to find what was grabbed.
+- A slider's label matches two accessibility nodes; use `get_by_role_and_label(Role::Slider, ...)`.
+- Screenshots: `INBETWEEN_UI_SHOTS=<dir>` on the kittest suites; a real-window check is `inbetween <project> --screenshot <png>`.
+
+**Planning**
+- When a plan has independent steps (for example filters, captions and shell tools once the model and cache exist), say so, so they can run as parallel agents under section 7.
