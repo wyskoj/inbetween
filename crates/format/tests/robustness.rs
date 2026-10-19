@@ -273,3 +273,24 @@ fn floats_survive_a_save_and_load_bit_for_bit() {
         }
     }
 }
+
+#[test]
+fn thumbnail_reader_survives_mutations() {
+    use inbetween_format::{project_to_string_with_thumbnail, thumbnail_from_bytes, Thumbnail};
+    let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    png.extend_from_slice(&[7u8; 64]);
+    let thumb = Thumbnail::from_png(8, 8, &png).unwrap();
+    let project = Project::default();
+    let seed = project_to_string_with_thumbnail(&project, Some(&thumb)).unwrap();
+    let bytes = seed.as_bytes();
+    for cut in 0..=bytes.len() {
+        let _ = thumbnail_from_bytes(&bytes[..cut]);
+    }
+    let mut rng = Rng(0x7B1D_0C0F_FEE5_A11E);
+    for _ in 0..20_000 {
+        if let Ok(Some((w, h, data))) = thumbnail_from_bytes(&mutate(&mut rng, bytes)) {
+            assert!((1..=512).contains(&w) && (1..=512).contains(&h));
+            assert!(data.starts_with(&[0x89, b'P', b'N', b'G']) && data.len() <= 1 << 20);
+        }
+    }
+}

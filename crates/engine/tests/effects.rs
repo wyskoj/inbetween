@@ -193,7 +193,7 @@ fn a_project_file_with_bad_effect_numbers_does_not_open() {
     std::fs::write(&file, text).unwrap();
     let mut s = Session::new();
     assert!(try_run(&mut s, "project.open", json!({"path": file})).is_err());
-    let text = r#"{"format":"inbetween-project","version":1,"project":{"sequences":[{"effects":{"foreground":{"enabled":true,"image":"/abs/x.png"}}}]}}"#;
+    let text = r#"{"format":"inbetween-project","version":1,"project":{"sequences":[{"effects":{"foreground":{"enabled":true,"image":"x\u0000.png"}}}]}}"#;
     std::fs::write(&file, text).unwrap();
     assert!(try_run(&mut s, "project.open", json!({"path": file})).is_err());
 }

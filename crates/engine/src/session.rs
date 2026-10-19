@@ -329,11 +329,7 @@ impl Session {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn load_path(&mut self, reference: &str, label: &str) -> Result<Arc<Image>, CommandError> {
-        // Project files only hold relative paths (checked when read and written); an absolute
-        // path can only come from a command in this session, such as `project.new`.
-        if !Path::new(reference).is_absolute() {
-            inbetween_format::check_relative(reference)?;
-        }
+        inbetween_format::check_image_path(reference)?;
         let full = self.resolve_image_path(reference);
         let meta = std::fs::metadata(&full)
             .map_err(|e| CommandError::Image(format!("{label}: {}: {e}", full.display())))?;

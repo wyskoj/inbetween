@@ -1,5 +1,6 @@
 use crate::{
-    dots_from_bytes, dots_to_string, project_from_bytes, project_to_string, FormatError,
+    dots_from_bytes, dots_to_string, project_from_bytes, project_to_string,
+    project_to_string_with_thumbnail, thumbnail_from_bytes, FormatError, Thumbnail,
     MAX_FILE_BYTES,
 };
 use inbetween_doc::{DotSet, Project};
@@ -51,6 +52,21 @@ pub fn read_project(path: &Path) -> Result<Project, FormatError> {
 /// Save a project atomically. Nothing is written if the project is invalid.
 pub fn write_project(path: &Path, project: &Project) -> Result<(), FormatError> {
     write_atomic(path, &project_to_string(project)?)
+}
+
+/// Save a project with an embedded preview thumbnail (or none), atomically.
+pub fn write_project_with_thumbnail(
+    path: &Path,
+    project: &Project,
+    thumbnail: Option<&Thumbnail>,
+) -> Result<(), FormatError> {
+    write_atomic(path, &project_to_string_with_thumbnail(project, thumbnail)?)
+}
+
+/// The preview thumbnail embedded in a project file, if it has one: width, height and PNG
+/// bytes. A broken thumbnail is an error; the project itself may still open.
+pub fn read_thumbnail(path: &Path) -> Result<Option<(u32, u32, Vec<u8>)>, FormatError> {
+    thumbnail_from_bytes(&read_limited(path)?)
 }
 
 /// Load a `.inbetweendots` file.

@@ -22,7 +22,7 @@ pub enum FormatError {
     Invalid(DocError),
     /// A project holds more sequences than the reader accepts.
     TooManySequences { count: usize, max: usize },
-    /// An image path is absolute or otherwise not portable.
+    /// An image path holds a NUL byte or is too long.
     BadPath { path: String, reason: &'static str },
 }
 

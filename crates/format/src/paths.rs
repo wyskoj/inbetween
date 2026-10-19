@@ -1,28 +1,26 @@
 use crate::FormatError;
 
-/// Accept only portable relative image paths (an empty path means "not set yet").
+/// Longest image path accepted, in characters.
+pub const MAX_PATH_CHARS: usize = 4096;
+
+/// Accept an image path as stored in a project file (an empty path means "not set yet").
 ///
-/// Rejected: absolute paths, drive letters, UNC paths and NUL bytes. `..` is allowed so a
-/// project can sit beside an `images` folder; callers resolve against the project's
-/// directory and decide whether to follow it.
-pub fn check_relative(path: &str) -> Result<(), FormatError> {
+/// Paths are relative to the project's folder where possible and absolute only when no
+/// relative path exists (another drive). Rejected: NUL bytes and over-long paths. `..` is
+/// allowed so a project can sit beside an `images` folder; callers resolve against the
+/// project's directory and decide whether to follow it.
+pub fn check_image_path(path: &str) -> Result<(), FormatError> {
     let bad = |reason| {
         Err(FormatError::BadPath {
-            path: path.to_string(),
+            path: path.chars().take(80).collect(),
             reason,
         })
     };
     if path.contains('\0') {
         return bad("contains a NUL character");
     }
-    if path.starts_with('/') || path.starts_with('\\') {
-        return bad("is absolute");
-    }
-    let mut chars = path.chars();
-    if let (Some(c), Some(':')) = (chars.next(), chars.next()) {
-        if c.is_ascii_alphabetic() {
-            return bad("starts with a drive letter");
-        }
+    if path.chars().count() > MAX_PATH_CHARS {
+        return bad("is too long");
     }
     Ok(())
 }
@@ -74,7 +72,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn accepts_relative_and_empty_paths() {
+    fn accepts_relative_absolute_and_empty_paths() {
         for p in [
             "",
             "a.png",
@@ -82,27 +80,25 @@ mod tests {
             "../images/a.png",
             "./a.png",
             "dir\\a.png",
+            "/etc/a.png",
+            "C:\\a.png",
+            "d:/x/a.png",
+            "\\\\server\\share\\a.png",
         ] {
-            assert!(check_relative(p).is_ok(), "{p}");
+            assert!(check_image_path(p).is_ok(), "{p}");
         }
     }
 
     #[test]
-    fn rejects_absolute_and_odd_paths() {
-        for p in [
-            "/etc/passwd",
-            "\\\\server\\share\\a.png",
-            "\\a.png",
-            "C:\\a.png",
-            "c:/a.png",
-            "a:b.png",
-            "a\0b",
-        ] {
+    fn rejects_nul_and_over_long_paths() {
+        for p in ["a\0b".to_string(), "a".repeat(MAX_PATH_CHARS + 1)] {
             assert!(
-                matches!(check_relative(p), Err(FormatError::BadPath { .. })),
-                "{p}"
+                matches!(check_image_path(&p), Err(FormatError::BadPath { .. })),
+                "{}",
+                p.len()
             );
         }
+        assert!(check_image_path(&"a".repeat(MAX_PATH_CHARS)).is_ok());
     }
 
     #[test]
@@ -137,8 +133,8 @@ mod tests {
     }
 
     #[test]
-    fn results_pass_the_relative_check() {
+    fn results_pass_the_path_check() {
         let rel = make_relative("/p/proj", "/p/images/a.png").unwrap();
-        assert!(check_relative(&rel).is_ok());
+        assert!(check_image_path(&rel).is_ok());
     }
 }

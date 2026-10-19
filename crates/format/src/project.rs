@@ -1,4 +1,5 @@
-use crate::{check_header, check_relative, decode_text, parse_error, FormatError};
+use crate::{check_header, check_image_path, decode_text, parse_error, FormatError};
+use base64::Engine as _;
 use inbetween_doc::Project;
 use serde::{Deserialize, Serialize};
 
@@ -11,11 +12,86 @@ pub const MAX_FILE_BYTES: usize = 64 * 1024 * 1024;
 /// Most sequences a project may hold.
 pub const MAX_SEQUENCES: usize = 10_000;
 
+/// Longest side of an embedded thumbnail, in pixels.
+pub const MAX_THUMBNAIL_PIXELS: u32 = 512;
+/// Largest embedded thumbnail PNG, in bytes once decoded.
+pub const MAX_THUMBNAIL_PNG_BYTES: usize = 1024 * 1024;
+
+const PNG_SIGNATURE: &[u8] = &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// A small preview of the project, embedded in the file so a file browser can show it
+/// without rendering. `png` is the base64 text of a PNG.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Thumbnail {
+    pub width: u32,
+    pub height: u32,
+    pub png: String,
+}
+
+impl Thumbnail {
+    /// Wrap PNG bytes, refusing a thumbnail the reader would refuse.
+    pub fn from_png(width: u32, height: u32, png: &[u8]) -> Result<Self, FormatError> {
+        let t = Self {
+            width,
+            height,
+            png: base64::engine::general_purpose::STANDARD.encode(png),
+        };
+        t.decode()?;
+        Ok(t)
+    }
+
+    /// The PNG bytes, after checking every limit.
+    pub fn decode(&self) -> Result<Vec<u8>, FormatError> {
+        let bad = |m: &str| FormatError::Parse(format!("bad thumbnail: {m}"));
+        let side = 1..=MAX_THUMBNAIL_PIXELS;
+        if !side.contains(&self.width) || !side.contains(&self.height) {
+            return Err(bad("size is out of range"));
+        }
+        // Base64 grows by 4/3; check before decoding so a huge string is never expanded.
+        if self.png.len() > MAX_THUMBNAIL_PNG_BYTES / 3 * 4 + 8 {
+            return Err(bad("image is too large"));
+        }
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(self.png.as_bytes())
+            .map_err(|_| bad("not valid base64"))?;
+        if png.len() > MAX_THUMBNAIL_PNG_BYTES {
+            return Err(bad("image is too large"));
+        }
+        if !png.starts_with(PNG_SIGNATURE) {
+            return Err(bad("not a PNG"));
+        }
+        Ok(png)
+    }
+}
+
 #[derive(Serialize)]
 struct EnvelopeOut<'a> {
     format: &'static str,
     version: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thumbnail: Option<&'a Thumbnail>,
     project: &'a Project,
+}
+
+#[derive(Deserialize, Default)]
+struct ThumbnailIn {
+    #[serde(default)]
+    thumbnail: Option<Thumbnail>,
+}
+
+/// Read only the embedded thumbnail of project-file bytes: `Ok(None)` when the file has
+/// none, an error when it has one that breaks a limit. Returns the size and the PNG bytes.
+pub fn thumbnail_from_bytes(bytes: &[u8]) -> Result<Option<(u32, u32, Vec<u8>)>, FormatError> {
+    let text = decode_text(bytes, MAX_FILE_BYTES)?;
+    check_header(text, PROJECT_FORMAT, PROJECT_VERSION)?;
+    let env: ThumbnailIn = serde_json::from_str(text).map_err(parse_error)?;
+    match env.thumbnail {
+        None => Ok(None),
+        Some(t) => {
+            let png = t.decode()?;
+            Ok(Some((t.width, t.height, png)))
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -25,12 +101,24 @@ struct EnvelopeIn {
 }
 
 /// Serialise to pretty JSON. Fails if the project breaks a model limit or holds an
-/// absolute image path, so a saved file always loads back.
+/// unusable image path, so a saved file always loads back.
 pub fn project_to_string(project: &Project) -> Result<String, FormatError> {
+    project_to_string_with_thumbnail(project, None)
+}
+
+/// Like [`project_to_string`], embedding a preview thumbnail.
+pub fn project_to_string_with_thumbnail(
+    project: &Project,
+    thumbnail: Option<&Thumbnail>,
+) -> Result<String, FormatError> {
     validate(project)?;
+    if let Some(t) = thumbnail {
+        t.decode()?;
+    }
     let env = EnvelopeOut {
         format: PROJECT_FORMAT,
         version: PROJECT_VERSION,
+        thumbnail,
         project,
     };
     let mut text = serde_json::to_string_pretty(&env)
@@ -69,10 +157,10 @@ fn validate(project: &Project) -> Result<(), FormatError> {
     }
     project.validate()?;
     for seq in &project.sequences {
-        check_relative(&seq.image1.0)?;
-        check_relative(&seq.image2.0)?;
+        check_image_path(&seq.image1.0)?;
+        check_image_path(&seq.image2.0)?;
         for image in seq.effects.all_images() {
-            check_relative(&image.0)?;
+            check_image_path(&image.0)?;
         }
     }
     Ok(())
@@ -245,7 +333,6 @@ mod tests {
             r#""master_curve":{"points":[{"x":0.1,"y":1.0},{"x":1.0,"y":1.0}]}"#,
             r#""master_curve":{"points":[{"x":0.0,"y":3.0},{"x":1.0,"y":1.0}]}"#,
             r#""effects":{"transition":{"softness":500.0}}"#,
-            r#""effects":{"light":{"enabled":true,"image":"/abs/l.png"}}"#,
         ] {
             let text = format!(
                 r#"{{"format":"inbetween-project","version":1,"project":{{"sequences":[{{{field}}}]}}}}"#
@@ -439,22 +526,90 @@ mod tests {
     }
 
     #[test]
-    fn absolute_image_paths_are_rejected() {
-        for path in ["/etc/passwd", "C:\\\\x.png", "\\\\\\\\server\\\\share"] {
+    fn absolute_image_paths_round_trip() {
+        let mut p = sample();
+        p.sequences[0].image1 = ImageRef::new("D:\\other drive\\a.png");
+        p.sequences[0].image2 = ImageRef::new("/abs/b.png");
+        p.sequences[0].effects.light.image = ImageRef::new("E:/l.png");
+        let text = project_to_string(&p).unwrap();
+        assert_eq!(project_from_str(&text).unwrap(), p);
+    }
+
+    #[test]
+    fn nul_and_over_long_image_paths_are_rejected() {
+        for path in ["a\\u0000b".to_string(), "x".repeat(5000)] {
             let text = format!(
                 r#"{{"format":"inbetween-project","version":1,"project":{{"sequences":[{{"image1":"{path}"}}]}}}}"#
             );
             assert!(
                 matches!(project_from_str(&text), Err(FormatError::BadPath { .. })),
-                "{path}"
+                "{}",
+                path.len()
             );
         }
         let mut p = sample();
-        p.sequences[0].image2 = ImageRef::new("/abs/b.png");
+        p.sequences[0].image2 = ImageRef::new("a\0b");
         assert!(matches!(
             project_to_string(&p),
             Err(FormatError::BadPath { .. })
         ));
+    }
+
+    fn tiny_png() -> Vec<u8> {
+        let mut png = PNG_SIGNATURE.to_vec();
+        png.extend_from_slice(b"rest of a pretend png");
+        png
+    }
+
+    #[test]
+    fn thumbnail_round_trips_and_is_optional() {
+        let p = sample();
+        let png = tiny_png();
+        let t = Thumbnail::from_png(8, 6, &png).unwrap();
+        let text = project_to_string_with_thumbnail(&p, Some(&t)).unwrap();
+        assert!(text.contains("\"thumbnail\""));
+        // The project itself reads back unchanged.
+        assert_eq!(project_from_str(&text).unwrap(), p);
+        assert_eq!(
+            thumbnail_from_bytes(text.as_bytes()).unwrap(),
+            Some((8, 6, png))
+        );
+        // Without one, nothing is written, and an older file still reads.
+        let plain = project_to_string(&p).unwrap();
+        assert!(!plain.contains("thumbnail"));
+        assert_eq!(thumbnail_from_bytes(plain.as_bytes()).unwrap(), None);
+        let older = r#"{"format":"inbetween-project","version":1,"project":{"sequences":[{}]}}"#;
+        assert_eq!(thumbnail_from_bytes(older.as_bytes()).unwrap(), None);
+    }
+
+    #[test]
+    fn bad_thumbnails_are_errors_not_panics() {
+        let head = r#"{"format":"inbetween-project","version":1,"thumbnail":"#;
+        let big_b64 = "A".repeat(MAX_THUMBNAIL_PNG_BYTES / 3 * 4 + 400);
+        for thumb in [
+            r#"{"width":8,"height":6,"png":"!!! not base64"}"#.to_string(),
+            r#"{"width":8,"height":6,"png":"aGVsbG8="}"#.to_string(), // "hello": not a PNG
+            r#"{"width":0,"height":6,"png":"iVBORw0KGgo="}"#.to_string(),
+            r#"{"width":9999,"height":6,"png":"iVBORw0KGgo="}"#.to_string(),
+            format!(r#"{{"width":8,"height":6,"png":"{big_b64}"}}"#),
+            r#"{"width":8}"#.to_string(),
+            r#"[1,2]"#.to_string(),
+            r#""text""#.to_string(),
+        ] {
+            let text = format!("{head}{thumb}}}");
+            assert!(thumbnail_from_bytes(text.as_bytes()).is_err(), "{thumb:.60}");
+        }
+        assert!(Thumbnail::from_png(8, 6, b"not a png").is_err());
+        assert!(Thumbnail::from_png(600, 6, &tiny_png()).is_err());
+        let mut big = tiny_png();
+        big.resize(MAX_THUMBNAIL_PNG_BYTES + 1, 0);
+        assert!(Thumbnail::from_png(8, 6, &big).is_err());
+        let bad = Thumbnail {
+            width: 8,
+            height: 6,
+            png: "zzz".into(),
+        };
+        assert!(project_to_string_with_thumbnail(&sample(), Some(&bad)).is_err());
     }
 
     #[test]

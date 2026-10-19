@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 inbetween-doc = { path = "../doc" }
 inbetween-geom = { path = "../geom" }
+base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 
