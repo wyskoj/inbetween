@@ -94,3 +94,12 @@
 - Shell: Image menu with quick items, the crop tool, the Adjust window with its filter list, the Caption window with drag.
 
 **Exit:** every §2 and §8 row is `[x]`.
+
+## Known debt
+
+Work that is not a feature row but should not be forgotten. Pick from here when a milestone leaves room.
+
+- **Image operation speed** (`docs/perf.md`, 1080p, 4 threads): `image.adjust` takes about 27 ms (target 15) and a Gaussian of sigma 10 about 124 ms (target 60). Zoom blur (0.5 s) and radial blur (1.1 s) take 24 bilinear taps per pixel. Edits are cached per source, so this is felt only while dragging a slider.
+- **Caption reach:** a caption wholly outside the frame draws nothing, and border or shadow reach from outside the frame is limited to 256 px (D46).
+- **Live-window checks:** the by-hand list in `docs/manual-checks.md` has not been run for M15 and M16.
+- **Other platforms:** only Windows has been run.

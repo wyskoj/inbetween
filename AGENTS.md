@@ -102,6 +102,8 @@ cargo deny check          # if you added a dependency
 cargo xtask perf --quick  # if you touched a hot path
 ```
 
+In the edit-test loop, `cargo xtask ci --quick` runs fmt, clippy, tests, layers and (when relevant) wasm and deny for only the crates with uncommitted changes, with the mutation-fuzz loops at a tenth (`INBETWEEN_FUZZ_SCALE=10`). It does not test crates that merely depend on yours, so run plain `cargo xtask ci` before you push.
+
 Then append a terse entry to `log/devlog.md`: what landed, numbers, what is still open. Sessions can end abruptly; the dev log plus a green tree is how the next session picks up. Keep the tree building at every commit.
 
 Commit messages: short imperative subject, a body of one or two lines at most.
@@ -123,12 +125,13 @@ Commit messages: short imperative subject, a body of one or two lines at most.
 
 **Workflow**
 - Run `cargo check -p <crate>` after each file; run clippy, wasm and the full tests at the end of a step.
-- `cargo test -p inbetween-format` takes about 2 minutes (the robustness test). Run it once per step and filter by test name while iterating.
-- Put new shell UI in submodules under `crates/ui-egui/src/app/`. `app.rs` is about 2000 lines and string patches to it are brittle.
+- The format robustness tests take about 90 s in full (the exhaustive single-byte test is the slow one). Use `INBETWEEN_FUZZ_SCALE=10` while iterating; CI runs them in full.
+- Put new shell UI in submodules under `crates/ui-egui/src/app/` (one `impl InbetweenApp` per window or tool, `use super::*;`). Keep `app.rs` for the core only; string patches to a large file are brittle.
 
 **Testing the shell (egui_kittest)**
 - egui reports a drag only after the pointer has moved, so use `pointer.press_origin()` to find what was grabbed.
 - A slider's label matches two accessibility nodes; use `get_by_role_and_label(Role::Slider, ...)`.
+- Hand checks the tests cannot cover live in `docs/manual-checks.md`; add a line there when you add a tool.
 - Screenshots: `INBETWEEN_UI_SHOTS=<dir>` on the kittest suites; a real-window check is `inbetween <project> --screenshot <png>`.
 
 **Planning**
