@@ -246,8 +246,13 @@ mod files {
             "Which image to replace: 1 or 2",
         )
         .range(1.0, 2.0),
-        ParamSpec::new("path", ParamKind::Path, true, "The new image (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)")
-            .open_file(inbetween_codecs::IMAGE_EXTENSIONS),
+        ParamSpec::new(
+            "path",
+            ParamKind::Path,
+            true,
+            "The new image (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)",
+        )
+        .open_file(inbetween_codecs::IMAGE_EXTENSIONS),
         SEQUENCE,
     ];
 

@@ -213,10 +213,93 @@ impl Image {
         }
         Ok(out)
     }
+
+    /// A copy scaled down by an area (box) average so its longest side is at most
+    /// `max_side`, keeping the aspect ratio. An image already that small is cloned.
+    /// Averaging is done on premultiplied values, so transparent areas do not bleed colour.
+    pub fn downscale_to_fit(&self, max_side: u32) -> Result<Image, RasterError> {
+        let longest = self.width.max(self.height);
+        if max_side == 0 {
+            return Err(RasterError::InvalidSize {
+                width: 0,
+                height: 0,
+            });
+        }
+        if longest <= max_side {
+            return Ok(self.clone());
+        }
+        let scale = f64::from(max_side) / f64::from(longest);
+        let dim = |n: u32| ((f64::from(n) * scale).round() as u32).clamp(1, max_side);
+        let (nw, nh) = (dim(self.width), dim(self.height));
+        let mut out = Image::new(nw, nh)?;
+        let (w, h) = (u64::from(self.width), u64::from(self.height));
+        for dy in 0..nh {
+            let y0 = (u64::from(dy) * h / u64::from(nh)) as u32;
+            let y1 = (((u64::from(dy) + 1) * h).div_ceil(u64::from(nh)) as u32)
+                .clamp(y0 + 1, self.height);
+            for dx in 0..nw {
+                let x0 = (u64::from(dx) * w / u64::from(nw)) as u32;
+                let x1 = (((u64::from(dx) + 1) * w).div_ceil(u64::from(nw)) as u32)
+                    .clamp(x0 + 1, self.width);
+                let mut sum = [0.0f64; 4];
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        if let Some(px) = self.get(x, y) {
+                            for (s, v) in sum.iter_mut().zip(px) {
+                                *s += f64::from(v);
+                            }
+                        }
+                    }
+                }
+                let n = f64::from((y1 - y0) * (x1 - x0));
+                out.set(
+                    dx,
+                    dy,
+                    [
+                        (sum[0] / n) as f32,
+                        (sum[1] / n) as f32,
+                        (sum[2] / n) as f32,
+                        (sum[3] / n) as f32,
+                    ],
+                );
+            }
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn downscale_averages_boxes_and_keeps_aspect() {
+        // 4 x 2: left half black, right half white, all opaque.
+        let mut rgba = Vec::new();
+        for _ in 0..2 {
+            for x in 0..4 {
+                let v = if x < 2 { 0 } else { 255 };
+                rgba.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let img = Image::from_rgba8(4, 2, &rgba).unwrap();
+        let small = img.downscale_to_fit(2).unwrap();
+        assert_eq!(small.size(), (2, 1));
+        assert_eq!(small.get(0, 0), Some([0.0, 0.0, 0.0, 1.0]));
+        assert_eq!(small.get(1, 0), Some([1.0, 1.0, 1.0, 1.0]));
+        // Smaller than the limit: unchanged.
+        assert_eq!(img.downscale_to_fit(10).unwrap(), img);
+        assert!(img.downscale_to_fit(0).is_err());
+        // Odd ratios never go out of bounds and keep alpha in range.
+        let odd = Image::filled(7, 3, [0.5, 0.0, 0.0, 0.5]).unwrap();
+        let s = odd.downscale_to_fit(2).unwrap();
+        assert_eq!(s.size(), (2, 1));
+        assert!(s
+            .as_slice()
+            .iter()
+            .all(|v| (v - 0.5).abs() < 1e-6 || v.abs() < 1e-6));
+        let thin = Image::filled(1000, 1, [1.0; 4]).unwrap();
+        assert_eq!(thin.downscale_to_fit(10).unwrap().size(), (10, 1));
+    }
+
     use super::*;
 
     fn two_by_two() -> Image {

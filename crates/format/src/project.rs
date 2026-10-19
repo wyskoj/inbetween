@@ -597,7 +597,10 @@ mod tests {
             r#""text""#.to_string(),
         ] {
             let text = format!("{head}{thumb}}}");
-            assert!(thumbnail_from_bytes(text.as_bytes()).is_err(), "{thumb:.60}");
+            assert!(
+                thumbnail_from_bytes(text.as_bytes()).is_err(),
+                "{thumb:.60}"
+            );
         }
         assert!(Thumbnail::from_png(8, 6, b"not a png").is_err());
         assert!(Thumbnail::from_png(600, 6, &tiny_png()).is_err());

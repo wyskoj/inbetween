@@ -1,7 +1,6 @@
 use crate::{
     dots_from_bytes, dots_to_string, project_from_bytes, project_to_string,
-    project_to_string_with_thumbnail, thumbnail_from_bytes, FormatError, Thumbnail,
-    MAX_FILE_BYTES,
+    project_to_string_with_thumbnail, thumbnail_from_bytes, FormatError, Thumbnail, MAX_FILE_BYTES,
 };
 use inbetween_doc::{DotSet, Project};
 use std::io::Read;
