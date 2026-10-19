@@ -50,7 +50,7 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 | [ ] | `frame.exportEdit` | Export a single frame together with its dot set | P2 |
 | [ ] | `file.dragDrop` | Drop images onto either source panel or effect slots | P1 |
 
-**Image import:** BMP, JPEG, TIFF, PNG, PSD (flattened), TGA, GIF; keep alpha for BMP/TIFF/PNG/PSD/TGA. P0 for PNG/JPEG, P1 for the rest. *Status: PNG and JPEG codecs done (`codecs`); the import command arrives with the engine.*
+**Image import:** BMP, JPEG, TIFF, PNG, PSD (flattened), TGA, GIF; keep alpha for BMP/TIFF/PNG/PSD/TGA. P0 for PNG/JPEG, P1 for the rest. *Status: done (`codecs` reads all of them; PSD is an in-house flattened-composite reader; GIF reads the first frame; import only, export stays PNG/JPEG).*
 
 ---
 

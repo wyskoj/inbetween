@@ -246,8 +246,8 @@ mod files {
             "Which image to replace: 1 or 2",
         )
         .range(1.0, 2.0),
-        ParamSpec::new("path", ParamKind::Path, true, "The new image (PNG or JPEG)")
-            .open_file(&["png", "jpg", "jpeg"]),
+        ParamSpec::new("path", ParamKind::Path, true, "The new image (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)")
+            .open_file(inbetween_codecs::IMAGE_EXTENSIONS),
         SEQUENCE,
     ];
 
@@ -281,7 +281,7 @@ mod files {
             label: "Set Image",
             menu: "Sequence/Set Image...",
             shortcut: None,
-            description: "Replace Image 1 or Image 2 of a sequence with another PNG or JPEG file.",
+            description: "Replace Image 1 or Image 2 of a sequence with another image file.",
             params: IMAGE_PARAMS,
             enabled: Session::has_sequences,
             disabled_reason: "the project has no sequences",

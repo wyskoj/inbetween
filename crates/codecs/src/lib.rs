@@ -1,4 +1,7 @@
-//! PNG and JPEG read/write. Standalone: no workspace dependencies.
+//! Image file read/write. Standalone: no workspace dependencies.
+//!
+//! Reads PNG, JPEG, BMP, TIFF, TGA, GIF (first frame) and PSD (flattened composite);
+//! writes PNG and JPEG.
 //!
 //! Pixels cross this boundary as straight (non-premultiplied) 8-bit sRGB RGBA, four bytes
 //! per pixel, rows top to bottom. PNG keeps alpha; JPEG has none (see [`encode_jpeg`]).
@@ -11,12 +14,19 @@
     clippy::unreachable
 )]
 
+pub(crate) mod psd;
+
 use image::{ExtendedColorType, ImageEncoder, ImageFormat, ImageReader, Limits};
 use std::fmt;
 use std::io::Cursor;
 
 /// Longest side accepted, in pixels.
 pub const MAX_DIMENSION: u32 = 32_768;
+/// File extensions (lowercase, no dot) of every image format Inbetween reads.
+pub const IMAGE_EXTENSIONS: &[&str] = &[
+    "png", "jpg", "jpeg", "bmp", "tif", "tiff", "tga", "gif", "psd",
+];
+
 /// Most pixels accepted. Checked from the file header before any pixel data is allocated.
 pub const MAX_PIXELS: u64 = 100_000_000;
 
@@ -32,11 +42,16 @@ pub struct Rgba8Image {
 pub enum Format {
     Png,
     Jpeg,
+    Bmp,
+    Tiff,
+    Tga,
+    Gif,
+    Psd,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CodecError {
-    /// The file is not a PNG or JPEG, or uses a feature we do not read.
+    /// The file is not a supported image, or uses a feature we do not read.
     Unsupported(String),
     /// The data is corrupt or truncated.
     Decode(String),
@@ -104,42 +119,81 @@ fn check_buffer(width: u32, height: u32, data: &[u8]) -> Result<(), CodecError> 
     }
 }
 
-fn reader(bytes: &[u8]) -> Result<ImageReader<Cursor<&[u8]>>, CodecError> {
-    ImageReader::new(Cursor::new(bytes))
+/// A reader over `bytes`. TGA has no magic bytes, so it is only chosen from `ext`.
+fn reader<'a>(
+    bytes: &'a [u8],
+    ext: Option<&str>,
+) -> Result<ImageReader<Cursor<&'a [u8]>>, CodecError> {
+    let mut r = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
-        .map_err(|e| CodecError::Decode(e.to_string()))
+        .map_err(|e| CodecError::Decode(e.to_string()))?;
+    if r.format().is_none() && ext.is_some_and(|e| e.eq_ignore_ascii_case("tga")) {
+        r.set_format(ImageFormat::Tga);
+    }
+    Ok(r)
 }
 
-/// Which format `bytes` start with, if it is one we read.
+/// Which format `bytes` start with, if it is one we read. TGA files are not recognised
+/// here (no magic bytes); see [`detect_with_ext`].
 pub fn detect(bytes: &[u8]) -> Option<Format> {
-    match reader(bytes).ok()?.format()? {
+    detect_with_ext(bytes, None)
+}
+
+/// Like [`detect`], with the file extension (no dot) as a hint for TGA.
+pub fn detect_with_ext(bytes: &[u8], ext: Option<&str>) -> Option<Format> {
+    if psd::is_psd(bytes) {
+        return Some(Format::Psd);
+    }
+    match reader(bytes, ext).ok()?.format()? {
         ImageFormat::Png => Some(Format::Png),
         ImageFormat::Jpeg => Some(Format::Jpeg),
+        ImageFormat::Bmp => Some(Format::Bmp),
+        ImageFormat::Tiff => Some(Format::Tiff),
+        ImageFormat::Tga => Some(Format::Tga),
+        ImageFormat::Gif => Some(Format::Gif),
         _ => None,
     }
 }
 
 /// Read the size from the header without decoding pixels.
 pub fn read_size(bytes: &[u8]) -> Result<(u32, u32), CodecError> {
-    if detect(bytes).is_none() {
-        return Err(CodecError::Unsupported("not a PNG or JPEG file".into()));
-    }
-    let (w, h) = reader(bytes)?
-        .into_dimensions()
-        .map_err(|e| CodecError::Decode(e.to_string()))?;
-    check_size(w, h)?;
-    Ok((w, h))
+    read_size_with_ext(bytes, None)
 }
 
-/// Decode a PNG or JPEG. Sixteen-bit PNGs are reduced to 8 bits; greyscale and palette
+/// Like [`read_size`], with the file extension as a hint for TGA.
+pub fn read_size_with_ext(bytes: &[u8], ext: Option<&str>) -> Result<(u32, u32), CodecError> {
+    match detect_with_ext(bytes, ext) {
+        None => Err(CodecError::Unsupported(
+            "not a PNG, JPEG, BMP, TIFF, TGA, GIF or PSD file".into(),
+        )),
+        Some(Format::Psd) => psd::read_size(bytes),
+        Some(_) => {
+            let (w, h) = reader(bytes, ext)?
+                .into_dimensions()
+                .map_err(|e| CodecError::Decode(e.to_string()))?;
+            check_size(w, h)?;
+            Ok((w, h))
+        }
+    }
+}
+
+/// Decode an image. Sixteen-bit images are reduced to 8 bits; greyscale and palette
 /// images are expanded; images without alpha come out fully opaque.
 pub fn decode(bytes: &[u8]) -> Result<Rgba8Image, CodecError> {
-    let (width, height) = read_size(bytes)?;
+    decode_with_ext(bytes, None)
+}
+
+/// Like [`decode`], with the file extension as a hint for TGA.
+pub fn decode_with_ext(bytes: &[u8], ext: Option<&str>) -> Result<Rgba8Image, CodecError> {
+    let (width, height) = read_size_with_ext(bytes, ext)?;
+    if psd::is_psd(bytes) {
+        return psd::decode(bytes);
+    }
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_DIMENSION);
     limits.max_image_height = Some(MAX_DIMENSION);
     limits.max_alloc = Some(MAX_PIXELS * 8);
-    let mut r = reader(bytes)?;
+    let mut r = reader(bytes, ext)?;
     r.limits(limits);
     let img = r.decode().map_err(|e| CodecError::Decode(e.to_string()))?;
     let rgba = img.to_rgba8();
@@ -217,7 +271,8 @@ mod files {
             )));
         }
         let bytes = std::fs::read(path).map_err(io)?;
-        decode(&bytes)
+        let ext = path.extension().and_then(|e| e.to_str());
+        decode_with_ext(&bytes, ext)
     }
 
     /// Encode and write an image, choosing PNG or JPEG from the extension. JPEG uses
@@ -305,6 +360,92 @@ mod tests {
             .data
             .chunks_exact(4)
             .all(|p| p[0] >= 250 && p[1] >= 250 && p[2] >= 250));
+    }
+
+    fn alpha_sample() -> Vec<u8> {
+        let mut v = Vec::new();
+        for i in 0..12u32 {
+            v.extend_from_slice(&[(i * 20) as u8, 255 - (i * 9) as u8, 40, (i * 21) as u8]);
+        }
+        v
+    }
+
+    #[test]
+    fn bmp_tiff_tga_keep_alpha_and_round_trip() {
+        let data = alpha_sample();
+        let mut bmp = Vec::new();
+        image::codecs::bmp::BmpEncoder::new(&mut bmp)
+            .write_image(&data, 4, 3, ExtendedColorType::Rgba8)
+            .unwrap();
+        let mut tiff = Cursor::new(Vec::new());
+        image::codecs::tiff::TiffEncoder::new(&mut tiff)
+            .write_image(&data, 4, 3, ExtendedColorType::Rgba8)
+            .unwrap();
+        let mut tga = Vec::new();
+        image::codecs::tga::TgaEncoder::new(&mut tga)
+            .write_image(&data, 4, 3, ExtendedColorType::Rgba8)
+            .unwrap();
+        let png = encode_png(4, 3, &data).unwrap();
+
+        assert_eq!(detect(&bmp), Some(Format::Bmp));
+        assert_eq!(detect(tiff.get_ref()), Some(Format::Tiff));
+        assert_eq!(detect(&png), Some(Format::Png));
+        // TGA has no magic: only the extension hint finds it.
+        assert_eq!(detect(&tga), None);
+        assert_eq!(detect_with_ext(&tga, Some("TGA")), Some(Format::Tga));
+        assert_eq!(read_size_with_ext(&tga, Some("tga")), Ok((4, 3)));
+
+        for (name, got) in [
+            ("bmp", decode(&bmp).unwrap()),
+            ("tiff", decode(tiff.get_ref()).unwrap()),
+            ("tga", decode_with_ext(&tga, Some("tga")).unwrap()),
+            ("png", decode(&png).unwrap()),
+        ] {
+            assert_eq!((got.width, got.height), (4, 3), "{name}");
+            assert_eq!(got.data, data, "{name}");
+        }
+    }
+
+    #[test]
+    fn gif_reads_the_first_frame() {
+        let mut gif = Vec::new();
+        {
+            let mut enc = image::codecs::gif::GifEncoder::new(&mut gif);
+            let red = image::RgbaImage::from_pixel(5, 4, image::Rgba([255, 0, 0, 255]));
+            let blue = image::RgbaImage::from_pixel(5, 4, image::Rgba([0, 0, 255, 255]));
+            enc.encode_frame(image::Frame::new(red)).unwrap();
+            enc.encode_frame(image::Frame::new(blue)).unwrap();
+        }
+        assert_eq!(detect(&gif), Some(Format::Gif));
+        let img = decode(&gif).unwrap();
+        assert_eq!((img.width, img.height), (5, 4));
+        assert_eq!(&img.data[..4], &[255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn psd_goes_through_decode_and_keeps_alpha() {
+        let planes = vec![vec![1, 2], vec![3, 4], vec![5, 6], vec![0, 200]];
+        let bytes = psd::tests::build(2, 1, 3, &planes, true);
+        assert_eq!(detect(&bytes), Some(Format::Psd));
+        assert_eq!(read_size(&bytes), Ok((2, 1)));
+        let img = decode(&bytes).unwrap();
+        assert_eq!(img.data, [1, 3, 5, 0, 2, 4, 6, 200]);
+    }
+
+    #[test]
+    fn every_listed_extension_is_lowercase() {
+        assert!(IMAGE_EXTENSIONS
+            .iter()
+            .all(|e| *e == e.to_ascii_lowercase()));
+        assert!(IMAGE_EXTENSIONS.contains(&"psd"));
+    }
+
+    #[test]
+    fn garbage_in_new_formats_is_an_error_not_a_panic() {
+        for magic in [&b"BM"[..], b"II*\0", b"MM\0*", b"GIF89a", b"8BPS"] {
+            assert!(decode(magic).is_err());
+        }
+        assert!(decode_with_ext(b"\x00\x01\x02", Some("tga")).is_err());
     }
 
     #[test]

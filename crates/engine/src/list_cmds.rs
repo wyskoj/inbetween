@@ -406,9 +406,9 @@ mod files {
             "image2",
             ParamKind::Path,
             true,
-            "The new sequence's Image 2 (PNG or JPEG)",
+            "The new sequence's Image 2 (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)",
         )
-        .open_file(&["png", "jpg", "jpeg"]),
+        .open_file(inbetween_codecs::IMAGE_EXTENSIONS),
         AFTER,
         NAME,
     ];

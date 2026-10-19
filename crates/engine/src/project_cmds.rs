@@ -72,21 +72,21 @@ mod files {
     use inbetween_doc::{ImageRef, OutputSettings, Project, Sequence};
     use std::path::{Path, PathBuf};
 
-    const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg"];
+    use inbetween_codecs::IMAGE_EXTENSIONS;
 
     const NEW_PARAMS: &[ParamSpec] = &[
         ParamSpec::new(
             "image1",
             ParamKind::Path,
             true,
-            "The first image (PNG or JPEG)",
+            "The first image (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)",
         )
         .open_file(IMAGE_EXTENSIONS),
         ParamSpec::new(
             "image2",
             ParamKind::Path,
             true,
-            "The second image (PNG or JPEG)",
+            "The second image (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)",
         )
         .open_file(IMAGE_EXTENSIONS),
         ParamSpec::new(

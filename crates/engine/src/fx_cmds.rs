@@ -17,7 +17,7 @@ const TRANSITION_PARAMS: &[ParamSpec] = &[
         "image",
         ParamKind::Path,
         false,
-        "Grayscale image that decides when each pixel dissolves: dark pixels first (PNG or JPEG); setting it switches the effect on",
+        "Grayscale image that decides when each pixel dissolves: dark pixels first (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD); setting it switches the effect on",
     )
     .open_file(IMAGE_EXTENSIONS),
     ParamSpec::new(
@@ -44,7 +44,7 @@ const LIGHT_PARAMS: &[ParamSpec] = &[
         "image",
         ParamKind::Path,
         false,
-        "Grayscale image: light areas brighten the morph, dark areas darken it (PNG or JPEG); setting it switches the effect on",
+        "Grayscale image: light areas brighten the morph, dark areas darken it (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD); setting it switches the effect on",
     )
     .open_file(IMAGE_EXTENSIONS),
     ParamSpec::new(

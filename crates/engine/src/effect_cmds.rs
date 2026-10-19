@@ -31,7 +31,7 @@ pub(crate) const CLEAR: ParamSpec = ParamSpec::new(
     "Reset the effect to its defaults and remove its image",
 );
 
-pub(crate) const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg"];
+pub(crate) use inbetween_codecs::IMAGE_EXTENSIONS;
 
 const BACK_COLOR_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
@@ -51,7 +51,7 @@ const BACKGROUND_PARAMS: &[ParamSpec] = &[
         "image",
         ParamKind::Path,
         false,
-        "Image shown behind the morph (PNG or JPEG); setting it switches the effect on",
+        "Image shown behind the morph (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD); setting it switches the effect on",
     )
     .open_file(IMAGE_EXTENSIONS),
     ParamSpec::new("opacity", ParamKind::Number, false, "Opacity, 0 to 100")
@@ -83,7 +83,7 @@ const MASK_PARAMS: &[ParamSpec] = &[
         "image",
         ParamKind::Path,
         false,
-        "Grayscale image: light areas show the morph, dark areas hide it (PNG or JPEG); setting it switches the effect on",
+        "Grayscale image: light areas show the morph, dark areas hide it (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD); setting it switches the effect on",
     )
     .open_file(IMAGE_EXTENSIONS),
     ParamSpec::new(
