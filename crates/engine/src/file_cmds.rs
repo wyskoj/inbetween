@@ -1,4 +1,5 @@
-//! File-level commands that work across projects: `file.appendProject`, `file.wizard`.
+//! File-level commands that work across projects: `file.appendProject`, `file.wizard`,
+//! `file.openVisual`.
 
 use crate::session::resolve_against;
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
@@ -107,6 +108,112 @@ fn append_project(session: &mut Session, params: &Params) -> Result<Value, Comma
         "added": adding,
         "count": session.project().sequences.len(),
     }))
+}
+
+/// Most projects `file.openVisual` lists from one folder.
+pub const MAX_VISUAL_ENTRIES: usize = 500;
+
+const OPEN_VISUAL_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new(
+        "folder",
+        ParamKind::Path,
+        false,
+        "A folder whose .inbetween files to list",
+    )
+    .folder(),
+    ParamSpec::new(
+        "paths",
+        ParamKind::PathList,
+        false,
+        "Specific .inbetween files to list (for example the recent ones)",
+    )
+    .open_files(&["inbetween"]),
+];
+
+fn modified_secs(path: &Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()?
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_secs())
+}
+
+/// What a project browser shows for one file. A bad file is an entry with an `error`, so one
+/// broken file never hides the rest.
+fn visual_entry(path: &Path) -> Value {
+    use base64::Engine as _;
+    let shown = path.display().to_string();
+    let name = stem(&shown);
+    let modified = modified_secs(path);
+    let project = match inbetween_format::read_project(path) {
+        Ok(p) => p,
+        Err(e) => {
+            return json!({
+                "path": shown,
+                "name": name,
+                "modified": modified,
+                "error": e.to_string(),
+            })
+        }
+    };
+    let thumbnail = match inbetween_format::read_thumbnail(path) {
+        Ok(Some((_, _, png))) => Some(base64::engine::general_purpose::STANDARD.encode(png)),
+        _ => None,
+    };
+    json!({
+        "path": shown,
+        "name": name,
+        "modified": modified,
+        "sequences": project.sequences.len(),
+        "kind": project.kind.id(),
+        "thumbnail_png_base64": thumbnail,
+    })
+}
+
+/// List projects with their embedded thumbnails: those in a folder and/or those named in
+/// `paths`. Only the files' own data is read; nothing is rendered.
+fn open_visual(_: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    let folder = params.string("folder");
+    let listed = params.strings("paths");
+    if folder.is_none() && listed.is_none() {
+        return Err(CommandError::BadParams(
+            "give a `folder` to browse or a list of `paths`".into(),
+        ));
+    }
+    let mut files: Vec<PathBuf> = listed
+        .unwrap_or_default()
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+    let mut truncated = false;
+    if let Some(folder) = folder {
+        let dir = Path::new(folder);
+        let io = |e: std::io::Error| CommandError::Io(format!("{folder}: {e}"));
+        if !std::fs::metadata(dir).map_err(io)?.is_dir() {
+            return Err(CommandError::Io(format!("{folder}: not a folder")));
+        }
+        let mut found: Vec<PathBuf> = std::fs::read_dir(dir)
+            .map_err(io)?
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("inbetween"))
+                    && p.is_file()
+            })
+            .collect();
+        found.sort_by_key(|p| p.file_name().map(|n| n.to_ascii_lowercase()));
+        if found.len() > MAX_VISUAL_ENTRIES {
+            found.truncate(MAX_VISUAL_ENTRIES);
+            truncated = true;
+        }
+        files.extend(found);
+    }
+    let projects: Vec<Value> = files.iter().map(|p| visual_entry(p)).collect();
+    Ok(json!({ "projects": projects, "truncated": truncated }))
 }
 
 const WIZARD_MORPHS: &[&str] = &[
@@ -251,6 +358,18 @@ fn wizard(session: &mut Session, params: &Params) -> Result<Value, CommandError>
 
 pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec {
+        id: "file.openVisual",
+        label: "Open Visually",
+        menu: "File/Open Visually...",
+        shortcut: None,
+        description: "List .inbetween projects (those in `folder` and the named `paths`) with their name, sequence count, kind and embedded thumbnail (base64 PNG). A project that cannot be read appears with an `error` instead.",
+        params: OPEN_VISUAL_PARAMS,
+        enabled: always,
+        disabled_reason: "",
+        edits: false,
+        run: open_visual,
+    },
+    CommandSpec {
         id: "file.wizard",
         label: "New From Images (Wizard)",
         menu: "File/New From Images...",
@@ -623,6 +742,117 @@ mod tests {
         for i in 0..3 {
             assert!(s.prepare(i).is_ok());
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_visual_lists_a_folder_with_thumbnails_and_flags_bad_files() {
+        let dir = temp("visual");
+        let r = Registry::standard();
+        let one = make_project(&r, &dir, "one", 10);
+        let two = make_project(&r, &dir, "two", 90);
+        let folder = dir.join("all");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::copy(&one, folder.join("B-one.inbetween")).unwrap();
+        std::fs::copy(&two, folder.join("a-two.INBETWEEN")).unwrap();
+        std::fs::write(folder.join("broken.inbetween"), b"{not json").unwrap();
+        std::fs::write(folder.join("notes.txt"), b"ignore me").unwrap();
+        std::fs::create_dir_all(folder.join("sub.inbetween")).unwrap();
+
+        let mut s = Session::new();
+        let out = r
+            .run(
+                &mut s,
+                "file.openVisual",
+                &json!({"folder": folder.to_str()}),
+            )
+            .unwrap();
+        let list = out["projects"].as_array().unwrap();
+        let names: Vec<&str> = list.iter().map(|e| e["name"].as_str().unwrap()).collect();
+        // Sorted by name without regard to case; the text file and the folder are skipped.
+        assert_eq!(names, ["a-two", "B-one", "broken"]);
+        assert_eq!(out["truncated"], false);
+        for e in &list[..2] {
+            assert_eq!(e["sequences"], 1);
+            assert_eq!(e["kind"], "sequence");
+            use base64::Engine as _;
+            let png = base64::engine::general_purpose::STANDARD
+                .decode(e["thumbnail_png_base64"].as_str().unwrap())
+                .unwrap();
+            let img = inbetween_codecs::decode(&png).unwrap();
+            assert_eq!((img.width, img.height), (32, 24));
+            assert!(e["modified"].as_u64().is_some());
+        }
+        assert!(list[2]["error"].is_string() && list[2].get("sequences").is_none());
+        // Listing never changes the session.
+        assert!(!s.has_sequences() && !s.is_dirty());
+
+        // `paths` works alone and together with a folder; a missing path is an error entry.
+        let out = r
+            .run(
+                &mut s,
+                "file.openVisual",
+                &json!({"paths": [one.to_str(), dir.join("gone.inbetween").to_str()]}),
+            )
+            .unwrap();
+        let list = out["projects"].as_array().unwrap();
+        assert_eq!(list.len(), 2);
+        assert!(list[0]["error"].is_null() && list[1]["error"].is_string());
+        let out = r
+            .run(
+                &mut s,
+                "file.openVisual",
+                &json!({"paths": [one.to_str()], "folder": folder.to_str()}),
+            )
+            .unwrap();
+        assert_eq!(out["projects"].as_array().unwrap().len(), 4);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_visual_handles_projects_without_thumbnails_and_bad_requests() {
+        let dir = temp("visual-bad");
+        let r = Registry::standard();
+        let mut s = Session::new();
+        let plain = dir.join("plain.inbetween");
+        inbetween_format::write_project(&plain, &Project::default()).unwrap();
+        let out = r
+            .run(
+                &mut s,
+                "file.openVisual",
+                &json!({"paths": [plain.to_str()]}),
+            )
+            .unwrap();
+        assert!(out["projects"][0]["thumbnail_png_base64"].is_null());
+        assert_eq!(out["projects"][0]["sequences"], 0);
+        for bad in [
+            json!({}),
+            json!({"folder": dir.join("missing").to_str()}),
+            json!({"folder": plain.to_str()}), // a file, not a folder
+        ] {
+            assert!(r.run(&mut s, "file.openVisual", &bad).is_err(), "{bad}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn open_visual_stops_at_the_entry_cap() {
+        let dir = temp("visual-cap");
+        let r = Registry::standard();
+        let mut s = Session::new();
+        let one = dir.join("seed.inbetween");
+        inbetween_format::write_project(&one, &Project::default()).unwrap();
+        for i in 0..MAX_VISUAL_ENTRIES + 3 {
+            std::fs::copy(&one, dir.join(format!("p{i:04}.inbetween"))).unwrap();
+        }
+        let out = r
+            .run(&mut s, "file.openVisual", &json!({"folder": dir.to_str()}))
+            .unwrap();
+        assert_eq!(
+            out["projects"].as_array().unwrap().len(),
+            MAX_VISUAL_ENTRIES
+        );
+        assert_eq!(out["truncated"], true);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

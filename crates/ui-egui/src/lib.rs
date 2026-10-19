@@ -18,6 +18,7 @@ pub mod form;
 pub mod hit;
 pub mod imaging;
 pub mod menus;
+pub mod open_visual;
 pub mod panels;
 pub mod playback;
 pub mod preview;
@@ -26,7 +27,7 @@ pub mod shortcuts;
 pub mod state;
 pub mod view;
 
-pub use app::{InbetweenApp, Layout, ScreenshotPlan, Status};
+pub use app::{InbetweenApp, Layout, PromptChoice, ScreenshotPlan, Status, REPLACES_PROJECT};
 pub use preview::GpuHandle;
 pub use serde_json::json;
 pub use state::ViewState;

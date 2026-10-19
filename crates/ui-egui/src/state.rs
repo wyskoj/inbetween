@@ -52,7 +52,12 @@ pub struct ViewState {
     pub show_sequence_list: bool,
     /// The curve editor window, when open.
     pub curve_window: Option<CurveKind>,
+    /// Projects opened or saved lately, newest first (at most [`MAX_RECENT`]).
+    pub recent: Vec<String>,
 }
+
+/// How many recent projects are remembered.
+pub const MAX_RECENT: usize = 10;
 
 impl Default for ViewState {
     fn default() -> Self {
@@ -72,6 +77,7 @@ impl Default for ViewState {
             sequence: 0,
             show_sequence_list: true,
             curve_window: None,
+            recent: Vec::new(),
         }
     }
 }
@@ -87,6 +93,13 @@ impl ViewState {
             self.top_fraction = 0.5;
         }
         self.top_fraction = self.top_fraction.clamp(0.2, 0.8);
+        let mut seen: Vec<String> = Vec::new();
+        for p in std::mem::take(&mut self.recent) {
+            if !p.is_empty() && p.len() <= 4096 && !seen.contains(&p) && seen.len() < MAX_RECENT {
+                seen.push(p);
+            }
+        }
+        self.recent = seen;
         for v in &mut self.views {
             if !v.zoom.is_finite() || !v.offset.iter().all(|o| o.is_finite()) {
                 *v = View::default();
@@ -100,6 +113,21 @@ impl ViewState {
 
     pub fn view_mut(&mut self, panel: Panel) -> &mut View {
         &mut self.views[panel.index()]
+    }
+
+    /// Put `path` at the top of the recent list, once, dropping the oldest past the cap.
+    pub fn push_recent(&mut self, path: &str) {
+        if path.is_empty() {
+            return;
+        }
+        self.recent.retain(|p| p != path);
+        self.recent.insert(0, path.to_string());
+        self.recent.truncate(MAX_RECENT);
+    }
+
+    /// Forget one recent project (for example a file that no longer exists).
+    pub fn remove_recent(&mut self, path: &str) {
+        self.recent.retain(|p| p != path);
     }
 
     /// Ask every panel to re-fit its frame (after opening a project, for example).
@@ -159,6 +187,49 @@ mod tests {
         s.fps = 0.0;
         s.sanitize();
         assert_eq!(s.fps, 1.0);
+    }
+
+    #[test]
+    fn recent_list_is_newest_first_deduplicated_and_capped() {
+        let mut s = ViewState::default();
+        for i in 0..15 {
+            s.push_recent(&format!("p{i}.inbetween"));
+        }
+        assert_eq!(s.recent.len(), MAX_RECENT);
+        assert_eq!(s.recent[0], "p14.inbetween");
+        assert_eq!(s.recent[MAX_RECENT - 1], "p5.inbetween");
+        // Opening an older one again moves it to the top without duplicating it.
+        s.push_recent("p9.inbetween");
+        assert_eq!(s.recent[0], "p9.inbetween");
+        assert_eq!(s.recent.iter().filter(|p| *p == "p9.inbetween").count(), 1);
+        assert_eq!(s.recent.len(), MAX_RECENT);
+        s.push_recent("");
+        assert_eq!(s.recent.len(), MAX_RECENT);
+        s.remove_recent("p9.inbetween");
+        assert!(!s.recent.contains(&"p9.inbetween".to_string()));
+        // The list survives a round trip, and old files without it load empty.
+        let text = serde_json::to_string(&s).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ViewState>(&text).unwrap().recent,
+            s.recent
+        );
+        assert!(serde_json::from_str::<ViewState>("{}")
+            .unwrap()
+            .recent
+            .is_empty());
+    }
+
+    #[test]
+    fn sanitize_cleans_the_recent_list() {
+        let mut s = ViewState {
+            recent: vec!["a".into(), "".into(), "a".into(), "x".repeat(5000)],
+            ..ViewState::default()
+        };
+        s.recent.extend((0..20).map(|i| format!("f{i}")));
+        s.sanitize();
+        assert_eq!(s.recent.len(), MAX_RECENT);
+        assert_eq!(s.recent[0], "a");
+        assert!(s.recent.iter().all(|p| !p.is_empty() && p.len() <= 4096));
     }
 
     #[test]

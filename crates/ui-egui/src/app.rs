@@ -6,6 +6,7 @@ use crate::curves::{self, CurveAction, CurveKind, CurveView};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
+use crate::open_visual::{OpenVisual, Outcome as VisualOutcome, Tab as VisualTab};
 use crate::panels::{self, Action, DotDrag, PreviewPanel, Shown, SourcePanel};
 use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
@@ -40,6 +41,28 @@ impl Default for Layout {
             preview: Rect::ZERO,
         }
     }
+}
+
+/// Commands that throw the open project away. When it has unsaved changes the shell asks first.
+/// Recent, Open Visually and dropped files all dispatch `project.open`, so they are covered.
+pub const REPLACES_PROJECT: &[&str] = &["file.new", "project.new", "project.open", "file.wizard"];
+
+/// The id that stands for closing the window in a pending prompt.
+const QUIT: &str = "app.quit";
+
+/// What waits for the answer to the unsaved-changes prompt.
+#[derive(Clone, Debug, PartialEq)]
+struct Pending {
+    id: String,
+    params: Value,
+}
+
+/// The answers to the unsaved-changes prompt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PromptChoice {
+    Save,
+    DontSave,
+    Cancel,
 }
 
 #[derive(Clone, Debug)]
@@ -131,6 +154,15 @@ pub struct InbetweenApp {
     thumbs: HashMap<String, (Arc<inbetween_raster::Image>, TextureHandle)>,
     curve_drag: Option<usize>,
     curve_group_open: bool,
+    /// The Open Visually window, when open.
+    open_visual: Option<OpenVisual>,
+    /// A command (or quitting) waiting for the answer to "save your changes?".
+    pending: Option<Pending>,
+    /// Waiting for Save As to finish before this goes ahead.
+    after_save: Option<Pending>,
+    /// The person said to quit (or discard and quit): let the window close.
+    allow_close: bool,
+    close_now: bool,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -165,6 +197,11 @@ impl InbetweenApp {
             thumbs: HashMap::new(),
             curve_drag: None,
             curve_group_open: false,
+            open_visual: None,
+            pending: None,
+            after_save: None,
+            allow_close: false,
+            close_now: false,
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -233,6 +270,11 @@ impl InbetweenApp {
                     self.list = None;
                 }
                 self.follow_list_change(id, done);
+                if matches!(id, "project.open" | "project.save" | "project.saveAs") {
+                    if let Some(path) = self.session.path().map(|p| p.display().to_string()) {
+                        self.state.push_recent(&path);
+                    }
+                }
                 // Drags and playback would flood the status bar.
                 let curve_drag = params["op"] == "move";
                 if !curve_drag && !matches!(id, "dots.move" | "edit.beginGroup" | "edit.endGroup") {
@@ -328,6 +370,10 @@ impl InbetweenApp {
             let _ = self.run_command(id, &json!({ "on": !now }));
             return;
         }
+        if id == "file.openVisual" {
+            self.open_visual_window();
+            return;
+        }
         let curve = match id {
             "curve.feature" => Some(CurveKind::Feature),
             "curve.shape" => Some(CurveKind::Shape),
@@ -344,6 +390,9 @@ impl InbetweenApp {
             .any(|p| p.required && p.name != "sequence")
         {
             self.form = Some(Form::for_spec(&spec));
+            return;
+        }
+        if self.guard(id, &json!({})) {
             return;
         }
         if let Err(e) = self.run_command(id, &json!({})) {
@@ -380,12 +429,222 @@ impl InbetweenApp {
                 return;
             }
         };
+        if self.guard(form.id, &params) {
+            return; // the form stays open until the prompt is answered
+        }
         match self.run_command(form.id, &params) {
-            Ok(_) => self.form = None,
+            Ok(_) => {
+                self.form = None;
+                if form.id == "project.saveAs" {
+                    if let Some(p) = self.after_save.take() {
+                        self.run_pending(p);
+                    }
+                }
+            }
             Err(e) => {
                 if let Some(f) = self.form.as_mut() {
                     f.error = Some(e.to_string());
                 }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ unsaved changes
+
+    /// If running `id` would throw away unsaved work, hold it and ask first. Returns whether
+    /// the caller must wait (the command has not run).
+    fn guard(&mut self, id: &str, params: &Value) -> bool {
+        if REPLACES_PROJECT.contains(&id) && self.session.is_dirty() {
+            self.pending = Some(Pending {
+                id: id.to_string(),
+                params: params.clone(),
+            });
+            return true;
+        }
+        false
+    }
+
+    /// Open a project file (from Recent, Open Visually or a drop), asking first if there are
+    /// unsaved changes.
+    pub fn open_project(&mut self, path: &str) {
+        let params = json!({ "path": path });
+        if !self.guard("project.open", &params) {
+            let _ = self.run_command("project.open", &params);
+        }
+    }
+
+    /// The window was asked to close. Returns whether it may: with unsaved changes the prompt
+    /// opens instead and the caller must keep the window.
+    pub fn request_quit(&mut self) -> bool {
+        if self.allow_close || !self.session.is_dirty() {
+            return true;
+        }
+        self.pending = Some(Pending {
+            id: QUIT.to_string(),
+            params: Value::Null,
+        });
+        false
+    }
+
+    /// Whether the save-your-changes prompt is showing.
+    pub fn prompt_open(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// Answer the prompt (the buttons do the same).
+    pub fn answer_prompt(&mut self, choice: PromptChoice) {
+        let Some(pending) = self.pending.take() else {
+            return;
+        };
+        match choice {
+            PromptChoice::Cancel => {}
+            PromptChoice::DontSave => self.run_pending(pending),
+            PromptChoice::Save if self.session.path().is_some() => {
+                if self.run_command("project.save", &json!({})).is_ok() {
+                    self.run_pending(pending);
+                }
+            }
+            PromptChoice::Save => {
+                // No file yet: ask for one, then carry on.
+                if let Some(spec) = self.registry.get("project.saveAs").copied() {
+                    self.after_save = Some(pending);
+                    self.form = Some(Form::for_spec(&spec));
+                }
+            }
+        }
+    }
+
+    fn run_pending(&mut self, pending: Pending) {
+        if pending.id == QUIT {
+            self.allow_close = true;
+            self.close_now = true;
+            return;
+        }
+        if self.run_command(&pending.id, &pending.params).is_ok()
+            && self.form.as_ref().is_some_and(|f| f.id == pending.id)
+        {
+            self.form = None;
+        }
+    }
+
+    fn handle_close(&mut self, ctx: &Context) {
+        if self.close_now {
+            self.close_now = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+        if self.screenshot.is_some() || !ctx.input(|i| i.viewport().close_requested()) {
+            return;
+        }
+        if !self.request_quit() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
+    }
+
+    fn prompt_window(&mut self, ctx: &Context) {
+        let Some(pending) = self.pending.clone() else {
+            return;
+        };
+        let name = self.session.path().and_then(|p| p.file_name()).map_or_else(
+            || "this project".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let what = if pending.id == QUIT {
+            "before closing"
+        } else {
+            "before replacing it"
+        };
+        let mut choice = None;
+        egui::Window::new("Unsaved changes")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label(format!("Save the changes to {name} {what}?"));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Save").clicked() {
+                        choice = Some(PromptChoice::Save);
+                    }
+                    if ui.button("Don't Save").clicked() {
+                        choice = Some(PromptChoice::DontSave);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(PromptChoice::Cancel);
+                    }
+                });
+            });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            choice = Some(PromptChoice::Cancel);
+        }
+        if let Some(c) = choice {
+            self.answer_prompt(c);
+        }
+    }
+
+    // ------------------------------------------------------------------------ open visually
+
+    pub fn open_visual(&self) -> Option<&OpenVisual> {
+        self.open_visual.as_ref()
+    }
+
+    fn open_visual_window(&mut self) {
+        self.open_visual = Some(OpenVisual::default());
+        self.refresh_visual();
+    }
+
+    /// Browse `folder` in the Open Visually window (opening it if needed).
+    pub fn browse_visual_folder(&mut self, folder: &str) {
+        let v = self.open_visual.get_or_insert_with(OpenVisual::default);
+        v.tab = VisualTab::Folder;
+        v.folder = Some(folder.to_string());
+        self.refresh_visual();
+    }
+
+    /// Ask the engine for the list the window shows (recent projects, or the chosen folder).
+    fn refresh_visual(&mut self) {
+        let Some(v) = self.open_visual.as_ref() else {
+            return;
+        };
+        let params = match (v.tab, &v.folder) {
+            (VisualTab::Recent, _) => Some(json!({ "paths": self.state.recent })),
+            (VisualTab::Folder, Some(f)) => Some(json!({ "folder": f })),
+            (VisualTab::Folder, None) => None,
+        };
+        let result = params.map(|p| {
+            self.registry
+                .run_caught(&mut self.session, "file.openVisual", &p)
+        });
+        if let Some(v) = self.open_visual.as_mut() {
+            match result {
+                Some(Ok(done)) => v.set_entries(&done),
+                Some(Err(e)) => {
+                    v.set_entries(&Value::Null);
+                    v.note = Some(e.to_string());
+                }
+                None => v.set_entries(&Value::Null),
+            }
+        }
+    }
+
+    fn visual_window(&mut self, ctx: &Context) {
+        let Some(mut v) = self.open_visual.take() else {
+            return;
+        };
+        let outcome = v.show(ctx);
+        self.open_visual = Some(v);
+        match outcome {
+            VisualOutcome::None => {}
+            VisualOutcome::Close => self.open_visual = None,
+            VisualOutcome::Refresh => self.refresh_visual(),
+            VisualOutcome::PickFolder => {
+                if let Some(p) = rfd::FileDialog::new().pick_folder() {
+                    self.browse_visual_folder(&p.display().to_string());
+                }
+            }
+            VisualOutcome::Open(path) => {
+                self.open_visual = None;
+                self.open_project(&path);
             }
         }
     }
@@ -552,7 +811,7 @@ impl InbetweenApp {
     }
 
     fn handle_keys(&mut self, ctx: &Context) {
-        if self.form.is_some() || ctx.wants_keyboard_input() {
+        if self.form.is_some() || self.pending.is_some() || ctx.wants_keyboard_input() {
             return;
         }
         // Redo has two spellings; check the more specific one first.
@@ -680,7 +939,10 @@ impl InbetweenApp {
         self.canvases(ctx);
         self.curve_window(ctx);
         self.form_window(ctx);
+        self.visual_window(ctx);
+        self.prompt_window(ctx);
         self.help_window(ctx);
+        self.handle_close(ctx);
         self.screenshot_step(ctx);
         if self.group_open && self.drag.is_none() {
             self.end_group();
@@ -953,6 +1215,13 @@ impl InbetweenApp {
             .iter()
             .filter_map(|id| Some((*id, self.toggle_state(id)?)))
             .collect();
+        let recent: Vec<(String, bool)> = self
+            .state
+            .recent
+            .iter()
+            .map(|p| (p.clone(), std::path::Path::new(p).exists()))
+            .collect();
+        let mut recent_click: Option<(String, bool)> = None;
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 for node in &self.menus {
@@ -966,6 +1235,10 @@ impl InbetweenApp {
                                 &toggles,
                                 &mut clicked,
                             );
+                            if name == "File" {
+                                ui.separator();
+                                recent_menu(ui, &recent, &mut recent_click);
+                            }
                         });
                     }
                 }
@@ -1001,6 +1274,13 @@ impl InbetweenApp {
             Some("actual") => self.actual_size(),
             Some("help") => self.state.show_help = !self.state.show_help,
             _ => {}
+        }
+        if let Some((path, exists)) = recent_click {
+            if exists {
+                self.open_project(&path);
+            } else {
+                self.state.remove_recent(&path);
+            }
         }
         if let Some(id) = clicked {
             self.invoke(id);
@@ -1285,6 +1565,7 @@ impl InbetweenApp {
         };
         let mut submit = false;
         let mut cancel = false;
+        let form_id = form.id;
         egui::Window::new(&form.title)
             .collapsible(false)
             .resizable(false)
@@ -1347,6 +1628,9 @@ impl InbetweenApp {
         }
         self.form = Some(form);
         if cancel {
+            if form_id == "project.saveAs" {
+                self.after_save = None;
+            }
             self.form = None;
         } else if submit {
             self.submit_form();
@@ -1491,7 +1775,31 @@ fn menu_items(
     }
 }
 
-/// A native file dialog for a path parameter.
+/// The File > Open Recent submenu. A project that is gone is greyed; clicking it takes it off
+/// the list.
+fn recent_menu(ui: &mut egui::Ui, recent: &[(String, bool)], click: &mut Option<(String, bool)>) {
+    ui.menu_button("Open Recent", |ui| {
+        if recent.is_empty() {
+            ui.add_enabled(false, egui::Button::new("(none)"));
+        }
+        for (path, exists) in recent {
+            let name = std::path::Path::new(path)
+                .file_name()
+                .map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
+            let response = if *exists {
+                ui.button(name).on_hover_text(path)
+            } else {
+                ui.button(egui::RichText::new(format!("{name} (missing, click to remove)")).weak())
+                    .on_hover_text(path)
+            };
+            if response.clicked() {
+                *click = Some((path.clone(), *exists));
+                ui.close_menu();
+            }
+        }
+    });
+}
+
 /// The editor for a list of paths: one row per path with move and remove buttons, and an
 /// Add button that opens a multi-select file dialog.
 fn path_list_editor(ui: &mut egui::Ui, field: &mut crate::form::Field) {
@@ -1546,6 +1854,7 @@ fn browse_many(spec: &inbetween_engine::ParamSpec) -> Vec<String> {
         .collect()
 }
 
+/// A native file dialog for a path parameter.
 fn browse(spec: &inbetween_engine::ParamSpec) -> Option<String> {
     let mut dialog = rfd::FileDialog::new();
     if !spec.extensions.is_empty() {

@@ -758,3 +758,277 @@ fn file_new_and_the_wizard_replace_the_project_through_the_menu_path() {
     assert!(seqs[0].image1.0.ends_with("sun.png"));
     assert_eq!(h.state().status().map(|s| s.is_error), Some(false));
 }
+
+// ------------------------------------------------------------ unsaved changes, recent, visual
+
+use inbetween_ui_egui::PromptChoice;
+
+/// A copy of the demo project in a scratch folder, so tests may save over it.
+fn demo_copy(tag: &str) -> (std::path::PathBuf, String) {
+    let dir = std::env::temp_dir().join(format!("inbetween-ui-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let demo = format!("{}/../../demo", env!("CARGO_MANIFEST_DIR"));
+    for f in ["demo.inbetween", "sun.png", "moon.png"] {
+        std::fs::copy(format!("{demo}/{f}"), dir.join(f)).unwrap();
+    }
+    let path = dir.join("demo.inbetween").display().to_string();
+    (dir, path)
+}
+
+fn dirty_demo(path: &str) -> H {
+    let mut app = empty_app();
+    app.run_command("project.open", &json!({ "path": path }))
+        .unwrap();
+    let mut h = harness_with(app);
+    let at = screen(&h, Panel::Source1, 100.0, 100.0);
+    click(&mut h, at, PointerButton::Primary);
+    assert!(h.state().session().is_dirty());
+    h
+}
+
+/// A project made from the demo images, never saved, with one added dot (so it is dirty).
+fn dirty_unsaved() -> H {
+    let demo = format!("{}/../../demo", env!("CARGO_MANIFEST_DIR"));
+    let mut h = harness_with(empty_app());
+    h.state_mut()
+        .run_command(
+            "project.new",
+            &json!({"image1": format!("{demo}/sun.png"), "image2": format!("{demo}/moon.png")}),
+        )
+        .unwrap();
+    h.run();
+    let at = screen(&h, Panel::Source1, 100.0, 100.0);
+    click(&mut h, at, PointerButton::Primary);
+    assert!(h.state().session().is_dirty());
+    h
+}
+
+#[test]
+fn replacing_a_dirty_project_asks_first_and_cancel_keeps_everything() {
+    let (dir, path) = demo_copy("prompt");
+    let mut h = dirty_demo(&path);
+    let before = h.state().session().project().clone();
+
+    h.state_mut().invoke("file.new");
+    h.run();
+    assert!(h.state().prompt_open());
+    assert_eq!(h.state().session().project(), &before);
+    shot(&mut h, "unsaved_prompt");
+
+    h.state_mut().answer_prompt(PromptChoice::Cancel);
+    h.run();
+    assert!(!h.state().prompt_open());
+    assert_eq!(h.state().session().project(), &before);
+    assert!(h.state().session().is_dirty());
+
+    // The same guard covers opening a project and the wizard form.
+    h.state_mut().open_project(&path);
+    assert!(h.state().prompt_open());
+    h.state_mut().answer_prompt(PromptChoice::Cancel);
+    h.state_mut().invoke("file.wizard");
+    let images = vec![
+        dir.join("sun.png").display().to_string(),
+        dir.join("moon.png").display().to_string(),
+    ];
+    h.state_mut().form_mut().unwrap().set_list("images", images);
+    h.state_mut().submit_form();
+    assert!(h.state().prompt_open());
+    assert!(
+        h.state().form().is_some(),
+        "the form stays until the prompt is answered"
+    );
+    h.state_mut().answer_prompt(PromptChoice::Cancel);
+    assert_eq!(h.state().session().project(), &before);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dont_save_replaces_the_project_without_writing() {
+    let (dir, path) = demo_copy("dontsave");
+    let on_disk = std::fs::read_to_string(&path).unwrap();
+    let mut h = dirty_demo(&path);
+    h.state_mut().invoke("file.new");
+    h.state_mut().answer_prompt(PromptChoice::DontSave);
+    h.run();
+    assert!(!h.state().prompt_open());
+    assert!(h.state().session().path().is_none());
+    assert_eq!(h.state().session().project().sequences.len(), 1);
+    assert_eq!(h.state().session().project().sequences[0].dots.len(), 0);
+    assert!(!h.state().session().is_dirty());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), on_disk);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn save_writes_the_file_then_replaces_the_project() {
+    let (dir, path) = demo_copy("savechoice");
+    let mut h = dirty_demo(&path);
+    let dots = h.state().session().project().sequences[0].dots.len();
+    h.state_mut().invoke("file.new");
+    h.state_mut().answer_prompt(PromptChoice::Save);
+    h.run();
+    assert!(!h.state().prompt_open());
+    assert!(
+        h.state().session().path().is_none(),
+        "the new project replaced it"
+    );
+    let saved = inbetween_format::read_project(std::path::Path::new(&path)).unwrap();
+    assert_eq!(saved.sequences[0].dots.len(), dots);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn save_without_a_file_goes_through_save_as_and_then_carries_on() {
+    let dir = std::env::temp_dir().join(format!("inbetween-ui-saveas-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut h = dirty_unsaved();
+    h.state_mut().invoke("file.new");
+    h.state_mut().answer_prompt(PromptChoice::Save);
+    h.run();
+    let form = h.state().form().expect("no file yet: Save As opens");
+    assert_eq!(form.id, "project.saveAs");
+    let target = dir.join("kept.inbetween");
+    h.state_mut()
+        .form_mut()
+        .unwrap()
+        .set("path", target.display().to_string());
+    h.state_mut().submit_form();
+    h.run();
+    assert!(target.exists());
+    assert!(h.state().form().is_none());
+    // The new project has replaced it, and the saved file is on the recent list.
+    assert!(h.state().session().path().is_none());
+    assert_eq!(
+        h.state().state.recent.first().map(String::as_str),
+        Some(target.display().to_string().as_str())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cancelling_save_as_drops_the_pending_action() {
+    let dir = std::env::temp_dir().join(format!("inbetween-ui-cancel-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut h = dirty_unsaved();
+    h.state_mut().invoke("file.new");
+    h.state_mut().answer_prompt(PromptChoice::Save);
+    h.run();
+    assert!(h.state().form().is_some());
+    frame(
+        &mut h,
+        vec![Event::Key {
+            key: Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Modifiers::NONE,
+        }],
+    );
+    h.run();
+    assert!(h.state().form().is_none());
+    assert!(h.state().session().is_dirty(), "nothing was replaced");
+    // A later Save As must not run the stale action.
+    h.state_mut().invoke("project.saveAs");
+    let target = dir.join("later.inbetween");
+    h.state_mut()
+        .form_mut()
+        .unwrap()
+        .set("path", target.display().to_string());
+    h.state_mut().submit_form();
+    h.run();
+    assert_eq!(
+        h.state().session().path().map(|p| p.display().to_string()),
+        Some(target.display().to_string()),
+        "the project was saved, not replaced"
+    );
+    assert!(!h.state().prompt_open());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn closing_the_window_with_unsaved_changes_asks_first() {
+    let (dir, path) = demo_copy("quit");
+    let mut h = dirty_demo(&path);
+    assert!(!h.state_mut().request_quit());
+    assert!(h.state().prompt_open());
+    h.state_mut().answer_prompt(PromptChoice::Cancel);
+    assert!(!h.state_mut().request_quit(), "still dirty, asks again");
+    h.state_mut().answer_prompt(PromptChoice::DontSave);
+    assert!(
+        h.state_mut().request_quit(),
+        "the answer lets the window close"
+    );
+    // A clean project closes at once.
+    let mut clean = demo_harness();
+    assert!(clean.state_mut().request_quit());
+    assert!(!clean.state().prompt_open());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn opening_and_saving_feed_the_recent_list() {
+    let (dir, path) = demo_copy("recent");
+    let mut app = empty_app();
+    app.run_command("project.open", &json!({ "path": path }))
+        .unwrap();
+    assert_eq!(app.state.recent, vec![path.clone()]);
+    let copy = dir.join("copy.inbetween").display().to_string();
+    app.run_command("project.saveAs", &json!({ "path": copy }))
+        .unwrap();
+    assert_eq!(app.state.recent.len(), 2);
+    assert!(app.state.recent[0].ends_with("copy.inbetween"));
+    // Opening an older entry again moves it up instead of duplicating it.
+    app.run_command("project.open", &json!({ "path": path }))
+        .unwrap();
+    assert_eq!(app.state.recent[0], path);
+    assert_eq!(app.state.recent.len(), 2);
+    // A failed open leaves the list alone.
+    let before = app.state.recent.clone();
+    let missing = dir.join("nope.inbetween").display().to_string();
+    assert!(app
+        .run_command("project.open", &json!({ "path": missing }))
+        .is_err());
+    assert_eq!(app.state.recent, before);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_open_visual_grid_lists_a_folder_from_thumbnails_and_opens_a_project() {
+    let (dir, path) = demo_copy("visual");
+    let mut app = empty_app();
+    app.run_command("project.open", &json!({ "path": path.clone() }))
+        .unwrap();
+    // Saving writes the thumbnail the grid shows.
+    for name in ["one.inbetween", "two.inbetween"] {
+        let target = dir.join(name).display().to_string();
+        app.run_command("project.saveAs", &json!({ "path": target }))
+            .unwrap();
+    }
+    std::fs::write(dir.join("broken.inbetween"), b"{nope").unwrap();
+    let mut h = harness_with(app);
+    h.state_mut().invoke("file.openVisual");
+    h.run();
+    let v = h.state().open_visual().expect("the window opens");
+    assert_eq!(v.tab, inbetween_ui_egui::open_visual::Tab::Recent);
+    assert!(v.entries.len() >= 2, "recent projects are listed");
+
+    h.state_mut()
+        .browse_visual_folder(&dir.display().to_string());
+    h.run();
+    let v = h.state().open_visual().unwrap();
+    let names: Vec<&str> = v.entries.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names, ["broken", "demo", "one", "two"]);
+    assert!(v.entries.iter().filter(|e| e.png.is_some()).count() >= 2);
+    assert!(v.entries[0].error.is_some());
+    shot(&mut h, "open_visual");
+
+    let one = dir.join("one.inbetween").display().to_string();
+    h.state_mut().open_project(&one);
+    h.run();
+    assert_eq!(
+        h.state().session().path().map(|p| p.display().to_string()),
+        Some(one)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -1946,6 +1946,7 @@ dependencies = [
 name = "inbetween-engine"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "image",
  "inbetween-codecs",
  "inbetween-doc",
@@ -2043,6 +2044,7 @@ dependencies = [
 name = "inbetween-ui-egui"
 version = "0.0.0"
 dependencies = [
+ "base64 0.22.1",
  "eframe",
  "egui",
  "egui_kittest",
