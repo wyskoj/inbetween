@@ -65,7 +65,7 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 | [ ] | `image.filter.*` | Smooth, blur, Gaussian, zoom blur, radial blur, sharpen, emboss, mosaic, oil paint, splash, cylinder, whirl, pinch | P2 |
 | [ ] | `image.caption` | Per-image caption (see §8) | P2 |
 | [ ] | `image.swap` | Swap Image 1 and Image 2 (F3) | P1 |
-| [ ] | `image.saveToLibrary` | Store image plus dots in the face library (§10) | P2 |
+| [~] | `image.saveToLibrary` | Store image plus dots in the face library (§10) | P2 |
 
 All source edits are undoable and non-destructive (dots stay attached to the edited image).
 
@@ -210,14 +210,16 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `face.extract` | Auto-detect the face in every source, crop to a shared template for consistent framing; adjustable template box; manual fallback; apply to all or one | P2 |
-| [ ] | `face.locate` | Auto-place Inbetween's standard face dot set; apply/append to all or one; multiple faces per image by appending | P2 |
-| [ ] | `face.locate.smartDrag` | "Intelligent" drag: moving one landmark re-fits the rest; modifier toggles plain drag | P2 |
-| [ ] | `face.model` | Edit which landmark dots are used, highlight important ones, edit guide lines; presets; save/load | P2 |
-| [ ] | `face.mix` | Blend N faces into one still; per-image feature % and shape % with locks, shape-follows-feature lock, average, random, candidate gallery, save/load | P2 |
-| [ ] | `face.library` | Folder-organized store of images with dots; drag into a project to reuse | P2 |
+| [~] | `face.extract` | Auto-detect the face in every source, crop to a shared template for consistent framing; adjustable template box; manual fallback; apply to all or one | P2 |
+| [~] | `face.locate` | Auto-place Inbetween's standard face dot set; apply/append to all or one; multiple faces per image by appending | P2 |
+| [~] | `face.locate.smartDrag` | "Intelligent" drag: moving one landmark re-fits the rest; modifier toggles plain drag | P2 |
+| [~] | `face.model` | Edit which landmark dots are used, highlight important ones, edit guide lines; presets; save/load | P2 |
+| [~] | `face.mix` | Blend N faces into one still; per-image feature % and shape % with locks, shape-follows-feature lock, average, random, candidate gallery, save/load | P2 |
+| [~] | `face.library` | Folder-organized store of images with dots; drag into a project to reuse | P2 |
 
 Built on open landmark models (e.g. MediaPipe Face Mesh, dlib). Inbetween's face dot model is its own design.
+
+*Status (M13): all six tools are commands (`face.model`, `face.locate`, `face.locate.smartDrag`, `face.extract`, `face.mix`, `face.library`, plus `image.saveToLibrary`), saved in the project (the model) or in `.inbetweenface`, `.inbetweenlandmarks` and `.inbetweenmix` files. Inbetween does not bundle a detector: a face is placed from a box (default: a centred starting box) or from landmarks a detector wrote to a `.inbetweenlandmarks` file. Open: a bundled auto-detector, mapping tables for named detectors, a smart-drag gesture on the canvas (modifier toggles plain drag), a face-model editor window, mix sliders and a candidate gallery view, a library browser with drag into a project, library drag-and-drop, `dots.autoLandmarks`.*
 
 ---
 

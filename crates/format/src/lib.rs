@@ -25,11 +25,17 @@
 
 mod dots;
 mod error;
+mod face;
 mod paths;
 mod project;
 
 pub use dots::{dots_from_bytes, dots_from_str, dots_to_string, DOTS_FORMAT, DOTS_VERSION};
 pub use error::FormatError;
+pub use face::{
+    face_model_from_bytes, face_model_to_string, landmarks_from_bytes, landmarks_to_string,
+    mix_recipe_from_bytes, mix_recipe_to_string, MixRecipe, FACE_FILE_VERSION, FACE_MODEL_FORMAT,
+    LANDMARKS_FORMAT, MAX_LANDMARKS, MAX_MIX_INPUTS, MIX_FORMAT,
+};
 pub use paths::{check_relative, make_relative};
 pub use project::{
     project_from_bytes, project_from_str, project_to_string, MAX_FILE_BYTES, MAX_SEQUENCES,
@@ -39,7 +45,10 @@ pub use project::{
 #[cfg(not(target_arch = "wasm32"))]
 mod files;
 #[cfg(not(target_arch = "wasm32"))]
-pub use files::{read_dots, read_project, write_dots, write_project};
+pub use files::{
+    read_dots, read_face_model, read_landmarks, read_mix_recipe, read_project, write_dots,
+    write_face_model, write_landmarks, write_mix_recipe, write_project,
+};
 
 /// Strip a UTF-8 byte-order mark and decode, so files saved by editors that add one load.
 pub(crate) fn decode_text(bytes: &[u8], limit: usize) -> Result<&str, FormatError> {

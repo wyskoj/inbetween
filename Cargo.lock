@@ -1933,10 +1933,12 @@ dependencies = [
  "inbetween-export",
  "inbetween-format",
  "inbetween-geom",
+ "inbetween-morph",
  "inbetween-raster",
  "inbetween-render-cpu",
  "inbetween-testkit",
  "png",
+ "rayon",
  "serde",
  "serde_json",
 ]

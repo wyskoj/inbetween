@@ -20,6 +20,8 @@ pub enum DocError {
     BadCamera(&'static str),
     /// A track curve setting is out of range (the text says which).
     BadTrack(&'static str),
+    /// The face model breaks a rule (the text says which).
+    BadFace(&'static str),
 }
 
 impl fmt::Display for DocError {
@@ -42,6 +44,7 @@ impl fmt::Display for DocError {
             Self::BadEffect(why) => write!(f, "invalid effect: {why}"),
             Self::BadCamera(why) => write!(f, "invalid camera: {why}"),
             Self::BadTrack(why) => write!(f, "invalid track: {why}"),
+            Self::BadFace(why) => write!(f, "invalid face model: {why}"),
             Self::BadOutputSize { width, height } => write!(
                 f,
                 "output size {width} x {height} is not allowed (each side 1 to {})",

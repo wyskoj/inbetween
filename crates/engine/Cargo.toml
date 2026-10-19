@@ -12,8 +12,10 @@ inbetween-doc = { path = "../doc" }
 inbetween-export = { path = "../export" }
 inbetween-format = { path = "../format" }
 inbetween-geom = { path = "../geom" }
+inbetween-morph = { path = "../morph" }
 inbetween-raster = { path = "../raster" }
 inbetween-render-cpu = { path = "../render-cpu" }
+rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

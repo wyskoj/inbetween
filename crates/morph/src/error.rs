@@ -16,6 +16,8 @@ pub enum MorphError {
     Geom(GeomError),
     /// Output or source size is zero or not finite.
     BadSize,
+    /// A face tool was given input it cannot use (the text says what).
+    Face(String),
 }
 
 impl fmt::Display for MorphError {
@@ -34,6 +36,7 @@ impl fmt::Display for MorphError {
             ),
             Self::Geom(e) => write!(f, "{e}"),
             Self::BadSize => write!(f, "image and output sizes must be positive"),
+            Self::Face(why) => write!(f, "{why}"),
         }
     }
 }

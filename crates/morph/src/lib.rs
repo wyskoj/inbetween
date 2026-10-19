@@ -12,6 +12,7 @@
 )]
 
 mod error;
+pub mod face;
 mod fit;
 mod plan;
 

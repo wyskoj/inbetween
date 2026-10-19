@@ -208,6 +208,16 @@ mod tests {
                 },
                 Sequence::default(),
             ],
+            face: {
+                let mut face = inbetween_doc::FaceModel::minimal();
+                face.name = "my \"face\"".into();
+                if let Some(d) = face.dots.get_mut(1) {
+                    d.enabled = true;
+                    d.x = 1.0 / 3.0;
+                }
+                face.guides.push([0, 5]);
+                face
+            },
         }
     }
 

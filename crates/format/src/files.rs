@@ -63,6 +63,36 @@ pub fn write_dots(path: &Path, dots: &DotSet) -> Result<(), FormatError> {
     write_atomic(path, &dots_to_string(dots)?)
 }
 
+/// Load a `.inbetweenface` face model.
+pub fn read_face_model(path: &Path) -> Result<inbetween_doc::FaceModel, FormatError> {
+    crate::face_model_from_bytes(&read_limited(path)?)
+}
+
+/// Save a face model atomically.
+pub fn write_face_model(path: &Path, model: &inbetween_doc::FaceModel) -> Result<(), FormatError> {
+    write_atomic(path, &crate::face_model_to_string(model)?)
+}
+
+/// Load a `.inbetweenlandmarks` file.
+pub fn read_landmarks(path: &Path) -> Result<Vec<inbetween_geom::Point>, FormatError> {
+    crate::landmarks_from_bytes(&read_limited(path)?)
+}
+
+/// Save landmark positions atomically.
+pub fn write_landmarks(path: &Path, points: &[inbetween_geom::Point]) -> Result<(), FormatError> {
+    write_atomic(path, &crate::landmarks_to_string(points)?)
+}
+
+/// Load a `.inbetweenmix` recipe.
+pub fn read_mix_recipe(path: &Path) -> Result<crate::MixRecipe, FormatError> {
+    crate::mix_recipe_from_bytes(&read_limited(path)?)
+}
+
+/// Save a mix recipe atomically.
+pub fn write_mix_recipe(path: &Path, recipe: &crate::MixRecipe) -> Result<(), FormatError> {
+    write_atomic(path, &crate::mix_recipe_to_string(recipe)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

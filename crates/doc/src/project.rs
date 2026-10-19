@@ -1,4 +1,4 @@
-use crate::{DocError, Sequence};
+use crate::{DocError, FaceModel, Sequence};
 use serde::{Deserialize, Serialize};
 
 /// Largest output side in pixels.
@@ -55,6 +55,8 @@ pub struct Project {
     pub kind: ProjectType,
     pub output: OutputSettings,
     pub sequences: Vec<Sequence>,
+    /// The face dot model the face tools place and fit.
+    pub face: FaceModel,
 }
 
 impl Project {
@@ -114,6 +116,7 @@ impl Project {
         if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
             return Err(DocError::BadOutputSize { width, height });
         }
+        self.face.validate()?;
         self.sequences.iter().try_for_each(Sequence::validate)
     }
 }

@@ -21,6 +21,9 @@ mod edit_cmds;
 mod effect_cmds;
 mod error;
 mod export_cmds;
+mod face_cmds;
+#[cfg(not(target_arch = "wasm32"))]
+mod face_media;
 mod fx_cmds;
 mod layer_cmds;
 mod list_cmds;
