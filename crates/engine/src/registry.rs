@@ -52,6 +52,7 @@ impl Registry {
         specs.extend(crate::effect_cmds::specs());
         specs.extend(crate::fx_cmds::specs());
         specs.extend(crate::image_cmds::specs());
+        specs.extend(crate::filter_cmds::specs());
         specs.extend(crate::camera_cmds::specs());
         specs.extend(crate::track_cmds::specs());
         specs.extend(crate::layer_cmds::specs());
@@ -180,6 +181,19 @@ mod tests {
             "image.adjust",
             "image.reset",
             "image.swap",
+            "image.filter.smooth",
+            "image.filter.blur",
+            "image.filter.gaussian",
+            "image.filter.zoomBlur",
+            "image.filter.radialBlur",
+            "image.filter.sharpen",
+            "image.filter.emboss",
+            "image.filter.mosaic",
+            "image.filter.oilPaint",
+            "image.filter.splash",
+            "image.filter.cylinder",
+            "image.filter.whirl",
+            "image.filter.pinch",
             "sequence.length",
             "export.frame",
             "export.sequence",

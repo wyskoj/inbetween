@@ -149,7 +149,7 @@ fn remap_side(
 
 /// Apply `change` to the edit of the targeted image, move the dots if the geometry changed,
 /// store the result and report it. `geometric` commands need the source file (its size).
-fn run_edit(
+pub(crate) fn run_edit(
     session: &mut Session,
     params: &Params,
     geometric: bool,
