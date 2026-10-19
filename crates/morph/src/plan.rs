@@ -137,7 +137,7 @@ pub struct Planner {
     width: u32,
     height: u32,
     morph: MorphType,
-    /// The sequence's timing only (frames and holds); no dots.
+    /// The sequence's timing only (frames, holds and curves); no dots.
     timing: Sequence,
     kind: Kind,
 }
@@ -208,6 +208,8 @@ impl Planner {
                 frames: seq.frames,
                 hold_start: seq.hold_start,
                 hold_end: seq.hold_end,
+                feature_curve: seq.feature_curve.clone(),
+                shape_curve: seq.shape_curve.clone(),
                 ..Sequence::default()
             },
             kind,
@@ -219,10 +221,13 @@ impl Planner {
         self.timing.total_frames()
     }
 
-    /// Plan the frame at morph time `t` (clamped to 0..=1; NaN counts as 0).
+    /// Plan the frame at morph time `t` (clamped to 0..=1; NaN counts as 0). The feature curve
+    /// remaps `t` into the colour-dissolve amount and the shape curve into how far the dots
+    /// have moved; both leave 0 and 1 where they are.
     pub fn plan(&self, t: f64) -> Result<FramePlan, MorphError> {
         let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) };
-        let mix = Mix::for_type(self.morph, t);
+        let mix = Mix::for_type(self.morph, self.timing.feature_curve.eval(t));
+        let shape = self.timing.shape_curve.eval(t);
         let (dot_count, policy, base, end, first, second) = match &self.kind {
             Kind::Still(tris) => {
                 return Ok(FramePlan {
@@ -245,7 +250,7 @@ impl Planner {
         let mut now: Vec<Point> = first
             .iter()
             .zip(second)
-            .map(|(a, b)| a.lerp(*b, t))
+            .map(|(a, b)| a.lerp(*b, shape))
             .collect();
         let per_frame;
         let connectivity: &[[usize; 3]] = if t >= 1.0 {
@@ -395,6 +400,45 @@ mod tests {
         let mut s = seq(&[]);
         s.hold_start = 5000;
         assert!(matches!(Planner::new(&s, 10, 10), Err(MorphError::Doc(_))));
+    }
+
+    fn curve(points: &[(f64, f64)]) -> inbetween_doc::Curve {
+        inbetween_doc::Curve {
+            points: points
+                .iter()
+                .map(|&(x, y)| inbetween_doc::CurvePoint::new(x, y))
+                .collect(),
+            linear: true,
+        }
+    }
+
+    #[test]
+    fn feature_and_shape_curves_remap_dissolve_and_motion_separately() {
+        let mut s = two_dots();
+        s.feature_curve = curve(&[(0.0, 0.0), (0.5, 0.1), (1.0, 1.0)]);
+        s.shape_curve = curve(&[(0.0, 0.0), (0.5, 0.9), (1.0, 1.0)]);
+        let p = Planner::new(&s, 100, 50).unwrap();
+        let plain = Planner::new(&two_dots(), 100, 50).unwrap();
+        let (curved, mid) = (p.plan(0.5).unwrap(), plain.plan(0.9).unwrap());
+        // Colour follows the feature curve (0.1), the dots follow the shape curve (0.9).
+        assert!((curved.mix.w2 - 0.1).abs() < 1e-6 && (curved.mix.w1 - 0.9).abs() < 1e-6);
+        assert_eq!(curved.tris, mid.tris);
+        // The reported time is still the sequence's own.
+        assert_eq!(curved.t, 0.5);
+    }
+
+    #[test]
+    fn curves_keep_the_first_and_last_frame_exact() {
+        let mut s = two_dots();
+        s.feature_curve = curve(&[(0.0, 0.0), (0.3, 0.9), (1.0, 1.0)]);
+        s.shape_curve = curve(&[(0.0, 0.0), (0.7, 0.1), (1.0, 1.0)]);
+        let (p, plain) = (
+            Planner::new(&s, 100, 50).unwrap(),
+            Planner::new(&two_dots(), 100, 50).unwrap(),
+        );
+        for t in [0.0, 1.0] {
+            assert_eq!(p.plan(t).unwrap(), plain.plan(t).unwrap());
+        }
     }
 
     #[test]

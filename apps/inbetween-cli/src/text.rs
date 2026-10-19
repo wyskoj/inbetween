@@ -63,9 +63,19 @@ pub fn info(v: &Value) -> String {
             (0, 0) => String::new(),
             (a, b) => format!(" (+{a} hold at the start, +{b} at the end)"),
         };
+        let mut flags = String::new();
+        if seq.get("visible") == Some(&Value::Bool(false)) {
+            flags.push_str(", hidden");
+        }
+        if seq.get("feature_curve") == Some(&Value::Bool(true)) {
+            flags.push_str(", feature curve");
+        }
+        if seq.get("shape_curve") == Some(&Value::Bool(true)) {
+            flags.push_str(", shape curve");
+        }
         let _ = writeln!(
             out,
-            "  {}. {name}: {} frames{holds}, {} dots, {}",
+            "  {}. {name}: {} frames{holds}, {} dots, {}{flags}",
             n(seq, "index"),
             n(seq, "frames"),
             n(seq, "dots"),

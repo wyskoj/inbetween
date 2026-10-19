@@ -3,7 +3,9 @@
 //!
 //! Property: no input panics, and anything that parses re-serialises and parses back equal.
 
-use inbetween_doc::{DotPair, DotSet, FitMode, ImageRef, MeshPolicy, MorphType, Project, Sequence};
+use inbetween_doc::{
+    Curve, CurvePoint, DotPair, DotSet, FitMode, ImageRef, MeshPolicy, MorphType, Project, Sequence,
+};
 use inbetween_format::{dots_from_bytes, dots_to_string, project_from_bytes, project_to_string};
 use inbetween_geom::Point;
 
@@ -77,6 +79,15 @@ fn project_seed() -> String {
                 morph: MorphType::Warp1,
                 fit: FitMode::Contain,
                 mesh: MeshPolicy::PerFrame,
+                feature_curve: Curve {
+                    points: vec![
+                        CurvePoint::new(0.0, 0.0),
+                        CurvePoint::new(0.4, 0.7),
+                        CurvePoint::new(1.0, 1.0),
+                    ],
+                    linear: false,
+                },
+                ..Sequence::default()
             },
             Sequence::default(),
         ],

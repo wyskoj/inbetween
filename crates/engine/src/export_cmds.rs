@@ -1,4 +1,4 @@
-//! Export commands: `export.frame`, `export.sequence`.
+//! Export commands: `export.frame`, `export.sequence`, `export.movie`.
 
 use crate::CommandSpec;
 
@@ -169,8 +169,128 @@ mod files {
         }))
     }
 
+    const MOVIE_PARAMS: &[ParamSpec] = &[
+        ParamSpec::new(
+            "out_dir",
+            ParamKind::Path,
+            true,
+            "Folder for the PNG frames (created if missing)",
+        )
+        .folder(),
+        ParamSpec::new(
+            "prefix",
+            ParamKind::String,
+            false,
+            "File name prefix: PREFIX_0001.png, ...",
+        )
+        .default_is("frame"),
+        ParamSpec::new(
+            "first",
+            ParamKind::Integer,
+            false,
+            "First movie frame to write, counting from 1",
+        )
+        .range(1.0, MAX_MOVIE_FRAMES as f64)
+        .default_is("1"),
+        ParamSpec::new(
+            "last",
+            ParamKind::Integer,
+            false,
+            "Last movie frame to write, counting from 1",
+        )
+        .range(1.0, MAX_MOVIE_FRAMES as f64)
+        .default_is("the last frame"),
+    ];
+
+    /// Most frames one movie export writes.
+    const MAX_MOVIE_FRAMES: u64 = 10_000_000;
+
+    /// Every visible sequence, one after another, as one continuously numbered frame series.
+    fn movie(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let prefix = params.string("prefix").unwrap_or("frame");
+        if prefix.contains(['/', '\\', ':']) {
+            return Err(CommandError::BadParams(
+                "`prefix` is a file name prefix and must not contain / \\ or :".into(),
+            ));
+        }
+        let total = session.project().total_frames();
+        if total == 0 {
+            return Err(CommandError::BadParams(
+                "no visible sequence has any frames; show a sequence first".into(),
+            ));
+        }
+        let first = params.integer("first").map_or(1, |n| n as u64);
+        let last = params
+            .integer("last")
+            .map_or(total, |n| n as u64)
+            .min(total);
+        if first > last {
+            return Err(CommandError::BadParams(format!(
+                "`first` ({first}) is after the last frame to write ({last}); the movie has {total} frames"
+            )));
+        }
+        let dir = Path::new(params.string("out_dir").unwrap_or_default());
+        std::fs::create_dir_all(dir)
+            .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
+        let mut written = 0u64;
+        let mut start = 0u64; // movie frame (from 0) where the current sequence begins
+        let count = session.project().sequences.len();
+        for index in 0..count {
+            let (visible, len) = {
+                let s = session.sequence(index)?;
+                (s.visible, u64::from(s.total_frames()))
+            };
+            if !visible {
+                continue;
+            }
+            let (lo, hi) = (start, start + len); // this sequence owns frames lo..hi
+            start = hi;
+            let wanted = first.max(lo + 1)..=last.min(hi);
+            if wanted.is_empty() {
+                continue;
+            }
+            let prepared = session.prepare(index)?;
+            let renderer = Renderer::new(
+                &prepared.sequence,
+                prepared.output,
+                &prepared.image1,
+                prepared.image2.as_deref(),
+            )?;
+            for n in wanted {
+                let image = renderer.render_frame(u32::try_from(n - 1 - lo).unwrap_or(u32::MAX))?;
+                write_image(&dir.join(format!("{prefix}_{n:04}.png")), &image)?;
+                written += 1;
+            }
+        }
+        let (w, h) = (
+            session.project().output.width,
+            session.project().output.height,
+        );
+        Ok(json!({
+            "dir": dir.display().to_string(),
+            "frames": written,
+            "first": first,
+            "last": last,
+            "total_frames": total,
+            "width": w,
+            "height": h,
+        }))
+    }
+
     pub(super) fn specs() -> Vec<CommandSpec> {
         vec![
+            CommandSpec {
+                id: "export.movie",
+                label: "Export Whole Movie",
+                menu: "File/Export/Whole Movie...",
+                shortcut: None,
+                description: "Render every visible sequence, one after another, to continuously numbered PNG files.",
+                params: MOVIE_PARAMS,
+                enabled: has_sequence,
+                disabled_reason: "the project has no sequences to render",
+                edits: false,
+                run: movie,
+            },
             CommandSpec {
                 id: "export.frame",
                 label: "Export Frame",

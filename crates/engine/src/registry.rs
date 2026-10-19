@@ -47,6 +47,8 @@ impl Registry {
         specs.extend(crate::edit_cmds::specs());
         specs.extend(crate::dots_cmds::specs());
         specs.extend(crate::sequence_cmds::specs());
+        specs.extend(crate::list_cmds::specs());
+        specs.extend(crate::curve_cmds::specs());
         specs.extend(crate::export_cmds::specs());
         Self { specs }
     }

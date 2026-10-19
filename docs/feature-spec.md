@@ -119,16 +119,16 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [~] | `sequence.length` | 2–999 morph frames, plus 0–999 hold frames on each end, set separately; enter as frames or seconds; optional apply-to-all | P0 |
-| [ ] | `sequence.add` | Add a continued sequence (previous Image 2 becomes new Image 1) | P1 |
-| [ ] | `sequence.addBlank` | Add an empty sequence | P1 |
-| [ ] | `sequence.delete/duplicate/rename` | | P1 |
-| [ ] | `sequence.visibility` | Hide/show; modifier-click toggles solo | P1 |
-| [ ] | `sequence.reorder` | Up, down, to top, to bottom, drag in list | P1 |
-| [ ] | `sequence.link` | Make Image 1 equal the previous sequence's Image 2 (seamless join) | P1 |
-| [ ] | `sequence.copyFrame` | Copy a source image with its dots into another sequence (drag between image icons) | P1 |
-| [ ] | `project.type.sequence` | Sequences play one after another; movie length is the sum | P1 |
+| [x] | `sequence.add` | Add a continued sequence (previous Image 2 becomes new Image 1) | P1 |
+| [x] | `sequence.addBlank` | Add an empty sequence | P1 |
+| [x] | `sequence.delete/duplicate/rename` | | P1 |
+| [x] | `sequence.visibility` | Hide/show; modifier-click toggles solo | P1 |
+| [~] | `sequence.reorder` | Up, down, to top, to bottom, drag in list | P1 |
+| [x] | `sequence.link` | Make Image 1 equal the previous sequence's Image 2 (seamless join) | P1 |
+| [~] | `sequence.copyFrame` | Copy a source image with its dots into another sequence (drag between image icons) | P1 |
+| [~] | `project.type.sequence` | Sequences play one after another; movie length is the sum | P1 |
 | [ ] | `project.type.layer` | All sequences play at once as stacked layers (first = top); all share one length; switchable at any time | P2 |
-| [ ] | `view.sequenceList` | Panel listing sequences with both thumbnails, name, visibility (F2) | P1 |
+| [x] | `view.sequenceList` | Panel listing sequences with both thumbnails, name, visibility (F2) | P1 |
 
 ---
 
@@ -138,11 +138,11 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `curve.feature` | Remaps the colour-dissolve amount over time | P1 |
-| [ ] | `curve.shape` | Remaps the shape-interpolation amount over time | P1 |
+| [x] | `curve.feature` | Remaps the colour-dissolve amount over time | P1 |
+| [x] | `curve.shape` | Remaps the shape-interpolation amount over time | P1 |
 | [ ] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
 | [ ] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
-| [ ] | `curve.edit` | Click to add point, drag to move, right-click to delete, linear toggle, reset | P1 |
+| [x] | `curve.edit` | Click to add point, drag to move, right-click to delete, linear toggle, reset | P1 |
 | [ ] | `curve.library` | Save, load, delete library curves | P2 |
 
 ---

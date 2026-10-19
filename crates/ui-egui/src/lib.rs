@@ -12,6 +12,7 @@
 )]
 
 pub mod app;
+pub mod curves;
 pub mod fonts;
 pub mod form;
 pub mod hit;
@@ -20,6 +21,7 @@ pub mod menus;
 pub mod panels;
 pub mod playback;
 pub mod preview;
+pub mod seqlist;
 pub mod shortcuts;
 pub mod state;
 pub mod view;

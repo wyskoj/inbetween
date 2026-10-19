@@ -24,6 +24,9 @@ fn info(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
                 "morph": s.morph,
                 "fit": s.fit,
                 "mesh": s.mesh,
+                "visible": s.visible,
+                "feature_curve": !s.feature_curve.is_identity(),
+                "shape_curve": !s.shape_curve.is_identity(),
                 "dots": s.dots.len(),
                 "image1": s.image1.0,
                 "image2": s.image2.0,
@@ -33,6 +36,7 @@ fn info(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
     Ok(json!({
         "path": session.path().map(|p| p.display().to_string()),
         "output": { "width": p.output.width, "height": p.output.height },
+        "total_frames": p.total_frames(),
         "dirty": session.is_dirty(),
         "sequences": sequences,
     }))

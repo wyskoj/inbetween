@@ -12,6 +12,8 @@ pub enum DocError {
     NonFiniteDot(usize),
     /// Output width or height is zero or above the limit.
     BadOutputSize { width: u32, height: u32 },
+    /// A curve breaks the rules (the text says which).
+    BadCurve(&'static str),
 }
 
 impl fmt::Display for DocError {
@@ -30,6 +32,7 @@ impl fmt::Display for DocError {
                 write!(f, "{count} dot pairs exceeds the limit of {max}")
             }
             Self::NonFiniteDot(i) => write!(f, "dot pair {i} has a NaN or infinite coordinate"),
+            Self::BadCurve(why) => write!(f, "invalid curve: {why}"),
             Self::BadOutputSize { width, height } => write!(
                 f,
                 "output size {width} x {height} is not allowed (each side 1 to {})",

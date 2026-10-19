@@ -13,10 +13,12 @@
     clippy::unreachable
 )]
 
+mod curve_cmds;
 mod dots_cmds;
 mod edit_cmds;
 mod error;
 mod export_cmds;
+mod list_cmds;
 mod params;
 mod project_cmds;
 mod registry;

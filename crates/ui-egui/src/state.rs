@@ -3,6 +3,7 @@
 //! It holds only view state (zoom, pan, selection, playback, toggles), never project data, so
 //! the CLI and MCP can read or drive it and a restart restores the layout.
 
+use crate::curves::CurveKind;
 use crate::view::View;
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +47,11 @@ pub struct ViewState {
     /// Share of the height the two source panels get, the rest goes to the preview.
     pub top_fraction: f32,
     pub show_help: bool,
+    /// The sequence the panels edit and the preview plays.
+    pub sequence: usize,
+    pub show_sequence_list: bool,
+    /// The curve editor window, when open.
+    pub curve_window: Option<CurveKind>,
 }
 
 impl Default for ViewState {
@@ -63,6 +69,9 @@ impl Default for ViewState {
             fps: 24.0,
             top_fraction: 0.5,
             show_help: false,
+            sequence: 0,
+            show_sequence_list: true,
+            curve_window: None,
         }
     }
 }

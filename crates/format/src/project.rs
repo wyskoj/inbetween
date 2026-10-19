@@ -79,7 +79,8 @@ fn validate(project: &Project) -> Result<(), FormatError> {
 mod tests {
     use super::*;
     use inbetween_doc::{
-        DotPair, DotSet, FitMode, ImageRef, MeshPolicy, MorphType, OutputSettings, Sequence,
+        Curve, CurvePoint, DotPair, DotSet, FitMode, ImageRef, MeshPolicy, MorphType,
+        OutputSettings, Sequence,
     };
     use inbetween_geom::Point;
 
@@ -109,6 +110,16 @@ mod tests {
                     morph: MorphType::Warp2,
                     fit: FitMode::Cover,
                     mesh: MeshPolicy::PerFrame,
+                    feature_curve: Curve {
+                        points: vec![
+                            CurvePoint::new(0.0, 0.0),
+                            CurvePoint::new(0.1 + 0.2, 1.0 / 3.0),
+                            CurvePoint::new(1.0, 1.0),
+                        ],
+                        linear: true,
+                    },
+                    shape_curve: Curve::default(),
+                    visible: false,
                 },
                 Sequence::default(),
             ],
@@ -125,6 +136,21 @@ mod tests {
             project_to_string(&project_from_str(&text).unwrap()).unwrap(),
             text
         );
+    }
+
+    #[test]
+    fn invalid_curves_are_refused_not_trusted() {
+        for curve in [
+            r#"{"points": [], "linear": false}"#,
+            r#"{"points": [{"x": 0.0, "y": 0.0}], "linear": false}"#,
+            r#"{"points": [{"x": 0.0, "y": 0.5}, {"x": 1.0, "y": 1.0}]}"#,
+            r#"{"points": [{"x": 0.0, "y": 0.0}, {"x": 7.0, "y": 1.0}]}"#,
+        ] {
+            let text = format!(
+                r#"{{"format":"inbetween-project","version":1,"project":{{"sequences":[{{"feature_curve":{curve}}}]}}}}"#
+            );
+            assert!(project_from_str(&text).is_err(), "{curve}");
+        }
     }
 
     #[test]

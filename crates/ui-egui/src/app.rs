@@ -2,12 +2,14 @@
 //! menus, shortcuts and dialogs together. Anything that changes the project is an engine
 //! command run by id; this file only decides which one.
 
+use crate::curves::{self, CurveAction, CurveKind, CurveView};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
 use crate::panels::{self, Action, DotDrag, PreviewPanel, Shown, SourcePanel};
 use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
+use crate::seqlist::{self, ListAction, Row};
 use crate::shortcuts;
 use crate::state::{Panel, ViewState};
 use crate::view::View;
@@ -17,6 +19,7 @@ use inbetween_engine::{
 };
 use inbetween_morph::{fit_transform, Planner};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
@@ -70,7 +73,21 @@ impl ScreenshotPlan {
 
 struct PreparedCache {
     revision: u64,
+    sequence: usize,
     result: Result<Prepared, String>,
+}
+
+/// What the sequence list shows, rebuilt when the project changes.
+struct ListCache {
+    revision: u64,
+    rows: Vec<RowSnapshot>,
+}
+
+struct RowSnapshot {
+    label: String,
+    visible: bool,
+    frames: u32,
+    thumbs: [Option<TextureHandle>; 2],
 }
 
 struct SourceTexture {
@@ -109,6 +126,11 @@ pub struct InbetweenApp {
     mesh: Option<MeshCache>,
     drag: Option<DotDrag>,
     group_open: bool,
+    list: Option<ListCache>,
+    /// Thumbnails by image reference; the image is kept so a changed file is noticed.
+    thumbs: HashMap<String, (Arc<inbetween_raster::Image>, TextureHandle)>,
+    curve_drag: Option<usize>,
+    curve_group_open: bool,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -139,6 +161,10 @@ impl InbetweenApp {
             mesh: None,
             drag: None,
             group_open: false,
+            list: None,
+            thumbs: HashMap::new(),
+            curve_drag: None,
+            curve_group_open: false,
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -189,19 +215,24 @@ impl InbetweenApp {
 
     /// Run a command by id, the same way the CLI does. Returns the command's result.
     pub fn run_command(&mut self, id: &str, params: &Value) -> Result<Value, CommandError> {
+        let params = &self.with_current_sequence(id, params);
         let result = self.registry.run_caught(&mut self.session, id, params);
         match &result {
-            Ok(_) => {
+            Ok(done) => {
                 if matches!(id, "project.open" | "project.new") {
                     self.state.refit_all();
+                    self.state.sequence = 0;
                     self.state.selected = None;
                     self.state.frame = 0;
                     self.preview.clear(self.gpu.as_ref());
                     self.prepared = None;
                     self.mesh = None;
+                    self.list = None;
                 }
+                self.follow_list_change(id, done);
                 // Drags and playback would flood the status bar.
-                if !matches!(id, "dots.move" | "edit.beginGroup" | "edit.endGroup") {
+                let curve_drag = params["op"] == "move";
+                if !curve_drag && !matches!(id, "dots.move" | "edit.beginGroup" | "edit.endGroup") {
                     if let Some(spec) = self.registry.get(id) {
                         self.status = Some(Status {
                             text: format!("{}: done", spec.label),
@@ -223,6 +254,59 @@ impl InbetweenApp {
         result
     }
 
+    /// Commands that take a `sequence` act on the one being edited unless told otherwise.
+    fn with_current_sequence(&self, id: &str, params: &Value) -> Value {
+        let takes_sequence = self
+            .registry
+            .get(id)
+            .is_some_and(|s| s.params.iter().any(|p| p.name == "sequence"));
+        match params {
+            Value::Object(o) if takes_sequence && !o.contains_key("sequence") => {
+                let mut o = o.clone();
+                o.insert("sequence".to_string(), json!(self.state.sequence));
+                Value::Object(o)
+            }
+            Value::Null if takes_sequence => json!({ "sequence": self.state.sequence }),
+            other => other.clone(),
+        }
+    }
+
+    /// Make `index` the sequence the panels edit and the preview plays.
+    pub fn select_sequence(&mut self, index: usize) {
+        if index == self.state.sequence {
+            return;
+        }
+        self.state.sequence = index;
+        self.state.selected = None;
+        self.state.frame = 0;
+        self.state.playing = false;
+        self.prepared = None;
+        self.mesh = None;
+        self.preview.clear(self.gpu.as_ref());
+    }
+
+    /// Keep the current sequence pointing at the right row after the list changed.
+    fn follow_list_change(&mut self, id: &str, done: &Value) {
+        let index = done["sequence"].as_u64().map(|n| n as usize);
+        match (id, index) {
+            (
+                "sequence.add" | "sequence.addBlank" | "sequence.duplicate" | "sequence.reorder",
+                Some(n),
+            ) => {
+                self.select_sequence(n);
+            }
+            ("sequence.delete", _) => {
+                let deleted = done["deleted"].as_u64().map_or(usize::MAX, |n| n as usize);
+                if deleted < self.state.sequence {
+                    self.state.sequence -= 1;
+                    self.prepared = None;
+                    self.mesh = None;
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// Run a menu command: straight away when it needs no input, through a form otherwise.
     pub fn invoke(&mut self, id: &str) {
         let Some(spec) = self.registry.get(id).copied() else {
@@ -231,7 +315,21 @@ impl InbetweenApp {
         if !self.registry.is_enabled(id, &self.session) {
             return;
         }
-        if spec.params.iter().any(|p| p.required) {
+        let curve = match id {
+            "curve.feature" => Some(CurveKind::Feature),
+            "curve.shape" => Some(CurveKind::Shape),
+            _ => None,
+        };
+        if curve.is_some() {
+            self.state.curve_window = curve;
+            return;
+        }
+        // `sequence` alone does not need a form: the sequence being edited is used.
+        if spec
+            .params
+            .iter()
+            .any(|p| p.required && p.name != "sequence")
+        {
             self.form = Some(Form::for_spec(&spec));
             return;
         }
@@ -273,19 +371,24 @@ impl InbetweenApp {
 
     fn refresh_prepared(&mut self) {
         let revision = self.session.revision();
+        let sequence = self.state.sequence;
         if self
             .prepared
             .as_ref()
-            .is_some_and(|p| p.revision == revision)
+            .is_some_and(|p| p.revision == revision && p.sequence == sequence)
         {
             return;
         }
         let result = if self.session.has_sequences() {
-            self.session.prepare(0).map_err(|e| e.to_string())
+            self.session.prepare(sequence).map_err(|e| e.to_string())
         } else {
             Err("Open a project, or start one from two images (File menu).".to_string())
         };
-        self.prepared = Some(PreparedCache { revision, result });
+        self.prepared = Some(PreparedCache {
+            revision,
+            sequence,
+            result,
+        });
     }
 
     fn prepared(&self) -> Option<&Prepared> {
@@ -361,6 +464,13 @@ impl InbetweenApp {
     }
 
     fn clamp_selection_and_frame(&mut self) {
+        let count = self.session.project().sequences.len();
+        if count > 0 && self.state.sequence >= count {
+            self.select_sequence(count - 1);
+            self.refresh_prepared();
+        } else if count == 0 {
+            self.state.sequence = 0;
+        }
         let (dots, frames) = match self.prepared() {
             Some(p) => (p.sequence.dots.len(), p.sequence.total_frames()),
             None => (0, 1),
@@ -449,6 +559,9 @@ impl InbetweenApp {
                 }
             }
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+            self.state.show_sequence_list = !self.state.show_sequence_list;
+        }
         let (delete, escape, space, fit, left, right) = ctx.input(|i| {
             (
                 i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
@@ -532,6 +645,7 @@ impl InbetweenApp {
         self.refresh_prepared();
         self.clamp_selection_and_frame();
         self.refresh_mesh();
+        self.refresh_list(ctx);
         self.advance_playback(ctx);
         self.refresh_preview(ctx);
         self.update_title(ctx);
@@ -539,13 +653,240 @@ impl InbetweenApp {
         self.menu_bar(ctx);
         self.status_bar(ctx);
         self.transport_bar(ctx);
+        self.sequence_panel(ctx);
         self.canvases(ctx);
+        self.curve_window(ctx);
         self.form_window(ctx);
         self.help_window(ctx);
         self.screenshot_step(ctx);
         if self.group_open && self.drag.is_none() {
             self.end_group();
         }
+    }
+
+    // ------------------------------------------------------------------------ sequence list
+
+    /// One thumbnail texture for an image reference, reusing the last one while the file is
+    /// unchanged.
+    fn thumbnail(
+        &mut self,
+        ctx: &Context,
+        reference: &str,
+        which: u8,
+        sequence: usize,
+    ) -> Option<TextureHandle> {
+        if reference.is_empty() {
+            return None;
+        }
+        let image = self.session.load_image(reference, which, sequence).ok()?;
+        if let Some((old, handle)) = self.thumbs.get(reference) {
+            if Arc::ptr_eq(old, &image) {
+                return Some(handle.clone());
+            }
+        }
+        let handle = ctx.load_texture(
+            format!("thumbnail {reference}"),
+            to_color_image(&image, 64),
+            TextureOptions::LINEAR,
+        );
+        self.thumbs
+            .insert(reference.to_string(), (image, handle.clone()));
+        Some(handle)
+    }
+
+    fn refresh_list(&mut self, ctx: &Context) {
+        let revision = self.session.revision();
+        if self.list.as_ref().is_some_and(|l| l.revision == revision) {
+            return;
+        }
+        let sequences = self.session.project().sequences.clone();
+        let mut used = HashSet::new();
+        let mut rows = Vec::with_capacity(sequences.len());
+        for (i, s) in sequences.iter().enumerate() {
+            used.insert(s.image1.0.clone());
+            used.insert(s.image2.0.clone());
+            rows.push(RowSnapshot {
+                label: if s.name.is_empty() {
+                    format!("Sequence {}", i + 1)
+                } else {
+                    s.name.clone()
+                },
+                visible: s.visible,
+                frames: s.total_frames(),
+                thumbs: [
+                    self.thumbnail(ctx, &s.image1.0, 1, i),
+                    self.thumbnail(ctx, &s.image2.0, 2, i),
+                ],
+            });
+        }
+        self.thumbs.retain(|k, _| used.contains(k));
+        self.list = Some(ListCache { revision, rows });
+    }
+
+    fn sequence_panel(&mut self, ctx: &Context) {
+        if !self.state.show_sequence_list {
+            return;
+        }
+        let current = self.state.sequence;
+        let rows: Vec<Row> = self.list.as_ref().map_or_else(Vec::new, |l| {
+            l.rows
+                .iter()
+                .enumerate()
+                .map(|(i, r)| Row {
+                    label: r.label.clone(),
+                    visible: r.visible,
+                    frames: r.frames,
+                    thumbs: [
+                        r.thumbs[0].as_ref().map(TextureHandle::id),
+                        r.thumbs[1].as_ref().map(TextureHandle::id),
+                    ],
+                    selected: i == current,
+                })
+                .collect()
+        });
+        let movie = self.session.project().total_frames();
+        let mut actions = Vec::new();
+        egui::SidePanel::left("sequences")
+            .default_width(220.0)
+            .width_range(160.0..=420.0)
+            .show(ctx, |ui| {
+                actions = seqlist::sequence_list(ui, &rows, movie);
+            });
+        for action in actions {
+            self.apply_list(action);
+        }
+    }
+
+    /// Run what a click in the sequence list asked for. Errors land in the status bar.
+    pub fn apply_list(&mut self, action: ListAction) {
+        let _ = match action {
+            ListAction::Select(i) => {
+                self.select_sequence(i);
+                return;
+            }
+            ListAction::Visibility { index, solo } => {
+                let mut p = json!({ "sequence": index });
+                if solo {
+                    p["solo"] = json!(true);
+                }
+                self.run_command("sequence.visibility", &p)
+            }
+            ListAction::Move(i, how) => {
+                self.run_command("sequence.reorder", &json!({ "sequence": i, "move": how }))
+            }
+            ListAction::Duplicate(i) => {
+                self.run_command("sequence.duplicate", &json!({ "sequence": i }))
+            }
+            ListAction::Delete(i) => self.run_command("sequence.delete", &json!({ "sequence": i })),
+            ListAction::Link(i) => self.run_command("sequence.link", &json!({ "sequence": i })),
+            ListAction::Rename(i) => {
+                self.select_sequence(i);
+                self.invoke("sequence.rename");
+                return;
+            }
+            ListAction::AddBlank => self.run_command("sequence.addBlank", &json!({})),
+            ListAction::AddContinued => {
+                self.invoke("sequence.add");
+                return;
+            }
+        };
+    }
+
+    // ------------------------------------------------------------------------------ curves
+
+    fn curve_window(&mut self, ctx: &Context) {
+        let Some(mut kind) = self.state.curve_window else {
+            return;
+        };
+        let Ok(seq) = self.session.sequence(self.state.sequence) else {
+            return;
+        };
+        let curve = match kind {
+            CurveKind::Feature => seq.feature_curve.clone(),
+            CurveKind::Shape => seq.shape_curve.clone(),
+        };
+        let last = f64::from(seq.frames.saturating_sub(1).max(1));
+        let ticks: Vec<f64> = (0..seq.frames.min(100_000))
+            .map(|i| f64::from(i) / last)
+            .collect();
+        let now = seq.frame_time(self.state.frame);
+        let mut open = true;
+        let mut drag = self.curve_drag;
+        let mut actions: Vec<CurveAction> = Vec::new();
+        let mut linear = curve.linear;
+        egui::Window::new("Curves")
+            .open(&mut open)
+            .resizable(false)
+            .default_pos([260.0, 80.0])
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    for k in [CurveKind::Feature, CurveKind::Shape] {
+                        ui.selectable_value(&mut kind, k, k.label());
+                    }
+                });
+                ui.weak(kind.help());
+                ui.add_space(4.0);
+                let view = CurveView {
+                    curve: &curve,
+                    ticks: &ticks,
+                    now,
+                };
+                actions.extend(curves::curve_editor(ui, &view, &mut drag));
+                ui.weak("Click to add a point, drag to move, right-click to remove.");
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut linear, "Linear").changed() {
+                        actions.push(CurveAction::SetLinear(linear));
+                    }
+                    if ui.button("Reset").clicked() {
+                        actions.push(CurveAction::Reset);
+                    }
+                    if ui
+                        .button("Apply to all sequences")
+                        .on_hover_text("Copy this curve to every sequence")
+                        .clicked()
+                    {
+                        actions.push(CurveAction::ApplyAll);
+                    }
+                });
+            });
+        self.curve_drag = drag;
+        let command = kind.command();
+        for action in actions {
+            self.apply_curve(command, action);
+        }
+        if self.curve_group_open && (self.curve_drag.is_none() || !open) {
+            let _ = self.run_command("edit.endGroup", &json!({}));
+            self.curve_group_open = false;
+            self.curve_drag = None;
+        }
+        self.state.curve_window = open.then_some(kind);
+    }
+
+    /// Run one curve edit as the matching `curve.*` command.
+    pub fn apply_curve(&mut self, command: &str, action: CurveAction) {
+        let _ = match action {
+            CurveAction::Add { x, y } => {
+                self.run_command(command, &json!({ "op": "add", "x": x, "y": y }))
+            }
+            CurveAction::BeginDrag => {
+                let r = self.run_command("edit.beginGroup", &json!({}));
+                self.curve_group_open = r.is_ok();
+                r
+            }
+            CurveAction::Move { index, x, y } => self.run_command(
+                command,
+                &json!({ "op": "move", "index": index, "x": x, "y": y }),
+            ),
+            CurveAction::EndDrag => Ok(Value::Null),
+            CurveAction::Remove(i) => {
+                self.run_command(command, &json!({ "op": "remove", "index": i }))
+            }
+            CurveAction::SetLinear(b) => {
+                self.run_command(command, &json!({ "op": "linear", "linear": b }))
+            }
+            CurveAction::Reset => self.run_command(command, &json!({ "op": "reset" })),
+            CurveAction::ApplyAll => self.run_command(command, &json!({ "op": "apply_all" })),
+        };
     }
 
     fn refresh_preview(&mut self, ctx: &Context) {
@@ -607,6 +948,7 @@ impl InbetweenApp {
                     ui.checkbox(&mut view.0, "Show mesh");
                     ui.checkbox(&mut view.1, "Show dot numbers");
                     ui.checkbox(&mut view.2, "Link the two image views");
+                    ui.checkbox(&mut self.state.show_sequence_list, "Sequence list (F2)");
                     ui.separator();
                     if ui.button("Help").clicked() {
                         view_action = Some("help");

@@ -39,9 +39,10 @@ enum Cmd {
         /// Folder for the frames (created if missing)
         #[arg(long)]
         out: PathBuf,
-        /// Sequence number, starting at 0
-        #[arg(long, default_value_t = 0)]
-        sequence: u32,
+        /// Render only this sequence (numbered from 0); by default every visible sequence is
+        /// rendered one after another
+        #[arg(long)]
+        sequence: Option<u32>,
         /// File name prefix: PREFIX_0001.png, ...
         #[arg(long)]
         prefix: Option<String>,
@@ -144,11 +145,18 @@ fn run(command: Cmd) -> Result<String, String> {
             prefix,
         } => {
             engine.open(&project)?;
-            let mut params = json!({ "out_dir": path_str(&out)?, "sequence": sequence });
+            let mut params = json!({ "out_dir": path_str(&out)? });
             if let Some(prefix) = prefix {
                 params["prefix"] = Value::from(prefix);
             }
-            let r = engine.run("export.sequence", params)?;
+            let id = match sequence {
+                Some(n) => {
+                    params["sequence"] = json!(n);
+                    "export.sequence"
+                }
+                None => "export.movie",
+            };
+            let r = engine.run(id, params)?;
             Ok(text::render_summary(&r))
         }
         Cmd::Frame {

@@ -1,4 +1,4 @@
-use crate::{DocError, DotSet};
+use crate::{Curve, DocError, DotSet};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 
@@ -152,6 +152,12 @@ pub struct Sequence {
     pub morph: MorphType,
     pub fit: FitMode,
     pub mesh: MeshPolicy,
+    /// Remaps morph time into the colour-dissolve amount.
+    pub feature_curve: Curve,
+    /// Remaps morph time into the shape-interpolation amount (how far the dots have moved).
+    pub shape_curve: Curve,
+    /// Hidden sequences are skipped by playback and export.
+    pub visible: bool,
 }
 
 impl Default for Sequence {
@@ -167,6 +173,9 @@ impl Default for Sequence {
             morph: MorphType::default(),
             fit: FitMode::default(),
             mesh: MeshPolicy::default(),
+            feature_curve: Curve::default(),
+            shape_curve: Curve::default(),
+            visible: true,
         }
     }
 }
@@ -231,6 +240,8 @@ impl Sequence {
                 max: MAX_DOTS,
             });
         }
+        self.feature_curve.validate()?;
+        self.shape_curve.validate()?;
         for (i, p) in self.dots.pairs.iter().enumerate() {
             if !(p.first.is_finite() && p.second.is_finite()) {
                 return Err(DocError::NonFiniteDot(i));
@@ -382,6 +393,20 @@ mod tests {
             );
         }
         assert_eq!(MorphType::from_id("nope"), None);
+    }
+
+    #[test]
+    fn older_sequences_get_identity_curves_and_stay_visible() {
+        let s: Sequence = serde_json::from_str(r#"{"frames": 12}"#).unwrap();
+        assert!(s.feature_curve.is_identity() && s.shape_curve.is_identity());
+        assert!(s.visible);
+    }
+
+    #[test]
+    fn validate_checks_curves() {
+        let mut s = Sequence::default();
+        s.shape_curve.points.clear();
+        assert!(matches!(s.validate(), Err(DocError::BadCurve(_))));
     }
 
     #[test]
