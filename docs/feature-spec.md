@@ -58,14 +58,14 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `image.crop` | Drag crop; free or locked aspect; crop may extend past the image; arbitrary-angle rotate inside crop | P1 |
-| [~] | `image.rotate` | 90° CW, 90° CCW, 180°, arbitrary angle | P1 |
-| [~] | `image.flip` | Horizontal, vertical | P1 |
-| [~] | `image.adjust` | Brightness, contrast, R/G/B, hue, saturation, negative, grayscale | P1 |
+| [x] | `image.crop` | Drag crop; free or locked aspect; crop may extend past the image; arbitrary-angle rotate inside crop | P1 |
+| [x] | `image.rotate` | 90° CW, 90° CCW, 180°, arbitrary angle | P1 |
+| [x] | `image.flip` | Horizontal, vertical | P1 |
+| [x] | `image.adjust` | Brightness, contrast, R/G/B, hue, saturation, negative, grayscale | P1 |
 | [x] | `image.filter.*` | Smooth, blur, Gaussian, zoom blur, radial blur, sharpen, emboss, mosaic, oil paint, splash, cylinder, whirl, pinch | P2 |
-| [~] | `image.caption` | Per-image caption (see §8) | P2 |
-| [~] | `image.swap` | Swap Image 1 and Image 2 (F3) | P1 |
-| [~] | `image.saveToLibrary` | Store image plus dots in the face library (§10) | P2 |
+| [x] | `image.caption` | Per-image caption (see §8) | P2 |
+| [x] | `image.swap` | Swap Image 1 and Image 2 (F3) | P1 |
+| [x] | `image.saveToLibrary` | Store image plus dots in the face library (§10) | P2 |
 
 All source edits are undoable and non-destructive (dots stay attached to the edited image).
 
@@ -187,10 +187,10 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `caption.*` | Captions at three scopes: per source image, per sequence, whole movie | P2 |
-| [~] |  | Multi-line text; font, size, style, colour, border size and colour, alignment | P2 |
-| [~] |  | Shadow with angle, distance, colour, size (size 0 = none) | P2 |
-| [~] |  | Position by drag or by normalized numeric coordinates | P2 |
+| [x] | `caption.*` | Captions at three scopes: per source image, per sequence, whole movie | P2 |
+| [x] |  | Multi-line text; font, size, style, colour, border size and colour, alignment | P2 |
+| [x] |  | Shadow with angle, distance, colour, size (size 0 = none) | P2 |
+| [x] |  | Position by drag or by normalized numeric coordinates | P2 |
 
 ---
 

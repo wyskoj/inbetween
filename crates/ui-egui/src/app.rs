@@ -2,18 +2,19 @@
 //! menus, shortcuts and dialogs together. Anything that changes the project is an engine
 //! command run by id; this file only decides which one.
 
+use crate::crop::{CropTool, Handle};
 use crate::curves::{self, CurveAction, CurveKind, CurveView};
 use crate::dragdrop::{self, DropAction, Dropped};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
 use crate::open_visual::{OpenVisual, Outcome as VisualOutcome, Tab as VisualTab};
-use crate::panels::{self, Action, DotDrag, PreviewPanel, Shown, SourcePanel};
+use crate::panels::{self, Action, CropView, DotDrag, Grabs, PreviewPanel, Shown, SourcePanel};
 use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
 use crate::seqlist::{self, ListAction, Row};
 use crate::shortcuts;
-use crate::state::{Panel, ViewState};
+use crate::state::{CaptionScope, Panel, ViewState};
 use crate::view::View;
 use egui::{Context, Pos2, Rect, TextureHandle, TextureOptions, Vec2};
 use inbetween_engine::{
@@ -25,6 +26,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
+
+mod adjust_ui;
+mod caption_ui;
+mod crop_ui;
 
 /// Screen rectangles of the three canvases from the last frame (used by tests and screenshots).
 #[derive(Clone, Copy, Debug)]
@@ -164,6 +169,18 @@ pub struct InbetweenApp {
     /// The person said to quit (or discard and quit): let the window close.
     allow_close: bool,
     close_now: bool,
+    /// What the pointer holds besides a dot (a crop handle, the caption).
+    grabs: Grabs,
+    crop_drag: Option<crop_ui::CropDrag>,
+    crop_texture: Option<crop_ui::CropTexture>,
+    /// The Adjust window keeps one undo group open while it is up.
+    adjust_group_open: bool,
+    adjust_changed: bool,
+    /// The Caption window keeps one undo group open while it is up.
+    caption_group_open: bool,
+    caption_changed: bool,
+    /// Where the caption's anchor was when a drag on it began.
+    caption_origin: Option<(f64, f64)>,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -203,6 +220,14 @@ impl InbetweenApp {
             after_save: None,
             allow_close: false,
             close_now: false,
+            grabs: Grabs::default(),
+            crop_drag: None,
+            crop_texture: None,
+            adjust_group_open: false,
+            adjust_changed: false,
+            caption_group_open: false,
+            caption_changed: false,
+            caption_origin: None,
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -271,6 +296,14 @@ impl InbetweenApp {
                     self.list = None;
                 }
                 self.follow_list_change(id, done);
+                if self.state.adjust_window.is_some() && id.starts_with("image.") {
+                    self.adjust_changed = true;
+                }
+                if matches!(id, "image.saveToLibrary" | "face.library") {
+                    if let Some(dir) = params["dir"].as_str().filter(|d| !d.is_empty()) {
+                        self.state.library_dir = dir.to_string();
+                    }
+                }
                 if matches!(id, "project.open" | "project.save" | "project.saveAs") {
                     if let Some(path) = self.session.path().map(|p| p.display().to_string()) {
                         self.state.push_recent(&path);
@@ -278,7 +311,12 @@ impl InbetweenApp {
                 }
                 // Drags and playback would flood the status bar.
                 let curve_drag = params["op"] == "move";
-                if !curve_drag && !matches!(id, "dots.move" | "edit.beginGroup" | "edit.endGroup") {
+                let live_window =
+                    self.state.adjust_window.is_some() || self.state.caption_window.is_some();
+                if !curve_drag
+                    && !live_window
+                    && !matches!(id, "dots.move" | "edit.beginGroup" | "edit.endGroup")
+                {
                     if let Some(spec) = self.registry.get(id) {
                         self.status = Some(Status {
                             text: format!("{}: done", spec.label),
@@ -384,13 +422,51 @@ impl InbetweenApp {
             self.state.curve_window = curve;
             return;
         }
-        // `sequence` alone does not need a form: the sequence being edited is used.
-        if spec
-            .params
-            .iter()
-            .any(|p| p.required && p.name != "sequence")
+        let focus = self.state.focus_image;
+        match id {
+            "image.crop" => {
+                self.start_crop(focus);
+                return;
+            }
+            "image.adjust" => {
+                self.open_adjust(focus);
+                return;
+            }
+            "image.caption" => {
+                self.open_caption(if focus == 2 {
+                    CaptionScope::Image2
+                } else {
+                    CaptionScope::Image1
+                });
+                return;
+            }
+            "caption.sequence" => {
+                self.open_caption(CaptionScope::Sequence);
+                return;
+            }
+            "caption.movie" => {
+                self.open_caption(CaptionScope::Movie);
+                return;
+            }
+            _ => {}
+        }
+        // `sequence` alone does not need a form: the sequence being edited is used. Image tools
+        // whose settings all have defaults still ask first, so a click never adds a surprise.
+        let form_first = FORM_FIRST.contains(&id)
+            || (id.starts_with("image.filter.")
+                && !matches!(
+                    id,
+                    "image.filter.remove" | "image.filter.move" | "image.filter.clear"
+                ));
+        if form_first
+            || spec
+                .params
+                .iter()
+                .any(|p| p.required && p.name != "sequence")
         {
-            self.form = Some(Form::for_spec(&spec));
+            let mut form = Form::for_spec(&spec);
+            self.prefill(&mut form);
+            self.form = Some(form);
             return;
         }
         if self.guard(id, &json!({})) {
@@ -403,6 +479,18 @@ impl InbetweenApp {
                 form.error = Some(e.to_string());
                 self.form = Some(form);
             }
+        }
+    }
+
+    /// Fill in what the shell knows: the image under focus, the last library folder.
+    fn prefill(&self, form: &mut Form) {
+        if form.fields.iter().any(|f| f.spec.name == "image") {
+            form.set("image", self.state.focus_image.to_string());
+        }
+        if matches!(form.id, "image.saveToLibrary" | "face.library")
+            && !self.state.library_dir.is_empty()
+        {
+            form.set("dir", self.state.library_dir.clone());
         }
     }
 
@@ -895,6 +983,17 @@ impl InbetweenApp {
             self.refresh_prepared();
         } else if count == 0 {
             self.state.sequence = 0;
+            self.state.crop = None;
+            if self.state.adjust_window.is_some() {
+                self.close_adjust(true);
+            }
+            if self
+                .state
+                .caption_window
+                .is_some_and(|s| s != CaptionScope::Movie)
+            {
+                self.close_caption();
+            }
         }
         let (dots, frames) = match self.prepared() {
             Some(p) => (p.sequence.dots.len(), p.sequence.total_frames()),
@@ -943,6 +1042,12 @@ impl InbetweenApp {
                     self.state.selected = None;
                 }
             }
+            Action::CropBegin { handle, at } => self.crop_begin(handle, at),
+            Action::CropMove { to } => self.crop_move(to),
+            Action::CropEnd => self.crop_drag = None,
+            Action::CaptionBegin => self.caption_begin(),
+            Action::CaptionMove { dx, dy } => self.caption_move(dx, dy),
+            Action::CaptionEnd => self.caption_origin = None,
         }
     }
 
@@ -956,6 +1061,16 @@ impl InbetweenApp {
     fn handle_keys(&mut self, ctx: &Context) {
         if self.form.is_some() || self.pending.is_some() || ctx.wants_keyboard_input() {
             return;
+        }
+        if self.state.crop.is_some() {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
+                self.apply_crop();
+                return;
+            }
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.cancel_crop();
+                return;
+            }
         }
         // Redo has two spellings; check the more specific one first.
         let redo = egui::KeyboardShortcut::new(
@@ -1082,6 +1197,9 @@ impl InbetweenApp {
         self.sequence_panel(ctx);
         self.canvases(ctx);
         self.curve_window(ctx);
+        self.crop_window(ctx);
+        self.adjust_window(ctx);
+        self.caption_window(ctx);
         self.form_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);
@@ -1367,6 +1485,8 @@ impl InbetweenApp {
             .map(|p| (p.clone(), std::path::Path::new(p).exists()))
             .collect();
         let mut recent_click: Option<(String, bool)> = None;
+        let mut quick: Option<usize> = None;
+        let has_sequences = self.session.has_sequences();
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 for node in &self.menus {
@@ -1383,6 +1503,18 @@ impl InbetweenApp {
                             if name == "File" {
                                 ui.separator();
                                 recent_menu(ui, &recent, &mut recent_click);
+                            }
+                            if name == "Image" {
+                                ui.separator();
+                                for (i, (label, ..)) in QUICK_IMAGE.iter().enumerate() {
+                                    if ui
+                                        .add_enabled(has_sequences, egui::Button::new(*label))
+                                        .clicked()
+                                    {
+                                        quick = Some(i);
+                                        ui.close_menu();
+                                    }
+                                }
                             }
                         });
                     }
@@ -1427,8 +1559,33 @@ impl InbetweenApp {
                 self.state.remove_recent(&path);
             }
         }
+        if let Some(i) = quick {
+            self.run_quick_image(i);
+        }
         if let Some(id) = clicked {
             self.invoke(id);
+        }
+    }
+
+    /// Run item `index` of the Image menu's quick list on the source panel last used.
+    pub fn run_quick_image(&mut self, index: usize) {
+        if let Some((_, id, key, value)) = QUICK_IMAGE.get(index) {
+            let focus = self.state.focus_image;
+            let _ = self.run_command(id, &json!({ *key: *value, "image": focus }));
+        }
+    }
+
+    /// The source panel the pointer last pressed in is the one the Image menu's quick items
+    /// act on.
+    fn track_focus(&mut self, ctx: &Context) {
+        let pressed = ctx.input(|i| i.pointer.any_pressed());
+        let at = ctx.input(|i| i.pointer.interact_pos());
+        if let (true, Some(p)) = (pressed, at) {
+            if self.layout.source1.contains(p) {
+                self.state.focus_image = 1;
+            } else if self.layout.source2.contains(p) {
+                self.state.focus_image = 2;
+            }
         }
     }
 
@@ -1527,9 +1684,11 @@ impl InbetweenApp {
 
     fn canvases(&mut self, ctx: &Context) {
         // Everything the panels need is copied out first, so drawing never borrows the session.
-        let snapshot = self.snapshot(ctx);
+        let mut snapshot = self.snapshot(ctx);
+        let mut crops = std::mem::take(&mut snapshot.crop);
         let mut views = self.state.views;
         let mut drag = self.drag;
+        let mut grabs = self.grabs;
         let mut actions: Vec<Action> = Vec::new();
         let (show_mesh, show_numbers, selected) = (
             self.state.show_mesh,
@@ -1565,10 +1724,12 @@ impl InbetweenApp {
                     show_mesh,
                     show_numbers,
                     message: Some(snapshot.message.clone()),
+                    crop: crops[index].take(),
+                    caption: snapshot.caption[index],
                 };
                 let out = ui
                     .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                        panels::source_panel(ui, &panel, &mut views[index], &mut drag)
+                        panels::source_panel(ui, &panel, &mut views[index], &mut drag, &mut grabs)
                     })
                     .inner;
                 actions.extend(out.actions);
@@ -1585,12 +1746,15 @@ impl InbetweenApp {
                 mesh: &snapshot.mesh[2],
                 show_mesh,
                 message: snapshot.preview_message.clone(),
+                caption: snapshot.caption[2],
             };
-            layout.preview = ui
+            let out = ui
                 .scope_builder(egui::UiBuilder::new().max_rect(bottom), |ui| {
-                    panels::preview_panel(ui, &preview, &mut views[2])
+                    panels::preview_panel(ui, &preview, &mut views[2], &mut grabs)
                 })
                 .inner;
+            layout.preview = out.rect;
+            actions.extend(out.actions);
         });
 
         // Linked source views move together: whichever one changed drives the other.
@@ -1604,7 +1768,9 @@ impl InbetweenApp {
         }
         self.state.views = views;
         self.drag = drag;
+        self.grabs = grabs;
         self.layout = layout;
+        self.track_focus(ctx);
         for action in actions {
             self.apply(action);
         }
@@ -1701,6 +1867,10 @@ impl InbetweenApp {
             self.preview.backend_name()
         );
         snap.preview_message = self.preview.error.clone();
+        for i in 0..2 {
+            self.crop_snapshot(ctx, i, &mut snap);
+        }
+        self.caption_snapshot(&mut snap);
         snap
     }
 
@@ -1856,6 +2026,10 @@ struct Snapshot {
     mesh: [Vec<[Pos2; 3]>; 3],
     message: String,
     preview_message: Option<String>,
+    /// The crop tool, on the panel that has it.
+    crop: [Option<CropView>; 2],
+    /// Where an editable caption sits on each canvas, in frame coordinates.
+    caption: [Option<Rect>; 3],
 }
 
 impl Snapshot {
@@ -1868,9 +2042,24 @@ impl Snapshot {
             mesh: [Vec::new(), Vec::new(), Vec::new()],
             message: "Open a project, or start one from two images (File menu).".into(),
             preview_message: None,
+            crop: [None, None],
+            caption: [None; 3],
         }
     }
 }
+
+/// Image commands that always ask (they would otherwise run at once with their defaults).
+const FORM_FIRST: &[&str] = &["image.rotate", "image.reset"];
+
+/// The Image menu's quick items: label, command, parameter name and value. Each acts on the
+/// source panel last used.
+pub const QUICK_IMAGE: &[(&str, &str, &str, &str)] = &[
+    ("Rotate 90\u{b0} CW", "image.rotate", "turn", "cw"),
+    ("Rotate 90\u{b0} CCW", "image.rotate", "turn", "ccw"),
+    ("Rotate 180\u{b0}", "image.rotate", "turn", "180"),
+    ("Flip Horizontal", "image.flip", "axis", "horizontal"),
+    ("Flip Vertical", "image.flip", "axis", "vertical"),
+];
 
 /// Commands that switch a sequence option on or off. The menu shows a check box and a click
 /// flips the option; the engine command takes `on` and reports the state when it is left out.

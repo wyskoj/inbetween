@@ -406,3 +406,42 @@ fn continued_sequences_carry_the_edit_with_the_image() {
     assert!(!seqs[1].edit1.is_identity());
     assert!(seqs[1].edit2.is_identity());
 }
+
+#[test]
+fn the_library_saves_what_you_see_and_gives_it_back_with_the_dots_on_the_features() {
+    let d = Dir::new("library");
+    let mut s = session(&d);
+    run(&mut s, "image.flip", json!({"axis": "horizontal"})).unwrap();
+    run(
+        &mut s,
+        "image.crop",
+        json!({"x": 4, "y": 2, "w": 50, "h": 40}),
+    )
+    .unwrap();
+    run(&mut s, "image.adjust", json!({"brightness": 5})).unwrap();
+    on_features(&mut s, "edited");
+    let lib = d.s("lib");
+    run(
+        &mut s,
+        "image.saveToLibrary",
+        json!({"dir": lib, "name": "seen"}),
+    )
+    .unwrap();
+
+    // The stored picture is the edited one, not the file on disk.
+    let saved = inbetween_codecs::read_file(&d.0.join("lib/seen.png")).unwrap();
+    assert_eq!((saved.width, saved.height), (50, 40));
+    let want = s.source(0, 1).unwrap().to_rgba8();
+    assert_eq!(saved.data, want);
+
+    // A fresh, unedited project takes it back: the dots land on the same features.
+    let mut t = session(&d);
+    run(
+        &mut t,
+        "face.library",
+        json!({"dir": lib, "op": "use", "name": "seen", "image": 1}),
+    )
+    .unwrap();
+    assert!(t.sequence(0).unwrap().edit1.is_identity());
+    on_features(&mut t, "reused");
+}

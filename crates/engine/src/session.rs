@@ -86,6 +86,9 @@ pub struct Prepared {
     pub light: Option<Arc<Image>>,
     /// The sequence's caption, already drawn at the output size.
     pub caption: Option<Arc<Image>>,
+    /// The movie-wide caption, drawn at the output size. Exports lay it over every frame; the
+    /// renderer does not, so a shell previewing the movie adds it itself.
+    pub movie_caption: Option<Arc<Image>>,
 }
 
 impl Prepared {
@@ -310,6 +313,7 @@ impl Session {
             Some(c) => self.caption_layer(c, output)?,
             None => None,
         };
+        let movie_caption = self.movie_caption()?;
         Ok(Prepared {
             sequence,
             output,
@@ -321,6 +325,7 @@ impl Session {
             transition,
             light,
             caption,
+            movie_caption,
         })
     }
 
@@ -350,13 +355,26 @@ impl Session {
     /// the file and the edit, so undoing and redoing an edit costs nothing.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn source(&mut self, seq: usize, which: u8) -> Result<Arc<Image>, CommandError> {
+        let edit = self.sequence(seq)?.edit(which).clone();
+        self.source_with(seq, which, &edit)
+    }
+
+    /// Like [`Session::source`], but with `edit` standing in for the image's own edit (a
+    /// shell previewing a change, such as the crop tool showing the picture uncropped).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn source_with(
+        &mut self,
+        seq: usize,
+        which: u8,
+        edit: &inbetween_doc::ImageEdit,
+    ) -> Result<Arc<Image>, CommandError> {
         let sequence = self.sequence(seq)?;
         let reference = if which == 1 {
             sequence.image1.0.clone()
         } else {
             sequence.image2.0.clone()
         };
-        let edit = sequence.edit(which).clone();
+        let edit = edit.clone();
         let raw = self.load_image(&reference, which, seq)?;
         if edit.is_identity() {
             return Ok(raw);

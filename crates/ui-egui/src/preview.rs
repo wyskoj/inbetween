@@ -116,7 +116,12 @@ impl Preview {
         self.drawn = Some((revision, frame));
         // Effects, the camera and the master fade are drawn by the CPU renderer only (D34, D36),
         // so a sequence with any of them on previews on the CPU even when a GPU is available.
-        let gpu = handle.filter(|_| !self.gpu_failed && !prepared.sequence.needs_post_pass());
+        // A caption (sequence or movie) is drawn on the CPU as well.
+        let gpu = handle.filter(|_| {
+            !self.gpu_failed
+                && !prepared.sequence.needs_post_pass()
+                && prepared.movie_caption.is_none()
+        });
         let outcome = match gpu {
             Some(h) => self.refresh_gpu(h, prepared, revision, frame),
             None => {
@@ -191,7 +196,10 @@ impl Preview {
         frame: u32,
     ) -> Result<(), String> {
         let renderer = prepared.renderer().map_err(|e| e.to_string())?;
-        let image = renderer.render_frame(frame).map_err(|e| e.to_string())?;
+        let mut image = renderer.render_frame(frame).map_err(|e| e.to_string())?;
+        if let Some(layer) = &prepared.movie_caption {
+            inbetween_render_cpu::caption::composite(&mut image, layer);
+        }
         let color = to_color_image(&image, ctx.input(|i| i.max_texture_side));
         match &mut self.cpu {
             Some(handle) => handle.set(color, TextureOptions::LINEAR),

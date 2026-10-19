@@ -3,6 +3,7 @@
 //! It holds only view state (zoom, pan, selection, playback, toggles), never project data, so
 //! the CLI and MCP can read or drive it and a restart restores the layout.
 
+use crate::crop::CropTool;
 use crate::curves::CurveKind;
 use crate::view::View;
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,47 @@ impl Panel {
             Self::Source1 => 0,
             Self::Source2 => 1,
             Self::Preview => 2,
+        }
+    }
+}
+
+/// What the caption window edits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptionScope {
+    Image1,
+    Image2,
+    Sequence,
+    Movie,
+}
+
+impl CaptionScope {
+    pub const ALL: [Self; 4] = [Self::Image1, Self::Image2, Self::Sequence, Self::Movie];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Image1 => "Image 1",
+            Self::Image2 => "Image 2",
+            Self::Sequence => "Sequence",
+            Self::Movie => "Movie",
+        }
+    }
+
+    /// The command that sets a caption at this scope.
+    pub fn command(self) -> &'static str {
+        match self {
+            Self::Image1 | Self::Image2 => "image.caption",
+            Self::Sequence => "caption.sequence",
+            Self::Movie => "caption.movie",
+        }
+    }
+
+    /// The source image (1 or 2) this scope belongs to, if it is a per-image one.
+    pub fn image(self) -> Option<u8> {
+        match self {
+            Self::Image1 => Some(1),
+            Self::Image2 => Some(2),
+            _ => None,
         }
     }
 }
@@ -54,6 +96,16 @@ pub struct ViewState {
     pub curve_window: Option<CurveKind>,
     /// Projects opened or saved lately, newest first (at most [`MAX_RECENT`]).
     pub recent: Vec<String>,
+    /// The source panel (1 or 2) last used; the Image menu's quick items act on it.
+    pub focus_image: u8,
+    /// The face library folder last used, offered again by the Save To Library form.
+    pub library_dir: String,
+    /// The Adjust window, when open: which image it edits.
+    pub adjust_window: Option<u8>,
+    /// The Caption window, when open.
+    pub caption_window: Option<CaptionScope>,
+    /// The crop being drawn, when the crop tool is active.
+    pub crop: Option<CropTool>,
 }
 
 /// How many recent projects are remembered.
@@ -78,6 +130,11 @@ impl Default for ViewState {
             show_sequence_list: true,
             curve_window: None,
             recent: Vec::new(),
+            focus_image: 1,
+            library_dir: String::new(),
+            adjust_window: None,
+            caption_window: None,
+            crop: None,
         }
     }
 }
@@ -100,6 +157,22 @@ impl ViewState {
             }
         }
         self.recent = seen;
+        if !(1..=2).contains(&self.focus_image) {
+            self.focus_image = 1;
+        }
+        if self.library_dir.len() > 4096 {
+            self.library_dir.clear();
+        }
+        if self.adjust_window.is_some_and(|i| !(1..=2).contains(&i)) {
+            self.adjust_window = None;
+        }
+        if self
+            .crop
+            .as_ref()
+            .is_some_and(|c| !c.is_sane() || !(1..=2).contains(&c.image))
+        {
+            self.crop = None;
+        }
         for v in &mut self.views {
             if !v.zoom.is_finite() || !v.offset.iter().all(|o| o.is_finite()) {
                 *v = View::default();

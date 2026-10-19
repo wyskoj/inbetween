@@ -1922,6 +1922,7 @@ dependencies = [
  "inbetween-engine",
  "inbetween-format",
  "inbetween-geom",
+ "inbetween-raster",
  "inbetween-testkit",
  "serde",
  "serde_json",

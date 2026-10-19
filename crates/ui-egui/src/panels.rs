@@ -3,12 +3,16 @@
 //! Panels only draw and read input. What the person did comes back as [`Action`]s, which the
 //! app turns into engine commands, so nothing here edits the project.
 
+use crate::crop::{CropTool, Handle};
 use crate::hit;
 use crate::view::View;
 use egui::{
     Align2, Color32, CursorIcon, FontId, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind,
     TextureId, Ui, Vec2,
 };
+
+mod crop_view;
+use crop_view::{caption_drag, crop_mode, draw_caption_frame};
 
 /// How close, in screen points, the pointer must be to grab a dot.
 pub const GRAB_RADIUS: f32 = 9.0;
@@ -18,11 +22,17 @@ const DOT_RADIUS: f32 = 5.0;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
     /// Click on empty image: add a dot pair here.
-    Add { x: f64, y: f64 },
+    Add {
+        x: f64,
+        y: f64,
+    },
     /// Click on a dot, or `None` to clear the selection.
     Select(Option<usize>),
     /// A drag on a dot began.
-    BeginDrag { index: usize, image: u8 },
+    BeginDrag {
+        index: usize,
+        image: u8,
+    },
     /// The dragged dot moved to this frame position.
     Drag {
         index: usize,
@@ -34,6 +44,33 @@ pub enum Action {
     EndDrag,
     /// Right-click on a dot: remove the pair.
     Delete(usize),
+    /// The crop box was grabbed; `at` is the position in the turned picture's pixels.
+    CropBegin {
+        handle: Handle,
+        at: (f64, f64),
+    },
+    /// The grabbed crop handle is now here (turned picture pixels).
+    CropMove {
+        to: (f64, f64),
+    },
+    CropEnd,
+    /// A drag on the caption began.
+    CaptionBegin,
+    /// The caption has been dragged this far from where the drag began, in frame pixels.
+    CaptionMove {
+        dx: f64,
+        dy: f64,
+    },
+    CaptionEnd,
+}
+
+/// What the pointer has hold of besides a dot, kept between frames.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Grabs {
+    /// A crop handle (or the box itself) is being dragged.
+    pub crop: Option<Handle>,
+    /// The caption is being dragged.
+    pub caption: bool,
 }
 
 /// A dot being dragged between frames.
@@ -70,6 +107,19 @@ pub struct SourcePanel<'a> {
     pub show_numbers: bool,
     /// Shown in the middle when there is nothing to draw.
     pub message: Option<String>,
+    /// While the crop tool is on this image: the box to draw and edit.
+    pub crop: Option<CropView>,
+    /// While the caption window is open for this image: where the caption sits, in frame
+    /// coordinates, so a drag that starts on it moves it.
+    pub caption: Option<Rect>,
+}
+
+/// The crop tool as a source panel draws it.
+pub struct CropView {
+    pub tool: CropTool,
+    /// Frame coordinates to pixels of the turned picture (the picture is shown fitted in the
+    /// frame, so this is the inverse of how it is placed).
+    pub fit: inbetween_geom::Affine,
 }
 
 pub struct PanelOutput {
@@ -168,10 +218,14 @@ pub fn source_panel(
     panel: &SourcePanel<'_>,
     view: &mut View,
     drag: &mut Option<DotDrag>,
+    grabs: &mut Grabs,
 ) -> PanelOutput {
     let (rect, resp) = canvas(ui, &panel.title);
     if view.auto_fit {
         *view = View::fit(panel.frame, rect);
+    }
+    if let Some(crop) = &panel.crop {
+        return crop_mode(ui, panel, crop, view, grabs, rect, &resp);
     }
     let mut actions = Vec::new();
 
@@ -191,7 +245,23 @@ pub fn source_panel(
         view,
         &[PointerButton::Middle, PointerButton::Secondary],
     );
+    let caption_here = |p: Pos2| {
+        panel
+            .caption
+            .is_some_and(|r| r.contains(view.to_frame(rect, p)))
+    };
     if resp.drag_started_by(PointerButton::Primary) {
+        if let Some(p) = resp.interact_pointer_pos() {
+            if caption_here(p) && hit::pick(&screen_dots, p, GRAB_RADIUS).is_none() {
+                grabs.caption = true;
+                actions.push(Action::CaptionBegin);
+            }
+        }
+    }
+    if grabs.caption {
+        caption_drag(ui, &resp, rect, view, grabs, &mut actions);
+    }
+    if !grabs.caption && resp.drag_started_by(PointerButton::Primary) {
         if let Some(index) = resp
             .interact_pointer_pos()
             .and_then(|p| hit::pick(&screen_dots, p, GRAB_RADIUS))
@@ -207,7 +277,7 @@ pub fn source_panel(
             });
         }
     }
-    if resp.dragged_by(PointerButton::Primary) {
+    if !grabs.caption && resp.dragged_by(PointerButton::Primary) {
         match (*drag, resp.interact_pointer_pos()) {
             (Some(d), Some(p)) if d.image == panel.image => {
                 let f = view.to_frame(rect, p);
@@ -322,25 +392,45 @@ pub struct PreviewPanel<'a> {
     pub mesh: &'a [[Pos2; 3]],
     pub show_mesh: bool,
     pub message: Option<String>,
+    /// While the caption window is open for the sequence or the movie: where the caption sits,
+    /// in frame coordinates. A drag that starts on it moves it instead of panning.
+    pub caption: Option<Rect>,
 }
 
-/// Draw the preview. It is view-only: any drag pans and the wheel zooms.
-pub fn preview_panel(ui: &mut Ui, panel: &PreviewPanel<'_>, view: &mut View) -> Rect {
+/// Draw the preview. It is view-only: any drag pans and the wheel zooms, except a drag that
+/// starts on an editable caption.
+pub fn preview_panel(
+    ui: &mut Ui,
+    panel: &PreviewPanel<'_>,
+    view: &mut View,
+    grabs: &mut Grabs,
+) -> PanelOutput {
     let (rect, resp) = canvas(ui, &panel.title);
     if view.auto_fit {
         *view = View::fit(panel.frame, rect);
     }
-    view_input(
-        ui,
-        &resp,
-        rect,
-        view,
+    let mut actions = Vec::new();
+    if resp.drag_started_by(PointerButton::Primary) {
+        if let (Some(r), Some(p)) = (panel.caption, resp.interact_pointer_pos()) {
+            if r.contains(view.to_frame(rect, p)) {
+                grabs.caption = true;
+                actions.push(Action::CaptionBegin);
+            }
+        }
+    }
+    if grabs.caption {
+        caption_drag(ui, &resp, rect, view, grabs, &mut actions);
+    }
+    let pan_buttons: &[PointerButton] = if grabs.caption {
+        &[PointerButton::Middle, PointerButton::Secondary]
+    } else {
         &[
             PointerButton::Primary,
             PointerButton::Middle,
             PointerButton::Secondary,
-        ],
-    );
+        ]
+    };
+    view_input(ui, &resp, rect, view, pan_buttons);
     if resp.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::Default);
     }
@@ -374,5 +464,8 @@ pub fn preview_panel(ui: &mut Ui, panel: &PreviewPanel<'_>, view: &mut View) -> 
             Color32::WHITE,
         );
     }
-    rect
+    if let Some(caption) = panel.caption {
+        draw_caption_frame(&painter, view, rect, caption);
+    }
+    PanelOutput { rect, actions }
 }

@@ -12,6 +12,7 @@
 )]
 
 pub mod app;
+pub mod crop;
 pub mod curves;
 pub mod dragdrop;
 pub mod fonts;
