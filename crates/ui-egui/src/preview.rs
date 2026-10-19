@@ -6,7 +6,6 @@ use eframe::egui_wgpu::{self, RenderState};
 use eframe::wgpu;
 use egui::{TextureHandle, TextureId, TextureOptions};
 use inbetween_engine::Prepared;
-use inbetween_morph::frame_t;
 use inbetween_render_cpu::Renderer;
 use inbetween_render_gpu::{GpuContext, GpuRenderer};
 use std::sync::Arc;
@@ -116,9 +115,8 @@ impl Preview {
             return;
         }
         self.drawn = Some((revision, frame));
-        let t = frame_t(frame, prepared.sequence.frames);
         let outcome = match handle.filter(|_| !self.gpu_failed) {
-            Some(h) => self.refresh_gpu(h, prepared, revision, t),
+            Some(h) => self.refresh_gpu(h, prepared, revision, frame),
             None => self.refresh_cpu(ctx, prepared, frame),
         };
         self.error = outcome.err();
@@ -129,7 +127,7 @@ impl Preview {
         handle: &GpuHandle,
         prepared: &Prepared,
         revision: u64,
-        t: f64,
+        frame: u32,
     ) -> Result<(), String> {
         let key = key_of(prepared);
         let stale = self.gpu.as_ref().is_none_or(|g| g.key != key);
@@ -176,7 +174,9 @@ impl Preview {
                 .map_err(|e| e.to_string())?;
             gpu.revision = revision;
         }
-        gpu.renderer.draw_preview(t).map_err(|e| e.to_string())
+        gpu.renderer
+            .draw_preview_frame(frame)
+            .map_err(|e| e.to_string())
     }
 
     fn refresh_cpu(

@@ -18,6 +18,7 @@ pub mod hit;
 pub mod imaging;
 pub mod menus;
 pub mod panels;
+pub mod playback;
 pub mod preview;
 pub mod shortcuts;
 pub mod state;

@@ -245,6 +245,50 @@ fn warp_one_never_shows_image_two() {
 }
 
 #[test]
+fn every_morph_type_matches_with_and_without_hold_frames() {
+    // Translucent sources, so the over-blend of Morph Hold and the dimming of the fades show.
+    let a = alpha_gradient(48, 32).unwrap();
+    let b = checkerboard(48, 32, 6, [200, 30, 30, 255], [30, 30, 200, 0]).unwrap();
+    for morph in MorphType::ALL {
+        for (hold_start, hold_end) in [(0, 0), (2, 3)] {
+            let mut seq = sequence(&moved(), 8);
+            seq.morph = morph;
+            seq.hold_start = hold_start;
+            seq.hold_end = hold_end;
+            let last = seq.total_frames() - 1;
+            let name = format!("{} hold {hold_start}/{hold_end}", morph.id());
+            compare(
+                &name,
+                &seq,
+                (48, 32),
+                &a,
+                &b,
+                &[0, 1, 3, 4, 6, last - 1, last],
+            );
+        }
+    }
+}
+
+#[test]
+fn hold_frames_count_and_repeat_the_end_frames() {
+    let Some(ctx) = context() else { return };
+    let (a, b) = (gradient(48, 32).unwrap(), labelled_grid(48, 32, 8).unwrap());
+    let mut seq = sequence(&moved(), 5);
+    seq.hold_start = 2;
+    seq.hold_end = 3;
+    let mut gpu = GpuRenderer::new(ctx, &seq, (48, 32), &a, Some(&b)).unwrap();
+    assert_eq!(gpu.frame_count(), 10);
+    let first = gpu.render_frame(0).unwrap();
+    assert_eq!(diff(&first, &gpu.render_frame(2).unwrap(), 0.0).max, 0.0);
+    let last = gpu.render_frame(9).unwrap();
+    assert_eq!(diff(&last, &gpu.render_frame(6).unwrap(), 0.0).max, 0.0);
+    // set_sequence picks up a new hold length without a rebuild.
+    seq.hold_end = 0;
+    gpu.set_sequence(&seq).unwrap();
+    assert_eq!(gpu.frame_count(), 7);
+}
+
+#[test]
 fn per_frame_mesh() {
     let (a, b) = (gradient(48, 32).unwrap(), labelled_grid(48, 32, 8).unwrap());
     let mut seq = sequence(&moved(), 12);

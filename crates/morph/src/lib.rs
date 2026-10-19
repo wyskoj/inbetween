@@ -17,4 +17,4 @@ mod plan;
 
 pub use error::MorphError;
 pub use fit::{fit_transform, transparent_outside};
-pub use plan::{frame_t, FramePlan, MeshTri, Planner};
+pub use plan::{frame_t, FramePlan, MeshTri, Mix, MixMode, Planner};

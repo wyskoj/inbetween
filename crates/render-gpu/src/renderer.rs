@@ -2,7 +2,7 @@ use crate::vertices::build_vertices;
 use crate::{GpuContext, GpuError, Vertex};
 use inbetween_doc::Sequence;
 use inbetween_geom::Affine;
-use inbetween_morph::{fit_transform, frame_t, transparent_outside, Planner};
+use inbetween_morph::{fit_transform, transparent_outside, FramePlan, Mix, MixMode, Planner};
 use inbetween_raster::Image;
 use wgpu::util::DeviceExt;
 
@@ -22,7 +22,12 @@ struct Params {
     out_size: [f32; 2],
     dims1: [f32; 2],
     dims2: [f32; 2],
-    dissolve: f32,
+    w1: f32,
+    w2: f32,
+    bright1: f32,
+    bright2: f32,
+    /// 0 adds the weighted samples, 1 lays Image 2 over Image 1.
+    mode: u32,
     flags: u32,
 }
 
@@ -31,7 +36,6 @@ struct Params {
 pub struct GpuRenderer {
     ctx: GpuContext,
     planner: Planner,
-    frames: u32,
     size: (u32, u32),
     fit1: Affine,
     fit2: Affine,
@@ -139,7 +143,11 @@ impl GpuRenderer {
             out_size: [width as f32, height as f32],
             dims1: [image1.width() as f32, image1.height() as f32],
             dims2: [source2.width() as f32, source2.height() as f32],
-            dissolve: 0.0,
+            w1: 1.0,
+            w2: 0.0,
+            bright1: 1.0,
+            bright2: 1.0,
+            mode: 0,
             flags,
         };
         let device = &ctx.device;
@@ -295,7 +303,6 @@ impl GpuRenderer {
         Ok(Self {
             ctx: ctx.clone(),
             planner,
-            frames: seq.frames,
             size: output,
             fit1,
             fit2,
@@ -317,8 +324,9 @@ impl GpuRenderer {
         })
     }
 
+    /// Every frame of the sequence, hold frames included.
     pub fn frame_count(&self) -> u32 {
-        self.frames
+        self.planner.total_frames()
     }
 
     pub fn size(&self) -> (u32, u32) {
@@ -334,13 +342,27 @@ impl GpuRenderer {
     /// Render at morph time `t` into [`GpuRenderer::texture`]. Returns once the work is
     /// submitted; call [`GpuRenderer::wait`] before reading the texture on the CPU.
     pub fn draw(&mut self, t: f64) -> Result<(), GpuError> {
-        self.submit(t, false)
+        let plan = self.planner.plan(t)?;
+        self.submit(&plan, false)
+    }
+
+    /// Like [`GpuRenderer::draw`] for frame `index`, counting hold frames (clamped to the last).
+    pub fn draw_frame(&mut self, index: u32) -> Result<(), GpuError> {
+        let plan = self.planner.plan_frame(index)?;
+        self.submit(&plan, false)
     }
 
     /// Like [`GpuRenderer::draw`], but into the 8-bit [`GpuRenderer::preview_texture`] that a
     /// UI can show without any conversion. About the same cost; no readback.
     pub fn draw_preview(&mut self, t: f64) -> Result<(), GpuError> {
-        self.submit(t, true)
+        let plan = self.planner.plan(t)?;
+        self.submit(&plan, true)
+    }
+
+    /// Like [`GpuRenderer::draw_preview`] for frame `index`, counting hold frames.
+    pub fn draw_preview_frame(&mut self, index: u32) -> Result<(), GpuError> {
+        let plan = self.planner.plan_frame(index)?;
+        self.submit(&plan, true)
     }
 
     /// The 8-bit texture [`GpuRenderer::draw_preview`] renders into (`Rgba8Unorm`, holding
@@ -381,13 +403,11 @@ impl GpuRenderer {
         self.fit1 = fit1;
         self.fit2 = fit2;
         self.base_params.flags = flags;
-        self.frames = seq.frames;
         Ok(())
     }
 
-    fn submit(&mut self, t: f64, preview: bool) -> Result<(), GpuError> {
-        let plan = self.planner.plan(t)?;
-        let vertices = build_vertices(&plan, &self.fit1, &self.fit2, self.size.0, self.size.1);
+    fn submit(&mut self, plan: &FramePlan, preview: bool) -> Result<(), GpuError> {
+        let vertices = build_vertices(plan, &self.fit1, &self.fit2, self.size.0, self.size.1);
         let bytes: &[u8] = bytemuck::cast_slice(&vertices);
 
         let device = &self.ctx.device;
@@ -402,8 +422,22 @@ impl GpuRenderer {
             });
         }
         queue.write_buffer(&self.vertex_buffer, 0, bytes);
+        let Mix {
+            mode,
+            w1,
+            w2,
+            bright1,
+            bright2,
+        } = plan.mix;
         let params = Params {
-            dissolve: plan.dissolve,
+            w1,
+            w2,
+            bright1,
+            bright2,
+            mode: match mode {
+                MixMode::Add => 0,
+                MixMode::Over => 1,
+            },
             ..self.base_params
         };
         queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&params));
@@ -448,9 +482,10 @@ impl GpuRenderer {
         self.ctx.device.poll(wgpu::Maintain::Wait);
     }
 
-    /// Draw frame `index` (clamped to the last frame) and read it back.
+    /// Draw frame `index`, counting hold frames (clamped to the last frame), and read it back.
     pub fn render_frame(&mut self, index: u32) -> Result<Image, GpuError> {
-        self.render_t(frame_t(index, self.frames))
+        self.draw_frame(index)?;
+        self.read_back()
     }
 
     /// Draw at morph time `t` and read the result back into a CPU image.

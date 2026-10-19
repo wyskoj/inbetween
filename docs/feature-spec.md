@@ -26,13 +26,13 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `morph.type.morph` | Image 1 morphs into Image 2 (default) | P0 |
-| [ ] | `morph.type.morphHold` | Morph while Image 1 never fades (partial morph using an alpha Image 2) | P1 |
-| [~] | `morph.type.warp1` | Image 1 deforms into Image 2's shape; Image 2's colours never appear | P0 |
-| [ ] | `morph.type.warp2` | Image 2 deforms from Image 1's shape; Image 1's colours never appear | P1 |
-| [ ] | `morph.type.fadeOut1` | Image 1 fades to black | P1 |
-| [ ] | `morph.type.fadeIn2` | Image 2 fades in from black | P1 |
-| [ ] | `morph.type.direct` | No morph; Image 2 cuts in at the end (slideshow when paired with a Transition effect) | P1 |
+| [x] | `morph.type.morph` | Image 1 morphs into Image 2 (default) | P0 |
+| [x] | `morph.type.morphHold` | Morph while Image 1 never fades (partial morph using an alpha Image 2) | P1 |
+| [x] | `morph.type.warp1` | Image 1 deforms into Image 2's shape; Image 2's colours never appear | P0 |
+| [x] | `morph.type.warp2` | Image 2 deforms from Image 1's shape; Image 1's colours never appear | P1 |
+| [x] | `morph.type.fadeOut1` | Image 1 fades to black | P1 |
+| [x] | `morph.type.fadeIn2` | Image 2 fades in from black | P1 |
+| [x] | `morph.type.direct` | No morph; Image 2 cuts in at the end (slideshow when paired with a Transition effect) | P1 |
 
 **Oracle tests:** frame 0 equals Image 1; last frame equals Image 2; identical dot sets reduce to a pure cross-dissolve; Warp 1 with identical images and unmoved dots is the identity.
 
@@ -196,7 +196,7 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 |---|---|---|---|
 | [ ] | `movie.size` | Match source size, presets, or custom | P0 |
 | [~] | `preview.scrub` | Scrub 0–100% in 1% steps; mouse wheel steps one frame; preview one sequence or all | P0 |
-| [~] | `play.*` | Play/pause, first, last, previous, next frame, loop, ping-pong; 1–60 fps | P1 |
+| [x] | `play.*` | Play/pause, first, last, previous, next frame, loop, ping-pong; 1–60 fps | P1 |
 | [~] |  | Live preview updates while dragging dots, curves, camera, effects | P0 |
 | [ ] |  | Checkerboard behind transparent preview areas | P1 |
 

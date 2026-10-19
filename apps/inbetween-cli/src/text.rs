@@ -59,9 +59,13 @@ pub fn info(v: &Value) -> String {
         } else {
             s(seq, "name")
         };
+        let holds = match (n(seq, "hold_start"), n(seq, "hold_end")) {
+            (0, 0) => String::new(),
+            (a, b) => format!(" (+{a} hold at the start, +{b} at the end)"),
+        };
         let _ = writeln!(
             out,
-            "  {}. {name}: {} frames, {} dots, {}",
+            "  {}. {name}: {} frames{holds}, {} dots, {}",
             n(seq, "index"),
             n(seq, "frames"),
             n(seq, "dots"),

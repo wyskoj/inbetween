@@ -630,6 +630,43 @@ fn playback_advances_and_loops_and_the_slider_range_follows_the_sequence() {
 }
 
 #[test]
+fn playback_covers_hold_frames_and_ping_pongs() {
+    let mut h = demo_harness();
+    h.state_mut()
+        .run_command(
+            "sequence.length",
+            &json!({"frames": 4, "hold_start": 2, "hold_end": 2}),
+        )
+        .unwrap();
+    h.run();
+    // 2 + 4 + 2 frames; the slider range follows the total.
+    h.state_mut().state.frame = 99;
+    h.run();
+    assert_eq!(app(&h).state.frame, 7);
+
+    h.state_mut().state.frame = 0;
+    h.state_mut().state.looping = false;
+    h.state_mut().state.ping_pong = true;
+    h.state_mut().state.playing = true;
+    let mut seen = vec![0];
+    for _ in 0..200 {
+        h.step();
+        let f = app(&h).state.frame;
+        if seen.last() != Some(&f) {
+            seen.push(f);
+        }
+        if !app(&h).state.playing {
+            break;
+        }
+    }
+    assert!(
+        !app(&h).state.playing,
+        "stopped after one round trip: {seen:?}"
+    );
+    assert_eq!(seen, [0, 1, 2, 3, 4, 5, 6, 7, 6, 5, 4, 3, 2, 1, 0]);
+}
+
+#[test]
 fn arrow_keys_step_frames_and_space_toggles_playing() {
     let mut h = demo_harness();
     h.press_key(Key::ArrowRight);

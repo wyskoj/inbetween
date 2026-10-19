@@ -135,7 +135,7 @@ mod files {
             ));
         }
         let prepared = session.prepare(index)?;
-        let total = prepared.sequence.frames;
+        let total = prepared.sequence.total_frames();
         let first = params.integer("first").map_or(1, |n| n as u32);
         let last = params
             .integer("last")

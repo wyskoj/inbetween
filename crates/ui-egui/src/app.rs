@@ -6,6 +6,7 @@ use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
 use crate::panels::{self, Action, DotDrag, PreviewPanel, Shown, SourcePanel};
+use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
 use crate::shortcuts;
 use crate::state::{Panel, ViewState};
@@ -14,7 +15,7 @@ use egui::{Context, Pos2, Rect, TextureHandle, TextureOptions, Vec2};
 use inbetween_engine::{
     CommandError, CommandSpec, ParamKind, PathUse, Prepared, Registry, Session,
 };
-use inbetween_morph::{fit_transform, frame_t, Planner};
+use inbetween_morph::{fit_transform, Planner};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -109,6 +110,8 @@ pub struct InbetweenApp {
     drag: Option<DotDrag>,
     group_open: bool,
     play_clock: f32,
+    /// Direction of playback; only ping-pong ever turns it around.
+    play_forward: bool,
     title: String,
     screenshot: Option<ScreenshotPlan>,
     pub layout: Layout,
@@ -137,6 +140,7 @@ impl InbetweenApp {
             drag: None,
             group_open: false,
             play_clock: 0.0,
+            play_forward: true,
             title: String::new(),
             screenshot: None,
             layout: Layout::default(),
@@ -351,9 +355,14 @@ impl InbetweenApp {
         self.sources[which].as_ref().map(|s| s.handle.id())
     }
 
+    /// Frames the preview can show: the morph plus its hold frames (1 with nothing loaded).
+    fn total_frames(&self) -> u32 {
+        self.prepared().map_or(1, |p| p.sequence.total_frames())
+    }
+
     fn clamp_selection_and_frame(&mut self) {
         let (dots, frames) = match self.prepared() {
-            Some(p) => (p.sequence.dots.len(), p.sequence.frames),
+            Some(p) => (p.sequence.dots.len(), p.sequence.total_frames()),
             None => (0, 1),
         };
         if self.state.selected.is_some_and(|i| i >= dots) {
@@ -464,7 +473,7 @@ impl InbetweenApp {
         if fit {
             self.state.refit_all();
         }
-        let frames = self.prepared().map_or(1, |p| p.sequence.frames);
+        let frames = self.total_frames();
         if left && self.state.frame > 0 {
             self.state.frame -= 1;
         }
@@ -474,7 +483,7 @@ impl InbetweenApp {
     }
 
     fn advance_playback(&mut self, ctx: &Context) {
-        let frames = self.prepared().map_or(1, |p| p.sequence.frames);
+        let frames = self.total_frames();
         if !self.state.playing || frames < 2 {
             self.state.playing = false;
             self.play_clock = 0.0;
@@ -484,11 +493,18 @@ impl InbetweenApp {
         let step = 1.0 / self.state.fps.max(1.0);
         while self.play_clock >= step {
             self.play_clock -= step;
-            if self.state.frame + 1 < frames {
-                self.state.frame += 1;
-            } else if self.state.looping {
-                self.state.frame = 0;
-            } else {
+            let at = Cursor {
+                frame: self.state.frame,
+                forward: self.play_forward,
+            };
+            let mode = Mode {
+                looping: self.state.looping,
+                ping_pong: self.state.ping_pong,
+            };
+            let (next, go) = playback::step(at, frames, mode);
+            self.state.frame = next.frame;
+            self.play_forward = next.forward;
+            if !go {
                 self.state.playing = false;
                 break;
             }
@@ -658,27 +674,49 @@ impl InbetweenApp {
     }
 
     fn transport_bar(&mut self, ctx: &Context) {
-        let frames = self.prepared().map_or(1, |p| p.sequence.frames);
+        let frames = self.total_frames();
         let enabled = frames > 1;
+        // Just the timing, so the closure below does not borrow the session.
+        let timing = self.prepared().map(|p| inbetween_doc::Sequence {
+            frames: p.sequence.frames,
+            hold_start: p.sequence.hold_start,
+            hold_end: p.sequence.hold_end,
+            ..Default::default()
+        });
         egui::TopBottomPanel::bottom("transport").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(enabled, |ui| {
+                    if ui.button("|<").on_hover_text("First frame").clicked() {
+                        self.state.frame = 0;
+                        self.play_forward = true;
+                    }
+                    if ui.button("<").on_hover_text("Previous frame").clicked() {
+                        self.state.frame = self.state.frame.saturating_sub(1);
+                    }
                     let label = if self.state.playing { "Pause" } else { "Play" };
                     if ui.button(label).clicked() {
                         self.state.playing = !self.state.playing;
+                        self.play_forward = true;
+                    }
+                    if ui.button(">").on_hover_text("Next frame").clicked() {
+                        self.state.frame = (self.state.frame + 1).min(frames.saturating_sub(1));
+                    }
+                    if ui.button(">|").on_hover_text("Last frame").clicked() {
+                        self.state.frame = frames.saturating_sub(1);
                     }
                     let mut frame = self.state.frame;
-                    ui.spacing_mut().slider_width = (ui.available_width() - 330.0).max(80.0);
+                    ui.spacing_mut().slider_width = (ui.available_width() - 460.0).max(80.0);
                     ui.add(
                         egui::Slider::new(&mut frame, 0..=frames.saturating_sub(1)).text("frame"),
                     );
                     self.state.frame = frame;
-                    let t = frame_t(self.state.frame, frames);
+                    let t = timing.map_or(0.0, |s| s.frame_time(self.state.frame));
                     ui.label(format!("{} / {frames}   t = {t:.2}", self.state.frame + 1));
                     ui.checkbox(&mut self.state.looping, "Loop");
+                    ui.checkbox(&mut self.state.ping_pong, "Ping-pong");
                     ui.add(
                         egui::DragValue::new(&mut self.state.fps)
-                            .range(1.0..=120.0)
+                            .range(1.0..=60.0)
                             .suffix(" fps"),
                     );
                 });
@@ -837,8 +875,7 @@ impl InbetweenApp {
             snap.mesh[0].clone_from(&m.on_image1);
             snap.mesh[1].clone_from(&m.on_image2);
             if let Some(planner) = &m.planner {
-                let t = frame_t(frames_now, seq.frames);
-                if let Ok(plan) = planner.plan(t) {
+                if let Ok(plan) = planner.plan_frame(frames_now) {
                     snap.mesh[2] = plan.tris.iter().map(|t| tri_points(&t.dst)).collect();
                 }
             }
@@ -850,11 +887,16 @@ impl InbetweenApp {
                 uv: Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
             });
         }
-        let t = frame_t(frames_now, seq.frames);
+        let t = seq.frame_time(frames_now);
+        let hold = if frames_now < seq.hold_start || frames_now >= seq.hold_start + seq.frames {
+            ", hold"
+        } else {
+            ""
+        };
         snap.titles[2] = format!(
-            "Preview: frame {} of {}  (t = {t:.2})  [{}]",
+            "Preview: frame {} of {}  (t = {t:.2}{hold})  [{}]",
             frames_now + 1,
-            seq.frames,
+            seq.total_frames(),
             self.preview.backend_name()
         );
         snap.preview_message = self.preview.error.clone();

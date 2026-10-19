@@ -4,7 +4,7 @@
 
 **P0 is complete (tagged v0.1.0): a headless morph engine.** `ib` turns two images and a dot set into a correct, deterministic PNG frame sequence, and the morph invariants (AGENTS.md §3) pass. M0 to M6 are done; the baseline is in `docs/perf.md`.
 
-**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **M8 is done:** the egui shell (two source panels, live GPU preview, add/move/delete dots, zoom and pan, undo, playback). **Next: M9** (remaining morph types, hold frames, playback controls).
+**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **M8 is done:** the egui shell (two source panels, live GPU preview, add/move/delete dots, zoom and pan, undo, playback). **M9 is done:** all seven morph types, hold frames at each end, and playback controls (first, previous, play, next, last, loop, ping-pong, 1 to 60 fps). **Next: M10** (feature and shape curves, multi-sequence projects, sequence list).
 
 *Original P0 goal, for reference:* a headless morph engine with no UI.
 

@@ -1,9 +1,10 @@
 use crate::MorphError;
-use inbetween_doc::{MeshPolicy, Sequence};
+use inbetween_doc::{MeshPolicy, MorphType, Sequence};
 use inbetween_geom::{triangulate, GeomError, Point, Triangle, Triangulation};
 
-/// Morph time of frame `index` in a sequence of `frames`: 0 for the first frame, 1 for the
-/// last, evenly spaced between. A one-frame sequence is just Image 1.
+/// Morph time of frame `index` in a sequence of `frames` with no hold frames: 0 for the first
+/// frame, 1 for the last, evenly spaced between. A one-frame sequence is just t = 0. Sequences
+/// with hold frames use [`inbetween_doc::Sequence::frame_time`].
 pub fn frame_t(index: u32, frames: u32) -> f64 {
     if frames <= 1 {
         0.0
@@ -25,14 +26,108 @@ pub struct MeshTri {
     pub dst: Triangle,
 }
 
+/// How the two warped samples of a pixel combine.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MixMode {
+    /// `w1 * s1 + w2 * s2` on premultiplied colour: a cross-dissolve when the weights sum to 1.
+    Add,
+    /// Image 2, scaled by `w2`, laid over Image 1 scaled by `w1`. Image 1 shows through wherever
+    /// Image 2 is transparent, so it never fades.
+    Over,
+}
+
+/// The per-pixel recipe for one frame, chosen by the morph type and the morph time. Both
+/// renderers apply the same recipe:
+///
+/// 1. Each sample keeps its alpha; its colour is multiplied by `bright` (1 = unchanged,
+///    0 = black), which is how a fade to or from black works.
+/// 2. The two samples are combined by `mode` with the weights `w1` and `w2`. A weight of
+///    zero means that image is never sampled.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mix {
+    pub mode: MixMode,
+    pub w1: f32,
+    pub w2: f32,
+    pub bright1: f32,
+    pub bright2: f32,
+}
+
+impl Mix {
+    const fn add(w1: f32, w2: f32) -> Self {
+        Self {
+            mode: MixMode::Add,
+            w1,
+            w2,
+            bright1: 1.0,
+            bright2: 1.0,
+        }
+    }
+
+    /// The recipe for `morph` at morph time `t` (0 to 1; anything else is clamped).
+    pub fn for_type(morph: MorphType, t: f64) -> Self {
+        let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) } as f32;
+        match morph {
+            MorphType::Morph => Self::add(1.0 - t, t),
+            MorphType::MorphHold => Self {
+                mode: MixMode::Over,
+                w1: 1.0,
+                w2: t,
+                ..Self::add(0.0, 0.0)
+            },
+            MorphType::Warp1 => Self::add(1.0, 0.0),
+            MorphType::Warp2 => Self::add(0.0, 1.0),
+            MorphType::FadeOut1 => Self {
+                bright1: 1.0 - t,
+                ..Self::add(1.0, 0.0)
+            },
+            MorphType::FadeIn2 => Self {
+                bright2: t,
+                ..Self::add(0.0, 1.0)
+            },
+            MorphType::Direct => {
+                if t >= 1.0 {
+                    Self::add(0.0, 1.0)
+                } else {
+                    Self::add(1.0, 0.0)
+                }
+            }
+        }
+    }
+
+    pub fn uses_image1(&self) -> bool {
+        self.w1 != 0.0
+    }
+
+    pub fn uses_image2(&self) -> bool {
+        self.w2 != 0.0
+    }
+}
+
 /// Everything a renderer needs to draw one frame.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FramePlan {
     /// Morph time, 0 to 1.
     pub t: f64,
-    /// How much of Image 2 shows: `t` for a morph, 0 when Image 2's colours never appear.
-    pub dissolve: f32,
+    pub mix: Mix,
     pub tris: Vec<MeshTri>,
+}
+
+/// What the planner keeps between frames.
+#[derive(Clone, Debug)]
+enum Kind {
+    /// The dots deform the images.
+    Warp {
+        policy: MeshPolicy,
+        dot_count: usize,
+        /// Triangulation of Image 1's dots: the mesh shared by every frame.
+        base: Triangulation,
+        /// Triangulation of Image 2's dots: used for the last frame so it matches Image 2.
+        end: Triangulation,
+        first: Vec<Point>,
+        second: Vec<Point>,
+    },
+    /// Fades and the direct cut: the whole frame as two triangles, mapped to itself.
+    Still(Vec<MeshTri>),
 }
 
 /// Builds frame plans for one sequence. The expensive triangulations happen once, in
@@ -41,15 +136,10 @@ pub struct FramePlan {
 pub struct Planner {
     width: u32,
     height: u32,
-    uses_image2: bool,
-    policy: MeshPolicy,
-    dot_count: usize,
-    /// Triangulation of Image 1's dots: the mesh shared by every frame.
-    base: Triangulation,
-    /// Triangulation of Image 2's dots: used for the last frame so it matches Image 2.
-    end: Triangulation,
-    first: Vec<Point>,
-    second: Vec<Point>,
+    morph: MorphType,
+    /// The sequence's timing only (frames and holds); no dots.
+    timing: Sequence,
+    kind: Kind,
 }
 
 fn tri(points: &[Point], idx: [usize; 3]) -> Option<Triangle> {
@@ -72,82 +162,132 @@ fn map_geom(e: GeomError, image: u8) -> MorphError {
 }
 
 impl Planner {
-    /// Validate `seq` and triangulate both dot sets for an output of `width` x `height`.
+    /// Validate `seq` and, for morph types that warp, triangulate both dot sets for an output of
+    /// `width` x `height`. Types that never warp ignore the dots, so bad dots cannot stop them.
     pub fn new(seq: &Sequence, width: u32, height: u32) -> Result<Self, MorphError> {
         if width == 0 || height == 0 {
             return Err(MorphError::BadSize);
         }
         seq.validate()?;
-        let first = seq.dots.first_positions();
-        let second = seq.dots.second_positions();
         let (w, h) = (f64::from(width), f64::from(height));
-        let base = triangulate(&first, w, h).map_err(|e| map_geom(e, 1))?;
-        let end = triangulate(&second, w, h).map_err(|e| map_geom(e, 2))?;
+        let kind = if seq.morph.warps() {
+            let first = seq.dots.first_positions();
+            let second = seq.dots.second_positions();
+            let base = triangulate(&first, w, h).map_err(|e| map_geom(e, 1))?;
+            let end = triangulate(&second, w, h).map_err(|e| map_geom(e, 2))?;
+            Kind::Warp {
+                policy: seq.mesh,
+                dot_count: first.len(),
+                first,
+                second,
+                base,
+                end,
+            }
+        } else {
+            let (a, b, c, d) = (
+                Point::new(0.0, 0.0),
+                Point::new(w, 0.0),
+                Point::new(w, h),
+                Point::new(0.0, h),
+            );
+            let still = |t: Triangle| MeshTri {
+                src1: t,
+                src2: t,
+                dst: t,
+            };
+            Kind::Still(vec![
+                still(Triangle::new(a, b, c)),
+                still(Triangle::new(a, c, d)),
+            ])
+        };
         Ok(Self {
             width,
             height,
-            uses_image2: seq.morph.uses_image2(),
-            policy: seq.mesh,
-            dot_count: first.len(),
-            first,
-            second,
-            base,
-            end,
+            morph: seq.morph,
+            timing: Sequence {
+                frames: seq.frames,
+                hold_start: seq.hold_start,
+                hold_end: seq.hold_end,
+                ..Sequence::default()
+            },
+            kind,
         })
+    }
+
+    /// Every frame of the sequence: hold, morph, hold.
+    pub fn total_frames(&self) -> u32 {
+        self.timing.total_frames()
     }
 
     /// Plan the frame at morph time `t` (clamped to 0..=1; NaN counts as 0).
     pub fn plan(&self, t: f64) -> Result<FramePlan, MorphError> {
         let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) };
+        let mix = Mix::for_type(self.morph, t);
+        let (dot_count, policy, base, end, first, second) = match &self.kind {
+            Kind::Still(tris) => {
+                return Ok(FramePlan {
+                    t,
+                    mix,
+                    tris: tris.clone(),
+                })
+            }
+            Kind::Warp {
+                dot_count,
+                policy,
+                base,
+                end,
+                first,
+                second,
+            } => (*dot_count, *policy, base, end, first, second),
+        };
 
         // Dots at time t, then the frame corners (which never move).
-        let mut now: Vec<Point> = self
-            .first
+        let mut now: Vec<Point> = first
             .iter()
-            .zip(&self.second)
+            .zip(second)
             .map(|(a, b)| a.lerp(*b, t))
             .collect();
         let per_frame;
         let connectivity: &[[usize; 3]] = if t >= 1.0 {
-            &self.end.triangles
-        } else if t > 0.0 && self.policy == MeshPolicy::PerFrame {
+            &end.triangles
+        } else if t > 0.0 && policy == MeshPolicy::PerFrame {
             // If two dots cross exactly at this t, keep the shared mesh for this frame.
             match triangulate(&now, f64::from(self.width), f64::from(self.height)) {
                 Ok(tr) => {
                     per_frame = tr.triangles;
                     &per_frame
                 }
-                Err(_) => &self.base.triangles,
+                Err(_) => &base.triangles,
             }
         } else {
-            &self.base.triangles
+            &base.triangles
         };
-        now.extend(self.base.vertices.iter().skip(self.dot_count));
+        now.extend(base.vertices.iter().skip(dot_count));
 
         let tris = connectivity
             .iter()
             .filter_map(|&idx| {
                 Some(MeshTri {
-                    src1: tri(&self.base.vertices, idx)?,
-                    src2: tri(&self.end.vertices, idx)?,
+                    src1: tri(&base.vertices, idx)?,
+                    src2: tri(&end.vertices, idx)?,
                     dst: tri(&now, idx)?,
                 })
             })
             .collect();
-        let dissolve = if self.uses_image2 { t as f32 } else { 0.0 };
-        Ok(FramePlan { t, dissolve, tris })
+        Ok(FramePlan { t, mix, tris })
     }
 
-    /// Plan frame `index` of a `frames`-frame sequence.
-    pub fn plan_frame(&self, index: u32, frames: u32) -> Result<FramePlan, MorphError> {
-        self.plan(frame_t(index, frames))
+    /// Plan frame `index` of the sequence, counting hold frames (an index past the end gives
+    /// the last frame).
+    pub fn plan_frame(&self, index: u32) -> Result<FramePlan, MorphError> {
+        self.plan(self.timing.frame_time(index))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use inbetween_doc::{DotPair, DotSet, MorphType};
+    use inbetween_doc::{DotPair, DotSet};
 
     type Xy = (f64, f64);
 
@@ -161,6 +301,10 @@ mod tests {
             frames: 5,
             ..Sequence::default()
         }
+    }
+
+    fn two_dots() -> Sequence {
+        seq(&[((30.0, 20.0), (40.0, 30.0)), ((70.0, 30.0), (60.0, 20.0))])
     }
 
     #[test]
@@ -183,8 +327,7 @@ mod tests {
 
     #[test]
     fn ends_of_the_plan_match_the_sources() {
-        let s = seq(&[((30.0, 20.0), (40.0, 30.0)), ((70.0, 30.0), (60.0, 20.0))]);
-        let p = Planner::new(&s, 100, 50).unwrap();
+        let p = Planner::new(&two_dots(), 100, 50).unwrap();
         for t in [0.0, 1.0] {
             let plan = p.plan(t).unwrap();
             for tr in &plan.tris {
@@ -192,14 +335,11 @@ mod tests {
                 assert_eq!(tr.dst, want, "t = {t}");
             }
         }
-        assert_eq!(p.plan(0.0).unwrap().dissolve, 0.0);
-        assert_eq!(p.plan(1.0).unwrap().dissolve, 1.0);
     }
 
     #[test]
     fn mesh_is_shared_between_frames_by_default() {
-        let s = seq(&[((30.0, 20.0), (40.0, 30.0)), ((70.0, 30.0), (60.0, 20.0))]);
-        let p = Planner::new(&s, 100, 50).unwrap();
+        let p = Planner::new(&two_dots(), 100, 50).unwrap();
         let a = p.plan(0.25).unwrap();
         let b = p.plan(0.75).unwrap();
         assert_eq!(a.tris.len(), b.tris.len());
@@ -207,14 +347,6 @@ mod tests {
             assert_eq!(x.src1, y.src1);
             assert_eq!(x.src2, y.src2);
         }
-    }
-
-    #[test]
-    fn warp_never_dissolves() {
-        let mut s = seq(&[((30.0, 20.0), (40.0, 30.0))]);
-        s.morph = MorphType::Warp1;
-        let p = Planner::new(&s, 100, 50).unwrap();
-        assert_eq!(p.plan(0.8).unwrap().dissolve, 0.0);
     }
 
     #[test]
@@ -260,6 +392,9 @@ mod tests {
         assert!(matches!(Planner::new(&s, 10, 10), Err(MorphError::Doc(_))));
         let s = seq(&[((f64::NAN, 0.0), (1.0, 1.0))]);
         assert!(matches!(Planner::new(&s, 10, 10), Err(MorphError::Doc(_))));
+        let mut s = seq(&[]);
+        s.hold_start = 5000;
+        assert!(matches!(Planner::new(&s, 10, 10), Err(MorphError::Doc(_))));
     }
 
     #[test]
@@ -268,5 +403,120 @@ mod tests {
         assert_eq!(p.plan(-4.0).unwrap().t, 0.0);
         assert_eq!(p.plan(9.0).unwrap().t, 1.0);
         assert_eq!(p.plan(f64::NAN).unwrap().t, 0.0);
+    }
+
+    // ---- mixes and morph types ----
+
+    #[test]
+    fn each_morph_type_has_the_documented_recipe() {
+        use MorphType::*;
+        let at = |m, t| Mix::for_type(m, t);
+        assert_eq!(at(Morph, 0.25), Mix::add(0.75, 0.25));
+        assert_eq!(at(Warp1, 0.9), Mix::add(1.0, 0.0));
+        assert_eq!(at(Warp2, 0.1), Mix::add(0.0, 1.0));
+        let hold = at(MorphHold, 0.4);
+        assert_eq!((hold.mode, hold.w1, hold.w2), (MixMode::Over, 1.0, 0.4));
+        let out = at(FadeOut1, 0.25);
+        assert_eq!((out.w1, out.w2, out.bright1), (1.0, 0.0, 0.75));
+        let fin = at(FadeIn2, 0.25);
+        assert_eq!((fin.w1, fin.w2, fin.bright2), (0.0, 1.0, 0.25));
+        assert_eq!(at(Direct, 0.99), Mix::add(1.0, 0.0));
+        assert_eq!(at(Direct, 1.0), Mix::add(0.0, 1.0));
+    }
+
+    #[test]
+    fn endpoints_of_every_type_are_what_the_spec_says() {
+        use MorphType::*;
+        let first = |m| Mix::for_type(m, 0.0);
+        let last = |m| Mix::for_type(m, 1.0);
+        // t = 0 shows Image 1 untouched for every type that starts from it.
+        for m in [Morph, MorphHold, Warp1, FadeOut1, Direct] {
+            assert_eq!(
+                (first(m).w1, first(m).w2, first(m).bright1),
+                (1.0, 0.0, 1.0),
+                "{m:?}"
+            );
+        }
+        // t = 1 shows Image 2 untouched for every type that ends on it.
+        for m in [Morph, Warp2, FadeIn2, Direct] {
+            assert_eq!(
+                (last(m).w1, last(m).w2, last(m).bright2),
+                (0.0, 1.0, 1.0),
+                "{m:?}"
+            );
+        }
+        // Fade out ends black; fade in starts black; Warp 2 starts as pure Image 2.
+        assert_eq!(last(FadeOut1).bright1, 0.0);
+        assert_eq!(first(FadeIn2).bright2, 0.0);
+        assert_eq!((first(Warp2).w1, first(Warp2).w2), (0.0, 1.0));
+        // Morph Hold keeps Image 1 at full weight all the way.
+        assert_eq!(last(MorphHold).w1, 1.0);
+        assert_eq!(last(MorphHold).w2, 1.0);
+    }
+
+    #[test]
+    fn mixes_never_go_out_of_range() {
+        for m in MorphType::ALL {
+            for t in [-5.0, 0.0, 0.3, 1.0, 7.0, f64::NAN, f64::INFINITY] {
+                let x = Mix::for_type(m, t);
+                for v in [x.w1, x.w2, x.bright1, x.bright2] {
+                    assert!((0.0..=1.0).contains(&v), "{m:?} t={t}: {x:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fades_and_direct_ignore_the_dots_entirely() {
+        for m in [MorphType::FadeOut1, MorphType::FadeIn2, MorphType::Direct] {
+            // Duplicate dots would be an error for a warping type.
+            let mut s = seq(&[((5.0, 5.0), (6.0, 6.0)), ((5.0, 5.0), (9.0, 9.0))]);
+            s.morph = m;
+            let p = Planner::new(&s, 100, 50).unwrap();
+            let plan = p.plan(0.5).unwrap();
+            assert_eq!(plan.tris.len(), 2);
+            for tr in &plan.tris {
+                assert_eq!((tr.dst, tr.src2), (tr.src1, tr.src1), "{m:?} must not warp");
+            }
+            let area: f64 = plan.tris.iter().map(|t| t.dst.area()).sum();
+            assert!(
+                (area - 5000.0).abs() < 1e-9,
+                "the two triangles cover the frame"
+            );
+        }
+        let mut s = seq(&[((5.0, 5.0), (6.0, 6.0)), ((5.0, 5.0), (9.0, 9.0))]);
+        s.morph = MorphType::Morph;
+        assert!(Planner::new(&s, 100, 50).is_err());
+    }
+
+    #[test]
+    fn warping_types_all_use_the_dot_mesh() {
+        for m in [
+            MorphType::Morph,
+            MorphType::MorphHold,
+            MorphType::Warp1,
+            MorphType::Warp2,
+        ] {
+            let mut s = two_dots();
+            s.morph = m;
+            let p = Planner::new(&s, 100, 50).unwrap();
+            assert!(p.plan(0.5).unwrap().tris.len() > 2, "{m:?}");
+        }
+    }
+
+    #[test]
+    fn hold_frames_repeat_the_end_plans() {
+        let mut s = two_dots();
+        s.frames = 5;
+        s.hold_start = 2;
+        s.hold_end = 3;
+        let p = Planner::new(&s, 100, 50).unwrap();
+        assert_eq!(p.total_frames(), 10);
+        let t_of = |i| p.plan_frame(i).unwrap().t;
+        assert_eq!([t_of(0), t_of(1), t_of(2)], [0.0, 0.0, 0.0]);
+        assert_eq!(t_of(4), 0.5);
+        assert_eq!([t_of(6), t_of(7), t_of(9), t_of(500)], [1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(p.plan_frame(0).unwrap(), p.plan_frame(1).unwrap());
+        assert_eq!(p.plan_frame(6).unwrap(), p.plan_frame(9).unwrap());
     }
 }

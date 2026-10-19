@@ -19,4 +19,4 @@ mod sequence;
 pub use dots::{DotPair, DotSet};
 pub use error::DocError;
 pub use project::{OutputSettings, Project, MAX_SIDE};
-pub use sequence::{FitMode, ImageRef, MeshPolicy, MorphType, Sequence, MAX_FRAMES};
+pub use sequence::{FitMode, ImageRef, MeshPolicy, MorphType, Sequence, MAX_FRAMES, MAX_HOLD};

@@ -45,6 +45,8 @@ pub struct ParamSpec {
     pub path_use: Option<PathUse>,
     /// For `Path` parameters: file extensions a dialog should offer, without the dot.
     pub extensions: &'static [&'static str],
+    /// For `String` parameters: the only values accepted, when the set is fixed.
+    pub choices: &'static [&'static str],
 }
 
 impl ParamSpec {
@@ -64,6 +66,7 @@ impl ParamSpec {
             default: None,
             path_use: None,
             extensions: &[],
+            choices: &[],
         }
     }
 
@@ -84,6 +87,12 @@ impl ParamSpec {
     /// A folder to write into.
     pub const fn folder(mut self) -> Self {
         self.path_use = Some(PathUse::Folder);
+        self
+    }
+
+    /// Restrict a `String` parameter to these values.
+    pub const fn one_of(mut self, choices: &'static [&'static str]) -> Self {
+        self.choices = choices;
         self
     }
 
@@ -196,6 +205,12 @@ fn check(spec: &ParamSpec, v: &Value) -> Result<Value, CommandError> {
             }
             if s.contains('\0') {
                 return Err(bad(format!("`{name}` must not contain a NUL character")));
+            }
+            if !spec.choices.is_empty() && !spec.choices.contains(&s.as_str()) {
+                return Err(bad(format!(
+                    "`{name}` must be one of: {}",
+                    spec.choices.join(", ")
+                )));
             }
             Ok(v.clone())
         }

@@ -400,3 +400,41 @@ fn editing_through_commands_and_saving_round_trips() {
     assert!(o.status.success(), "{}", stderr(&o));
     assert!(frames.join("shot_0012.png").exists());
 }
+
+#[test]
+fn render_writes_hold_frames_and_other_morph_types() {
+    let out = Scratch::new("holds");
+    for name in ["sun.png", "moon.png", "demo.inbetween"] {
+        std::fs::copy(demo_dir().join(name), out.path(name)).unwrap();
+    }
+    let path = out.path("demo.inbetween");
+    let mut project = inbetween_format::read_project(&path).unwrap();
+    project.sequences[0].frames = 4;
+    project.sequences[0].hold_start = 2;
+    project.sequences[0].hold_end = 3;
+    project.sequences[0].morph = inbetween_doc::MorphType::Warp2;
+    inbetween_format::write_project(&path, &project).unwrap();
+
+    let info = stdout(&ib(&["info", path.to_str().unwrap()]));
+    assert!(
+        info.contains("+2 hold at the start, +3 at the end"),
+        "{info}"
+    );
+
+    let frames = out.path("frames");
+    let o = ib(&[
+        "render",
+        path.to_str().unwrap(),
+        "--out",
+        frames.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(stdout(&o).contains("Wrote 9 frames"), "{}", stdout(&o));
+    let read = |n: u32| std::fs::read(frames.join(format!("frame_{n:04}.png"))).unwrap();
+    assert!(!frames.join("frame_0010.png").exists());
+    // Start hold repeats frame 1; end hold repeats the last morph frame; the middle differs.
+    assert_eq!(read(1), read(2));
+    assert_eq!(read(6), read(7));
+    assert_eq!(read(7), read(9));
+    assert_ne!(read(3), read(5));
+}

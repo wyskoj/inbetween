@@ -72,6 +72,8 @@ fn project_seed() -> String {
                     DotPair::fixed(Point::new(-5.0, 7.0)),
                 ]),
                 frames: 12,
+                hold_start: 2,
+                hold_end: 4,
                 morph: MorphType::Warp1,
                 fit: FitMode::Contain,
                 mesh: MeshPolicy::PerFrame,

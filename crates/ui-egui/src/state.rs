@@ -40,6 +40,8 @@ pub struct ViewState {
     pub frame: u32,
     pub playing: bool,
     pub looping: bool,
+    /// Play forward, then backward, instead of jumping back to the start.
+    pub ping_pong: bool,
     pub fps: f32,
     /// Share of the height the two source panels get, the rest goes to the preview.
     pub top_fraction: f32,
@@ -57,6 +59,7 @@ impl Default for ViewState {
             frame: 0,
             playing: false,
             looping: true,
+            ping_pong: false,
             fps: 24.0,
             top_fraction: 0.5,
             show_help: false,
@@ -70,7 +73,7 @@ impl ViewState {
         if !self.fps.is_finite() {
             self.fps = 24.0;
         }
-        self.fps = self.fps.clamp(1.0, 120.0);
+        self.fps = self.fps.clamp(1.0, 60.0);
         if !self.top_fraction.is_finite() {
             self.top_fraction = 0.5;
         }

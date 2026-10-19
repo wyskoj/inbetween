@@ -17,9 +17,9 @@
 use inbetween_doc::Sequence;
 use inbetween_geom::{Affine, Point};
 use inbetween_morph::{
-    fit_transform, frame_t, transparent_outside, FramePlan, MeshTri, MorphError, Planner,
+    fit_transform, transparent_outside, FramePlan, MeshTri, Mix, MixMode, MorphError, Planner,
 };
-use inbetween_raster::{clamp_valid, lerp, Image, Pixel, RasterError, TRANSPARENT};
+use inbetween_raster::{clamp_valid, over, scale, Image, Pixel, RasterError, TRANSPARENT};
 use rayon::prelude::*;
 use std::fmt;
 
@@ -86,7 +86,6 @@ impl Source<'_> {
 /// Renders the frames of one sequence. Build it once; render any number of frames.
 pub struct Renderer<'a> {
     planner: Planner,
-    frames: u32,
     width: u32,
     height: u32,
     source1: Source<'a>,
@@ -121,7 +120,6 @@ impl<'a> Renderer<'a> {
         };
         Ok(Self {
             planner,
-            frames: seq.frames,
             width,
             height,
             source1,
@@ -129,13 +127,15 @@ impl<'a> Renderer<'a> {
         })
     }
 
+    /// Every frame of the sequence, hold frames included.
     pub fn frame_count(&self) -> u32 {
-        self.frames
+        self.planner.total_frames()
     }
 
-    /// Render frame `index` (clamped to the last frame).
+    /// Render frame `index`, counting hold frames (clamped to the last frame).
     pub fn render_frame(&self, index: u32) -> Result<Image, RenderError> {
-        self.render_t(frame_t(index, self.frames))
+        let plan = self.planner.plan_frame(index)?;
+        self.draw(&plan)
     }
 
     /// Render at morph time `t` (0 = Image 1, 1 = Image 2).
@@ -161,13 +161,13 @@ impl<'a> Renderer<'a> {
             .par_chunks_mut(row_len * BAND_ROWS as usize)
             .enumerate()
             .for_each(|(band, pixels)| {
-                self.shade_band(pixels, band as u32 * BAND_ROWS, &setups, plan.dissolve);
+                self.shade_band(pixels, band as u32 * BAND_ROWS, &setups, &plan.mix);
             });
         Ok(out)
     }
 
     /// Shade the rows held in `pixels`, which start at output row `y_start`.
-    fn shade_band(&self, pixels: &mut [f32], y_start: u32, setups: &[TriSetup], dissolve: f32) {
+    fn shade_band(&self, pixels: &mut [f32], y_start: u32, setups: &[TriSetup], mix: &Mix) {
         let width = self.width as usize;
         let rows = (pixels.len() / (width * 4)) as u32;
         let y_end = y_start + rows;
@@ -200,22 +200,47 @@ impl<'a> Renderer<'a> {
                 Some(s) => {
                     let q1 = s.to1.map_or(p, |m| m.apply(p));
                     let q2 = s.to2.map_or(p, |m| m.apply(p));
-                    self.colour(q1, q2, dissolve)
+                    self.colour(q1, q2, mix)
                 }
-                None => self.colour(p, p, dissolve),
+                None => self.colour(p, p, mix),
             };
             px.copy_from_slice(&colour);
         }
     }
 
     /// Colour for an output pixel whose source positions on the two images are `q1`, `q2`.
-    fn colour(&self, q1: Point, q2: Point, dissolve: f32) -> Pixel {
-        let a = self.source1.sample(q1);
-        let px = match &self.source2 {
-            Some(s2) if dissolve > 0.0 => lerp(a, s2.sample(q2), dissolve),
-            _ => a,
+    fn colour(&self, q1: Point, q2: Point, mix: &Mix) -> Pixel {
+        // An image whose weight is zero is never sampled.
+        let s1 = if mix.uses_image1() {
+            self.source1.sample(q1)
+        } else {
+            TRANSPARENT
         };
-        clamp_valid(px)
+        let s2 = match &self.source2 {
+            Some(s) if mix.uses_image2() => s.sample(q2),
+            _ => TRANSPARENT,
+        };
+        clamp_valid(mix_pixels(mix, s1, s2))
+    }
+}
+
+/// Combine one pixel's two samples as the frame's [`Mix`] says: dim each colour (alpha kept),
+/// then add them with their weights or lay Image 2 over Image 1.
+pub fn mix_pixels(mix: &Mix, s1: Pixel, s2: Pixel) -> Pixel {
+    let dim = |p: Pixel, b: f32| [p[0] * b, p[1] * b, p[2] * b, p[3]];
+    let (a, b) = (dim(s1, mix.bright1), dim(s2, mix.bright2));
+    match mix.mode {
+        MixMode::Add => [
+            a[0] * mix.w1 + b[0] * mix.w2,
+            a[1] * mix.w1 + b[1] * mix.w2,
+            a[2] * mix.w1 + b[2] * mix.w2,
+            a[3] * mix.w1 + b[3] * mix.w2,
+        ],
+        MixMode::Over => {
+            let top = scale(b, mix.w2);
+            let under = scale(a, mix.w1);
+            over(top, under)
+        }
     }
 }
 
