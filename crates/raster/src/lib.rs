@@ -11,10 +11,15 @@
     clippy::unreachable
 )]
 
+mod adjust;
 mod blend;
 mod error;
+pub mod filter;
 mod image;
+mod par;
+pub mod transform;
 
+pub use adjust::{adjust, luminance, Adjust};
 pub use blend::{clamp_valid, lerp, over, scale, Pixel, TRANSPARENT};
 pub use error::RasterError;
 pub use image::{Image, MAX_PIXELS};

@@ -21,10 +21,7 @@ pub struct EffectImages<'a> {
     pub light: Option<&'a Image>,
 }
 
-/// Brightness of a premultiplied pixel on a black backdrop, in `0..=1`.
-pub(crate) fn luminance(p: Pixel) -> f32 {
-    (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]).clamp(0.0, 1.0)
-}
+pub(crate) use inbetween_raster::luminance;
 
 /// How much of the morph a mask pixel of brightness `light` lets through.
 pub fn mask_factor(light: f32, intensity: f64, invert: bool) -> f32 {

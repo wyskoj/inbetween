@@ -51,6 +51,26 @@ impl Image {
         })
     }
 
+    /// Wrap premultiplied f32 values, four per pixel, row by row.
+    pub fn from_premultiplied(
+        width: u32,
+        height: u32,
+        data: Vec<f32>,
+    ) -> Result<Self, RasterError> {
+        let len = checked_len(width, height)?;
+        if data.len() != len {
+            return Err(RasterError::BufferMismatch {
+                expected: len,
+                got: data.len(),
+            });
+        }
+        Ok(Self {
+            width,
+            height,
+            data,
+        })
+    }
+
     /// Build from straight (non-premultiplied) 8-bit sRGB RGBA, e.g. a decoded PNG.
     pub fn from_rgba8(width: u32, height: u32, rgba: &[u8]) -> Result<Self, RasterError> {
         let len = checked_len(width, height)?;

@@ -38,3 +38,18 @@ Machine: NVIDIA GeForce RTX 5060 Laptop GPU (Vulkan), Windows 11.
 | 2026-10-18 | Versus CPU on frame 15 | max difference 0.278 on 1 pixel of 2,073,600; mean 2.6e-5 |
 
 That is about 40 times faster than the CPU renderer at 4 threads (28 ms) before readback, with room for roughly 1,400 frames per second against the 60 fps budget. After readback the GPU is still about 3 times faster than the CPU at 4 threads, and the copy of 33 MB of f32 pixels dominates the 10 ms. A live preview should sample `GpuRenderer::texture()` directly and skip the readback. Not measured: a low-end integrated GPU, or lavapipe (software), where the numbers will be much worse.
+## Source image operations (M16)
+
+`crates/raster/examples/filters.rs`: every pixel operation on a 1920x1080 image, mean of 5 runs after one warm-up, `RAYON_NUM_THREADS=4`.
+
+| Date | Operation | Time |
+|---|---|---|
+| 2026-10-19 | rotate 90, flip | 6.6 ms, 5.8 ms |
+| 2026-10-19 | resample (rotated affine) | 11.5 ms |
+| 2026-10-19 | adjust (brightness, contrast, hue, saturation) | 27 ms |
+| 2026-10-19 | smooth, box r=10, gaussian s=10, sharpen | 55 ms, 34 ms, 124 ms, 174 ms |
+| 2026-10-19 | zoom blur, radial blur | 514 ms, 1135 ms |
+| 2026-10-19 | emboss, mosaic 16, oil r=4, splash 8 | 53 ms, 9 ms, 218 ms, 18 ms |
+| 2026-10-19 | cylinder, whirl, pinch | 47 ms, 29 ms, 43 ms |
+
+The adjust (15 ms) and gaussian (60 ms) targets are not met yet; both are memory-bound on a 33 MB image (a plain flip costs 6 ms). Edits are processed once per source and cached by the session, so this cost is paid on edit, not per frame. Zoom and radial blur take 24 bilinear taps per pixel and are the slowest; they are the first candidates if interactive dragging feels slow.
