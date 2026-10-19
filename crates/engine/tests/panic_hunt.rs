@@ -5,7 +5,8 @@
 //! hostile relative output paths land in a scratch folder.
 
 use inbetween_doc::{
-    DotPair, DotSet, ImageRef, MorphType, OutputSettings, Project, Sequence, MAX_FRAMES,
+    AdjustSettings, Crop, DotPair, DotSet, Filter, ImageEdit, ImageRef, MorphType, OutputSettings,
+    Project, Sequence, MAX_FRAMES,
 };
 use inbetween_engine::{CommandError, CommandSpec, ParamKind, Registry, Session};
 use inbetween_geom::Point;
@@ -164,6 +165,113 @@ fn broken_project() -> Project {
             ..sequence("nul image", DotSet::default())
         },
     ];
+    let hostile_edits = [
+        (
+            "nan crop",
+            ImageEdit {
+                crop: Some(Crop {
+                    x: f64::NAN,
+                    y: 0.0,
+                    w: 5.0,
+                    h: 5.0,
+                }),
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "giant crop",
+            ImageEdit {
+                crop: Some(Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 1e9,
+                    h: 1e9,
+                }),
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "zero crop",
+            ImageEdit {
+                crop: Some(Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 0.0,
+                    h: 0.0,
+                }),
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "huge angle",
+            ImageEdit {
+                angle: 1e9,
+                expand: true,
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "many turns",
+            ImageEdit {
+                quarter_turns: 200,
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "17 filters",
+            ImageEdit {
+                filters: vec![Filter::Blur { radius: 1 }; 17],
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "huge filter radius",
+            ImageEdit {
+                filters: vec![Filter::Whirl {
+                    cx: f64::NAN,
+                    cy: 1e300,
+                    radius: 1e9,
+                    angle: f64::INFINITY,
+                }],
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "bad adjust",
+            ImageEdit {
+                adjust: AdjustSettings {
+                    brightness: f64::NAN,
+                    hue: 1e300,
+                    ..AdjustSettings::default()
+                },
+                ..ImageEdit::default()
+            },
+        ),
+        (
+            "expand to the limit",
+            ImageEdit {
+                angle: 45.0,
+                expand: true,
+                crop: Some(Crop {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 32768.0,
+                    h: 3000.0,
+                }),
+                ..ImageEdit::default()
+            },
+        ),
+    ];
+    for (name, edit) in hostile_edits {
+        seqs.push(Sequence {
+            edit1: edit.clone(),
+            edit2: edit,
+            ..sequence(
+                name,
+                pairs(&[((3.0, 3.0), (4.0, 4.0)), ((9.0, 9.0), (8.0, 8.0))]),
+            )
+        });
+    }
     seqs.push(sequence("last", pairs(&[((3.0, 3.0), (4.0, 4.0))])));
     Project {
         output: OutputSettings {

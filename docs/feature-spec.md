@@ -58,13 +58,13 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `image.crop` | Drag crop; free or locked aspect; crop may extend past the image; arbitrary-angle rotate inside crop | P1 |
-| [ ] | `image.rotate` | 90° CW, 90° CCW, 180°, arbitrary angle | P1 |
-| [ ] | `image.flip` | Horizontal, vertical | P1 |
-| [ ] | `image.adjust` | Brightness, contrast, R/G/B, hue, saturation, negative, grayscale | P1 |
+| [~] | `image.crop` | Drag crop; free or locked aspect; crop may extend past the image; arbitrary-angle rotate inside crop | P1 |
+| [~] | `image.rotate` | 90° CW, 90° CCW, 180°, arbitrary angle | P1 |
+| [~] | `image.flip` | Horizontal, vertical | P1 |
+| [~] | `image.adjust` | Brightness, contrast, R/G/B, hue, saturation, negative, grayscale | P1 |
 | [ ] | `image.filter.*` | Smooth, blur, Gaussian, zoom blur, radial blur, sharpen, emboss, mosaic, oil paint, splash, cylinder, whirl, pinch | P2 |
 | [ ] | `image.caption` | Per-image caption (see §8) | P2 |
-| [ ] | `image.swap` | Swap Image 1 and Image 2 (F3) | P1 |
+| [~] | `image.swap` | Swap Image 1 and Image 2 (F3) | P1 |
 | [~] | `image.saveToLibrary` | Store image plus dots in the face library (§10) | P2 |
 
 All source edits are undoable and non-destructive (dots stay attached to the edited image).

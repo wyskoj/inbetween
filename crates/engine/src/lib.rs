@@ -27,6 +27,7 @@ mod face_media;
 #[cfg(not(target_arch = "wasm32"))]
 mod file_cmds;
 mod fx_cmds;
+mod image_cmds;
 mod layer_cmds;
 mod list_cmds;
 #[cfg(not(target_arch = "wasm32"))]

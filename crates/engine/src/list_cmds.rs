@@ -182,8 +182,13 @@ fn link(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
             "the first sequence has no previous sequence to link to".into(),
         ));
     };
-    let image = session.sequence(previous)?.image2.clone();
-    session.sequence_mut(index)?.image1 = image.clone();
+    let (image, edit) = {
+        let p = session.sequence(previous)?;
+        (p.image2.clone(), p.edit2.clone())
+    };
+    let target = session.sequence_mut(index)?;
+    target.image1 = image.clone();
+    target.edit1 = edit;
     Ok(json!({ "sequence": index, "image1": image.0 }))
 }
 
@@ -197,10 +202,18 @@ fn copy_frame(session: &mut Session, params: &Params) -> Result<Value, CommandEr
         params.integer("to_image").unwrap_or(1),
     );
     let source = session.sequence(from)?;
-    let (image, positions) = if from_image == 1 {
-        (source.image1.clone(), source.dots.first_positions())
+    let (image, edit, positions) = if from_image == 1 {
+        (
+            source.image1.clone(),
+            source.edit1.clone(),
+            source.dots.first_positions(),
+        )
     } else {
-        (source.image2.clone(), source.dots.second_positions())
+        (
+            source.image2.clone(),
+            source.edit2.clone(),
+            source.dots.second_positions(),
+        )
     };
     let target = session.sequence_mut(to)?;
     // The copied dots sit on the chosen image; the other image starts with them unmoved, to be
@@ -208,8 +221,10 @@ fn copy_frame(session: &mut Session, params: &Params) -> Result<Value, CommandEr
     target.dots = DotSet::new(positions.into_iter().map(DotPair::fixed).collect());
     if to_image == 1 {
         target.image1 = image;
+        target.edit1 = edit;
     } else {
         target.image2 = image;
+        target.edit2 = edit;
     }
     Ok(json!({
         "from_sequence": from,
@@ -433,6 +448,7 @@ mod files {
         let mut seq = match previous {
             Some(p) => Sequence {
                 image1: p.image2.clone(),
+                edit1: p.edit2.clone(),
                 frames: p.frames,
                 morph: p.morph,
                 fit: p.fit,

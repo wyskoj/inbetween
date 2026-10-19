@@ -51,6 +51,7 @@ impl Registry {
         specs.extend(crate::curve_cmds::specs());
         specs.extend(crate::effect_cmds::specs());
         specs.extend(crate::fx_cmds::specs());
+        specs.extend(crate::image_cmds::specs());
         specs.extend(crate::camera_cmds::specs());
         specs.extend(crate::track_cmds::specs());
         specs.extend(crate::layer_cmds::specs());
@@ -173,6 +174,12 @@ mod tests {
             "file.appendProject",
             "dots.import",
             "dots.export",
+            "image.rotate",
+            "image.flip",
+            "image.crop",
+            "image.adjust",
+            "image.reset",
+            "image.swap",
             "sequence.length",
             "export.frame",
             "export.sequence",
