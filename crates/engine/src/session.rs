@@ -233,16 +233,7 @@ impl Session {
     /// Where an image reference points: absolute paths as they are, relative ones against the
     /// project file's folder (or the working directory for a project with no file yet).
     pub fn resolve_image_path(&self, reference: &str) -> PathBuf {
-        let path = Path::new(reference);
-        if path.is_absolute() {
-            return path.to_path_buf();
-        }
-        let base = self
-            .path
-            .as_deref()
-            .and_then(Path::parent)
-            .unwrap_or_else(|| Path::new("."));
-        base.join(path)
+        resolve_against(self.path.as_deref(), reference)
     }
 
     /// Load (or reuse) the images for a sequence and bundle them for the renderer.
@@ -353,4 +344,19 @@ impl Session {
     pub fn cached_images(&self) -> usize {
         self.images.len()
     }
+}
+
+/// Where an image reference points when read from the project file `project_file`: absolute
+/// paths as they are, relative ones against that file's folder (the working directory when
+/// there is no file).
+pub(crate) fn resolve_against(project_file: Option<&Path>, reference: &str) -> PathBuf {
+    let path = Path::new(reference);
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+    let base = project_file
+        .and_then(Path::parent)
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    base.join(path)
 }

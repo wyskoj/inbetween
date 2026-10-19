@@ -58,6 +58,8 @@ impl Registry {
         specs.extend(crate::anim_cmds::specs());
         specs.extend(crate::face_cmds::specs());
         #[cfg(not(target_arch = "wasm32"))]
+        specs.extend(crate::file_cmds::specs());
+        #[cfg(not(target_arch = "wasm32"))]
         specs.extend(crate::face_media::specs());
         Self { specs }
     }
@@ -166,6 +168,9 @@ mod tests {
         for id in [
             "project.open",
             "project.save",
+            "project.saveAs",
+            "file.new",
+            "file.appendProject",
             "dots.import",
             "dots.export",
             "sequence.length",
