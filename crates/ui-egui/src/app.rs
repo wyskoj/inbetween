@@ -1108,8 +1108,9 @@ impl InbetweenApp {
         if reference.is_empty() {
             return None;
         }
-        let image = self.session.load_image(reference, which, sequence).ok()?;
-        if let Some((old, handle)) = self.thumbs.get(reference) {
+        let image = self.session.source(sequence, which).ok()?;
+        let key = format!("{sequence}/{which}/{reference}");
+        if let Some((old, handle)) = self.thumbs.get(&key) {
             if Arc::ptr_eq(old, &image) {
                 return Some(handle.clone());
             }
@@ -1119,8 +1120,7 @@ impl InbetweenApp {
             to_color_image(&image, 64),
             TextureOptions::LINEAR,
         );
-        self.thumbs
-            .insert(reference.to_string(), (image, handle.clone()));
+        self.thumbs.insert(key, (image, handle.clone()));
         Some(handle)
     }
 

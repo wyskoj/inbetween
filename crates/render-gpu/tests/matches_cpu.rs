@@ -562,3 +562,40 @@ fn preview_target_can_be_drawn_and_waited_on() {
     assert_eq!((tex.width(), tex.height()), (64, 48));
     assert_eq!(tex.format(), wgpu::TextureFormat::Rgba8Unorm);
 }
+
+#[test]
+fn edited_sources_match() {
+    use inbetween_doc::{AdjustSettings, Crop, Filter, ImageEdit};
+    use inbetween_render_cpu::source::apply_edit;
+    // Turn + crop + angle + adjust + gaussian on both images, then morph the results.
+    let (a, b) = (gradient(48, 32).unwrap(), labelled_grid(48, 32, 8).unwrap());
+    let edit = ImageEdit {
+        quarter_turns: 1,
+        flip_h: true,
+        crop: Some(Crop {
+            x: 2.0,
+            y: 3.0,
+            w: 26.0,
+            h: 40.0,
+        }),
+        angle: 12.0,
+        adjust: AdjustSettings {
+            brightness: 15.0,
+            saturation: -20.0,
+            ..AdjustSettings::default()
+        },
+        filters: vec![Filter::Gaussian { sigma: 1.5 }],
+        ..ImageEdit::default()
+    };
+    let a2 = apply_edit(&a, &edit).unwrap().unwrap();
+    let b2 = apply_edit(&b, &edit).unwrap().unwrap();
+    assert_eq!(a2.size(), (26, 40));
+    let pairs: Vec<(Xy, Xy)> = vec![
+        ((6.0, 6.0), (8.0, 7.0)),
+        ((20.0, 6.0), (18.0, 9.0)),
+        ((13.0, 20.0), (15.0, 18.0)),
+        ((6.0, 33.0), (5.0, 31.0)),
+        ((20.0, 33.0), (21.0, 35.0)),
+    ];
+    compare("edited", &sequence(&pairs, 12), (26, 40), &a2, &b2, ALL);
+}

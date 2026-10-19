@@ -127,7 +127,7 @@ fn extract_sequence(
         if reference.0.is_empty() {
             continue;
         }
-        let source = session.load_image(&reference.0, which, index)?;
+        let source = session.source(index, which)?;
         let points = face_points(&seq, first, count, i64::from(which))?;
         let src_box = face::fit_box(&model, &points).map_err(morph_error)?;
         let framed = reframe(
@@ -414,8 +414,7 @@ fn mix(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     let mut faces = Vec::with_capacity(list.len());
     for &index in &list {
         let seq = session.sequence(index)?.clone();
-        let reference = if which == 2 { &seq.image2 } else { &seq.image1 };
-        let image = session.load_image(&reference.0, which as u8, index)?;
+        let image = session.source(index, which as u8)?;
         faces.push(Face {
             image,
             points: face_points(&seq, first, dots_per_face, which)?,
@@ -584,8 +583,7 @@ fn add_to_library(session: &mut Session, params: &Params) -> Result<Value, Comma
         )));
     }
     let seq = session.sequence(index)?.clone();
-    let reference = if which == 2 { &seq.image2 } else { &seq.image1 };
-    let image = session.load_image(&reference.0, which as u8, index)?;
+    let image = session.source(index, which as u8)?;
     let output = session.project().output;
     let fit = fit_transform(
         image.width(),

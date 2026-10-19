@@ -19,6 +19,9 @@ pub struct Session {
     project: Project,
     path: Option<PathBuf>,
     images: HashMap<PathBuf, CachedImage>,
+    /// Edited sources by resolved path and a hash of the edit, so undo and redo reuse them.
+    processed: HashMap<(PathBuf, u64), CachedProcessed>,
+    processed_clock: u64,
     undo: Vec<Project>,
     redo: Vec<Project>,
     /// Depth of nested `edit.beginGroup` calls. While above zero, edits merge into one undo step.
@@ -36,6 +39,18 @@ struct CachedImage {
     stamp: (Option<SystemTime>, u64),
     image: Arc<Image>,
 }
+
+/// An edited source, valid while the raw image it was made from is still the cached one.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+struct CachedProcessed {
+    raw: Arc<Image>,
+    image: Arc<Image>,
+    last_used: u64,
+}
+
+/// Most edited sources kept.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+const MAX_PROCESSED: usize = 32;
 
 /// Everything needed to render one sequence, resolved and loaded.
 pub struct Prepared {
@@ -241,9 +256,9 @@ impl Session {
     pub fn prepare(&mut self, index: usize) -> Result<Prepared, CommandError> {
         let sequence = self.sequence(index)?.clone();
         let output = (self.project.output.width, self.project.output.height);
-        let image1 = self.load_image(&sequence.image1.0, 1, index)?;
+        let image1 = self.source(index, 1)?;
         let image2 = if sequence.morph.uses_image2() {
-            Some(self.load_image(&sequence.image2.0, 2, index)?)
+            Some(self.source(index, 2)?)
         } else {
             None
         };
@@ -300,6 +315,73 @@ impl Session {
         }
         self.load_path(reference, &format!("The {name} effect image"))
             .map(Some)
+    }
+
+    /// The source image of sequence `seq` (`which` 1 or 2) with its edit applied. Without an
+    /// edit this is the cached raw image itself (the same `Arc`). Edited results are cached by
+    /// the file and the edit, so undoing and redoing an edit costs nothing.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn source(&mut self, seq: usize, which: u8) -> Result<Arc<Image>, CommandError> {
+        let sequence = self.sequence(seq)?;
+        let reference = if which == 1 {
+            sequence.image1.0.clone()
+        } else {
+            sequence.image2.0.clone()
+        };
+        let edit = sequence.edit(which).clone();
+        let raw = self.load_image(&reference, which, seq)?;
+        if edit.is_identity() {
+            return Ok(raw);
+        }
+        let json =
+            serde_json::to_string(&edit).map_err(|e| CommandError::Internal(e.to_string()))?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&json, &mut hasher);
+        let key = (
+            self.resolve_image_path(&reference),
+            std::hash::Hasher::finish(&hasher),
+        );
+        self.processed_clock += 1;
+        let clock = self.processed_clock;
+        if let Some(hit) = self.processed.get_mut(&key) {
+            if Arc::ptr_eq(&hit.raw, &raw) {
+                hit.last_used = clock;
+                return Ok(Arc::clone(&hit.image));
+            }
+        }
+        let image = match inbetween_render_cpu::source::apply_edit(&raw, &edit) {
+            Ok(Some(image)) => Arc::new(image),
+            Ok(None) => return Ok(raw),
+            Err(e) => {
+                return Err(CommandError::Image(format!(
+                    "Image {which} of sequence {seq}: could not apply its edits: {e}"
+                )))
+            }
+        };
+        if self.processed.len() >= MAX_PROCESSED {
+            let oldest = self
+                .processed
+                .iter()
+                .min_by_key(|(_, v)| v.last_used)
+                .map(|(k, _)| k.clone());
+            if let Some(k) = oldest {
+                self.processed.remove(&k);
+            }
+        }
+        self.processed.insert(
+            key,
+            CachedProcessed {
+                raw,
+                image: Arc::clone(&image),
+                last_used: clock,
+            },
+        );
+        Ok(image)
+    }
+
+    /// How many edited sources are cached (for tests and diagnostics).
+    pub fn cached_sources(&self) -> usize {
+        self.processed.len()
     }
 
     /// Load one image reference through the cache.

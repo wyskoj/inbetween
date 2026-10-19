@@ -16,6 +16,7 @@
 
 pub mod camera;
 mod effects;
+pub mod source;
 mod trail;
 
 pub use effects::{light_pixel, mask_factor, ray_strength, transition_amount, EffectImages};
@@ -41,6 +42,8 @@ pub enum RenderError {
     MissingImage2,
     /// An effect is switched on but its image was not given.
     MissingEffectImage(&'static str),
+    /// An image edit is out of range.
+    Edit(inbetween_doc::DocError),
 }
 
 impl fmt::Display for RenderError {
@@ -52,6 +55,7 @@ impl fmt::Display for RenderError {
             Self::MissingEffectImage(which) => {
                 write!(f, "the {which} effect is on but its image is not loaded")
             }
+            Self::Edit(e) => write!(f, "{e}"),
         }
     }
 }
@@ -61,6 +65,12 @@ impl std::error::Error for RenderError {}
 impl From<MorphError> for RenderError {
     fn from(e: MorphError) -> Self {
         Self::Morph(e)
+    }
+}
+
+impl From<inbetween_doc::DocError> for RenderError {
+    fn from(e: inbetween_doc::DocError) -> Self {
+        Self::Edit(e)
     }
 }
 
