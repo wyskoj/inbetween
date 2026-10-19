@@ -30,6 +30,26 @@ impl Rng {
     }
 }
 
+/// How many iterations the mutation loops run. `INBETWEEN_FUZZ_SCALE=10` (a percentage) gives a
+/// quick pass for day-to-day work; CI and the default run the full count.
+fn scale_percent() -> u32 {
+    std::env::var("INBETWEEN_FUZZ_SCALE")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100)
+        .clamp(1, 100)
+}
+
+fn iterations(full: u32) -> u32 {
+    (full / 100 * scale_percent()).max(1)
+}
+
+/// Step for the exhaustive loops: 1 in a full run, larger in a quick one, so every position is
+/// still visited by some run but not by every quick run.
+fn stride() -> usize {
+    (100 / scale_percent()) as usize
+}
+
 const TOKENS: &[&str] = &[
     "null",
     "true",
@@ -187,7 +207,7 @@ fn check_dots(bytes: &[u8]) {
 fn project_parser_survives_mutations() {
     let seed = project_seed();
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
-    for _ in 0..30_000 {
+    for _ in 0..iterations(30_000) {
         check_project(&mutate(&mut rng, seed.as_bytes()));
     }
 }
@@ -196,7 +216,7 @@ fn project_parser_survives_mutations() {
 fn dots_parser_survives_mutations() {
     let seed = dots_seed();
     let mut rng = Rng(0xD1B5_4A32_D192_ED03);
-    for _ in 0..30_000 {
+    for _ in 0..iterations(30_000) {
         check_dots(&mutate(&mut rng, seed.as_bytes()));
     }
 }
@@ -208,10 +228,10 @@ fn every_truncation_and_every_single_byte_change_is_handled() {
         (dots_seed(), check_dots as fn(&[u8])),
     ] {
         let bytes = seed.as_bytes();
-        for cut in 0..=bytes.len() {
+        for cut in (0..=bytes.len()).step_by(stride()) {
             check(&bytes[..cut]);
         }
-        for i in 0..bytes.len() {
+        for i in (0..bytes.len()).step_by(stride()) {
             for b in [0u8, b'"', b'{', b'}', b'[', b']', b'-', b'9', 0x80, 0xFF] {
                 let mut copy = bytes.to_vec();
                 copy[i] = b;
@@ -224,7 +244,7 @@ fn every_truncation_and_every_single_byte_change_is_handled() {
 #[test]
 fn random_bytes_and_hostile_shapes_are_handled() {
     let mut rng = Rng(0x1234_5678_9ABC_DEF1);
-    for _ in 0..5_000 {
+    for _ in 0..iterations(5_000) {
         let len = rng.below(256);
         let junk: Vec<u8> = (0..len).map(|_| rng.next() as u8).collect();
         check_project(&junk);
@@ -313,7 +333,7 @@ fn thumbnail_reader_survives_mutations() {
         let _ = thumbnail_from_bytes(&bytes[..cut]);
     }
     let mut rng = Rng(0x7B1D_0C0F_FEE5_A11E);
-    for _ in 0..20_000 {
+    for _ in 0..iterations(20_000) {
         if let Ok(Some((w, h, data))) = thumbnail_from_bytes(&mutate(&mut rng, bytes)) {
             assert!((1..=512).contains(&w) && (1..=512).contains(&h));
             assert!(data.starts_with(&[0x89, b'P', b'N', b'G']) && data.len() <= 1 << 20);

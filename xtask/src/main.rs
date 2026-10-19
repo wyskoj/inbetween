@@ -17,7 +17,7 @@ use std::process::ExitCode;
 
 const USAGE: &str =
     "usage: cargo xtask <task>\n  layers  check crate layering\n  wasm    check L0 to L5 build for wasm32\n  perf    time a 1080p frame with 1,000 dot pairs (--quick, --threads N)
-  ci      run every CI gate locally";
+  ci      run every CI gate locally (--quick: only the crates you changed)";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -25,7 +25,7 @@ fn main() -> ExitCode {
         Some("layers") => layers::run(),
         Some("wasm") => wasm::run(),
         Some("perf") => perf::run(args.get(1..).unwrap_or_default()),
-        Some("ci") => ci::run(),
+        Some("ci") => ci::run(args.get(1..).unwrap_or_default()),
         Some(other) => Err(format!("unknown task `{other}`\n{USAGE}")),
         None => Err(USAGE.to_string()),
     };
