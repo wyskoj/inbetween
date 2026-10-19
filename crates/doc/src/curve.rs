@@ -41,6 +41,62 @@ impl Default for Curve {
 }
 
 impl Curve {
+    /// A flat curve at full value: the default master (opacity) curve, which may end anywhere
+    /// (see [`Curve::validate_free`]).
+    pub fn opaque() -> Self {
+        Self {
+            points: vec![CurvePoint::new(0.0, 1.0), CurvePoint::new(1.0, 1.0)],
+            linear: false,
+        }
+    }
+
+    /// Whether this is [`Curve::opaque`].
+    pub fn is_opaque(&self) -> bool {
+        self.points == Self::opaque().points
+    }
+
+    /// Like [`Curve::validate`], but the end points only have to sit at x = 0 and x = 1, with
+    /// any y: a master (opacity) curve starts and ends wherever it likes.
+    pub fn validate_free(&self) -> Result<(), DocError> {
+        let (Some(a), Some(b)) = (self.points.first(), self.points.last()) else {
+            return Err(DocError::BadCurve("a curve needs at least 2 points"));
+        };
+        if a.x != 0.0 || b.x != 1.0 {
+            return Err(DocError::BadCurve(
+                "a curve must start at x = 0 and end at x = 1",
+            ));
+        }
+        if !(0.0..=1.0).contains(&a.y) || !(0.0..=1.0).contains(&b.y) {
+            return Err(DocError::BadCurve(
+                "curve points must have x and y between 0 and 1",
+            ));
+        }
+        // The remaining rules are the pinned curve's, with the ends moved onto its corners.
+        let mut pinned = self.clone();
+        if let Some((f, rest)) = pinned.points.split_first_mut() {
+            f.y = 0.0;
+            if let Some(l) = rest.last_mut() {
+                l.y = 1.0;
+            }
+        }
+        pinned.validate()
+    }
+
+    /// Change the height of an end point (a free-ended curve only; the ends keep x = 0, 1).
+    pub fn set_end_y(&mut self, index: usize, y: f64) -> Result<(), DocError> {
+        if !y.is_finite() {
+            return Err(DocError::BadCurve("curve points must be finite numbers"));
+        }
+        let last = self.points.len().saturating_sub(1);
+        if index != 0 && index != last {
+            return Err(DocError::BadCurve("not an end point"));
+        }
+        if let Some(p) = self.points.get_mut(index) {
+            p.y = y.clamp(0.0, 1.0);
+        }
+        Ok(())
+    }
+
     /// Whether the curve leaves time unchanged.
     pub fn is_identity(&self) -> bool {
         self.points == Self::default().points

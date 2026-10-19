@@ -27,6 +27,9 @@ fn info(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
                 "visible": s.visible,
                 "feature_curve": !s.feature_curve.is_identity(),
                 "shape_curve": !s.shape_curve.is_identity(),
+                "master_curve": !s.master_curve.is_opaque(),
+                "camera": s.camera.is_active(),
+                "track": s.track.is_active(),
                 "dots": s.dots.len(),
                 "image1": s.image1.0,
                 "image2": s.image2.0,
@@ -35,6 +38,7 @@ fn info(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
         .collect();
     Ok(json!({
         "path": session.path().map(|p| p.display().to_string()),
+        "kind": p.kind.id(),
         "output": { "width": p.output.width, "height": p.output.height },
         "total_frames": p.total_frames(),
         "dirty": session.is_dirty(),
@@ -147,6 +151,7 @@ mod files {
                 image2: ImageRef::new(two),
                 ..Sequence::default()
             }],
+            ..Project::default()
         };
         project.validate()?;
         session.set_project(project, None);
@@ -183,10 +188,9 @@ mod files {
         for seq in &mut out.sequences {
             seq.image1 = fix(&seq.image1)?;
             seq.image2 = fix(&seq.image2)?;
-            let fx = &mut seq.effects;
-            fx.background.image = fix(&fx.background.image)?;
-            fx.mask.image = fix(&fx.mask.image)?;
-            fx.foreground.image = fix(&fx.foreground.image)?;
+            for image in seq.effects.all_images_mut() {
+                *image = fix(image)?;
+            }
         }
         Ok(out)
     }

@@ -1,4 +1,4 @@
-use crate::{Curve, DocError, DotSet, Effects};
+use crate::{Camera, Curve, DocError, DotSet, Effects, Track};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 
@@ -158,8 +158,14 @@ pub struct Sequence {
     pub shape_curve: Curve,
     /// Hidden sequences are skipped by playback and export.
     pub visible: bool,
-    /// Back colour, background, mask and foreground.
+    /// Back colour, background, mask, foreground, transition, light, trail and radial.
     pub effects: Effects,
+    /// Moves the rendered morph over time.
+    pub camera: Camera,
+    /// The sequence's overall opacity over time (a fade in or out). Its ends may sit anywhere.
+    pub master_curve: Curve,
+    /// Bends the path every dot travels.
+    pub track: Track,
 }
 
 impl Default for Sequence {
@@ -179,6 +185,9 @@ impl Default for Sequence {
             shape_curve: Curve::default(),
             visible: true,
             effects: Effects::default(),
+            camera: Camera::default(),
+            master_curve: Curve::opaque(),
+            track: Track::default(),
         }
     }
 }
@@ -190,6 +199,12 @@ impl Sequence {
             image2,
             ..Self::default()
         }
+    }
+
+    /// Whether the frame needs more than the plain morph that the GPU renderer draws: any
+    /// effect, a camera move or a master fade. (The track bends the mesh, so the GPU draws it.)
+    pub fn needs_post_pass(&self) -> bool {
+        self.effects.any_active() || self.camera.is_active() || !self.master_curve.is_opaque()
     }
 
     /// Every frame the sequence renders: hold, morph, hold.
@@ -245,6 +260,9 @@ impl Sequence {
         }
         self.feature_curve.validate()?;
         self.shape_curve.validate()?;
+        self.master_curve.validate_free()?;
+        self.camera.validate()?;
+        self.track.validate()?;
         self.effects.validate()?;
         for (i, p) in self.dots.pairs.iter().enumerate() {
             if !(p.first.is_finite() && p.second.is_finite()) {

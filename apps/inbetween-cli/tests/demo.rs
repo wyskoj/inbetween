@@ -36,6 +36,7 @@ fn demo_project() -> Project {
             frames: 12,
             ..Sequence::default()
         }],
+        ..Project::default()
     }
 }
 

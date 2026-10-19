@@ -50,6 +50,10 @@ impl Registry {
         specs.extend(crate::list_cmds::specs());
         specs.extend(crate::curve_cmds::specs());
         specs.extend(crate::effect_cmds::specs());
+        specs.extend(crate::fx_cmds::specs());
+        specs.extend(crate::camera_cmds::specs());
+        specs.extend(crate::track_cmds::specs());
+        specs.extend(crate::layer_cmds::specs());
         specs.extend(crate::export_cmds::specs());
         specs.extend(crate::anim_cmds::specs());
         Self { specs }

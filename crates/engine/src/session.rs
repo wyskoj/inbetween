@@ -47,6 +47,8 @@ pub struct Prepared {
     pub background: Option<Arc<Image>>,
     pub mask: Option<Arc<Image>>,
     pub foreground: Option<Arc<Image>>,
+    pub transition: Option<Arc<Image>>,
+    pub light: Option<Arc<Image>>,
 }
 
 impl Prepared {
@@ -62,6 +64,8 @@ impl Prepared {
             background: self.background.as_deref(),
             mask: self.mask.as_deref(),
             foreground: self.foreground.as_deref(),
+            transition: self.transition.as_deref(),
+            light: self.light.as_deref(),
         }))
     }
 }
@@ -266,6 +270,13 @@ impl Session {
             "foreground",
             index,
         )?;
+        let transition = self.load_effect(
+            fx.transition.enabled,
+            &fx.transition.image.0,
+            "transition",
+            index,
+        )?;
+        let light = self.load_effect(fx.light.enabled, &fx.light.image.0, "light", index)?;
         Ok(Prepared {
             sequence,
             output,
@@ -274,6 +285,8 @@ impl Session {
             background,
             mask,
             foreground,
+            transition,
+            light,
         })
     }
 

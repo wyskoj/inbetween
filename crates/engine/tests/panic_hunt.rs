@@ -87,6 +87,7 @@ fn valid_project() -> Project {
             height: 18,
         },
         sequences: vec![sequence("valid", pairs(&dots))],
+        ..Project::default()
     }
 }
 
@@ -170,6 +171,7 @@ fn broken_project() -> Project {
             height: 18,
         },
         sequences: seqs,
+        ..Project::default()
     }
 }
 

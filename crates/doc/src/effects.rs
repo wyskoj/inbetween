@@ -67,6 +67,102 @@ impl Default for Mask {
     }
 }
 
+/// A grayscale image that decides *when* each pixel dissolves from Image 1 to Image 2.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Transition {
+    pub enabled: bool,
+    pub image: ImageRef,
+    /// 0 (hard edge between the two images) to 100 (the whole transition is one soft fade).
+    pub softness: f64,
+    /// Dissolve light areas first instead of dark ones.
+    pub invert: bool,
+}
+
+impl Default for Transition {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            image: ImageRef::default(),
+            softness: 20.0,
+            invert: false,
+        }
+    }
+}
+
+/// A grayscale image that brightens or darkens the morph: light areas of the image brighten,
+/// dark areas darken, mid gray leaves the pixel alone.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Light {
+    pub enabled: bool,
+    pub image: ImageRef,
+    /// 0 to 100: how far the lightest areas push the morph towards white.
+    pub bright: f64,
+    /// 0 to 100: how far the darkest areas push the morph towards black.
+    pub dark: f64,
+}
+
+impl Default for Light {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            image: ImageRef::default(),
+            bright: 50.0,
+            dark: 50.0,
+        }
+    }
+}
+
+/// Motion blur or a motion trail made from the frames just before the current one.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Trail {
+    pub enabled: bool,
+    /// On: blur (the earlier frames are averaged with this one). Off: a trail (tinted copies
+    /// of the earlier frames fade out behind this one).
+    pub overlay: bool,
+    /// Colour of the trail copies, straight 8-bit RGBA. Unused by the blur.
+    pub rgba: [u8; 4],
+    /// 0 to 100: how many earlier frames are used (up to 8) and, for a trail, how strong.
+    pub intensity: f64,
+}
+
+impl Default for Trail {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            overlay: true,
+            rgba: [255, 255, 255, 255],
+            intensity: 50.0,
+        }
+    }
+}
+
+/// Rays radiating from the frame centre, drawn over or under the morph.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Radial {
+    pub enabled: bool,
+    /// Draw over the morph (on) or between the background and the morph (off).
+    pub overlay: bool,
+    /// Ray colour, straight 8-bit RGBA.
+    pub rgba: [u8; 4],
+    /// 0 to 100.
+    pub intensity: f64,
+}
+
+impl Default for Radial {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            overlay: true,
+            rgba: [255, 255, 255, 255],
+            intensity: 50.0,
+        }
+    }
+}
+
 /// All effects of one sequence.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -75,6 +171,10 @@ pub struct Effects {
     pub background: ImageLayer,
     pub mask: Mask,
     pub foreground: ImageLayer,
+    pub transition: Transition,
+    pub light: Light,
+    pub trail: Trail,
+    pub radial: Radial,
 }
 
 impl Effects {
@@ -84,6 +184,32 @@ impl Effects {
             || self.background.enabled
             || self.mask.enabled
             || self.foreground.enabled
+            || self.transition.enabled
+            || self.light.enabled
+            || self.trail.enabled
+            || self.radial.enabled
+    }
+
+    /// Every image reference an effect holds, switched on or not.
+    pub fn all_images(&self) -> [&ImageRef; 5] {
+        [
+            &self.background.image,
+            &self.mask.image,
+            &self.foreground.image,
+            &self.transition.image,
+            &self.light.image,
+        ]
+    }
+
+    /// Mutable access to every image reference an effect holds.
+    pub fn all_images_mut(&mut self) -> [&mut ImageRef; 5] {
+        [
+            &mut self.background.image,
+            &mut self.mask.image,
+            &mut self.foreground.image,
+            &mut self.transition.image,
+            &mut self.light.image,
+        ]
     }
 
     /// The image references of effects that are switched on.
@@ -92,6 +218,8 @@ impl Effects {
             (self.background.enabled, &self.background.image),
             (self.mask.enabled, &self.mask.image),
             (self.foreground.enabled, &self.foreground.image),
+            (self.transition.enabled, &self.transition.image),
+            (self.light.enabled, &self.light.image),
         ]
         .into_iter()
         .filter_map(|(on, image)| on.then_some(image))
@@ -105,6 +233,21 @@ impl Effects {
         if !ok(self.mask.intensity, -100.0, 100.0) {
             return Err(DocError::BadEffect(
                 "mask intensity must be between -100 and 100",
+            ));
+        }
+        if !ok(self.transition.softness, 0.0, 100.0) {
+            return Err(DocError::BadEffect(
+                "transition softness must be between 0 and 100",
+            ));
+        }
+        if !ok(self.light.bright, 0.0, 100.0) || !ok(self.light.dark, 0.0, 100.0) {
+            return Err(DocError::BadEffect(
+                "light intensities must be between 0 and 100",
+            ));
+        }
+        if !ok(self.trail.intensity, 0.0, 100.0) || !ok(self.radial.intensity, 0.0, 100.0) {
+            return Err(DocError::BadEffect(
+                "trail and radial intensity must be between 0 and 100",
             ));
         }
         Ok(())
@@ -146,6 +289,32 @@ mod tests {
             e.mask.intensity = bad;
             assert!(e.validate().is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn new_effects_count_as_active_and_are_checked() {
+        let mut e = Effects::default();
+        e.radial.enabled = true;
+        assert!(e.any_active());
+        for bad in [f64::NAN, -1.0, 101.0] {
+            let mut e = Effects::default();
+            e.transition.softness = bad;
+            assert!(e.validate().is_err());
+            let mut e = Effects::default();
+            e.light.dark = bad;
+            assert!(e.validate().is_err());
+            let mut e = Effects::default();
+            e.trail.intensity = bad;
+            assert!(e.validate().is_err());
+            let mut e = Effects::default();
+            e.radial.intensity = bad;
+            assert!(e.validate().is_err());
+        }
+        let mut e = Effects::default();
+        e.light.image = ImageRef::new("l.png");
+        e.light.enabled = true;
+        assert_eq!(e.active_images().count(), 1);
+        assert_eq!(e.all_images().len(), 5);
     }
 
     #[test]

@@ -14,12 +14,15 @@
 )]
 
 mod anim_cmds;
+mod camera_cmds;
 mod curve_cmds;
 mod dots_cmds;
 mod edit_cmds;
 mod effect_cmds;
 mod error;
 mod export_cmds;
+mod fx_cmds;
+mod layer_cmds;
 mod list_cmds;
 #[cfg(not(target_arch = "wasm32"))]
 mod movie;
@@ -28,6 +31,7 @@ mod project_cmds;
 mod registry;
 mod sequence_cmds;
 mod session;
+mod track_cmds;
 
 pub use error::CommandError;
 pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_STRING_BYTES};

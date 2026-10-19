@@ -63,7 +63,7 @@ fn layer_order_is_back_background_morph_foreground() {
     let fx = EffectImages {
         background: Some(&bg),
         foreground: Some(&fg),
-        mask: None,
+        ..EffectImages::default()
     };
     let out = render(&s, &a, &b, fx, 0);
     // Black, then blue at 50% -> (0,0,.5,1); half-red over that -> r .5, b .25.
@@ -156,6 +156,7 @@ fn output_stays_valid_with_extreme_settings() {
         background: Some(&junk),
         mask: Some(&junk),
         foreground: Some(&junk),
+        ..EffectImages::default()
     };
     for f in 0..3 {
         let out = render(&s, &a, &b, fx, f);

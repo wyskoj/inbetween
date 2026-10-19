@@ -1,9 +1,11 @@
-//! Curve commands: `curve.feature`, `curve.shape`.
+//! Curve commands: `curve.feature`, `curve.shape`, `curve.master`, `camera.curve`.
 //!
-//! Both edit a sequence's time remapping: the feature curve remaps the colour dissolve, the
-//! shape curve remaps how far the dots have travelled. One `op` parameter covers the editing
-//! gestures (`curve.edit` in the feature spec): add a point, move one, remove one, toggle
-//! linear, reset, or copy the curve to every sequence.
+//! All edit a sequence's time curve: the feature curve remaps the colour dissolve, the shape
+//! curve remaps how far the dots have travelled, the master curve is the sequence's opacity
+//! over time (its ends may sit anywhere; the others are pinned at (0, 0) and (1, 1)) and the
+//! camera curve eases the camera's clock. One `op` parameter covers the editing gestures
+//! (`curve.edit` in the feature spec): add a point, move one, remove one, toggle linear,
+//! reset, or copy the curve to every sequence. (The track curve is `curve.track`.)
 
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
 use inbetween_doc::Curve;
@@ -56,16 +58,27 @@ const PARAMS: &[ParamSpec] = &[
     ),
 ];
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum Which {
     Feature,
     Shape,
+    Master,
+    Easing,
 }
 
 fn curve_mut(seq: &mut inbetween_doc::Sequence, which: Which) -> &mut Curve {
     match which {
         Which::Feature => &mut seq.feature_curve,
         Which::Shape => &mut seq.shape_curve,
+        Which::Master => &mut seq.master_curve,
+        Which::Easing => &mut seq.camera.easing,
+    }
+}
+
+fn fresh(which: Which) -> Curve {
+    match which {
+        Which::Master => Curve::opaque(),
+        _ => Curve::default(),
     }
 }
 
@@ -91,12 +104,15 @@ fn run(session: &mut Session, params: &Params, which: Which) -> Result<Value, Co
                 curve_mut(session.sequence_mut(index)?, which).insert(x, y)?;
             }
             "move" => {
-                let (i, x, y) = (
-                    need_index(params, op)?,
-                    need(params, "x", op)?,
-                    need(params, "y", op)?,
-                );
-                curve_mut(session.sequence_mut(index)?, which).move_point(i, x, y)?;
+                let i = need_index(params, op)?;
+                let curve = curve_mut(session.sequence_mut(index)?, which);
+                let is_end = i == 0 || i + 1 == curve.points.len();
+                if which == Which::Master && is_end {
+                    // The master curve's ends only move up and down.
+                    curve.set_end_y(i, need(params, "y", op)?)?;
+                } else {
+                    curve.move_point(i, need(params, "x", op)?, need(params, "y", op)?)?;
+                }
             }
             "remove" => {
                 let i = need_index(params, op)?;
@@ -106,7 +122,7 @@ fn run(session: &mut Session, params: &Params, which: Which) -> Result<Value, Co
                 let curve = curve_mut(session.sequence_mut(index)?, which);
                 curve.linear = params.boolean("linear").unwrap_or(!curve.linear);
             }
-            "reset" => *curve_mut(session.sequence_mut(index)?, which) = Curve::default(),
+            "reset" => *curve_mut(session.sequence_mut(index)?, which) = fresh(which),
             "apply_all" => {
                 let curve = curve_mut(session.sequence_mut(index)?, which).clone();
                 for seq in &mut session.project_mut().sequences {
@@ -119,12 +135,16 @@ fn run(session: &mut Session, params: &Params, which: Which) -> Result<Value, Co
         }
     }
     let curve = curve_mut(session.sequence_mut(index)?, which).clone();
-    curve.validate()?;
+    if which == Which::Master {
+        curve.validate_free()?;
+    } else {
+        curve.validate()?;
+    }
     Ok(json!({
         "sequence": index,
         "points": curve.points.iter().map(|p| json!([p.x, p.y])).collect::<Vec<_>>(),
         "linear": curve.linear,
-        "identity": curve.is_identity(),
+        "identity": if which == Which::Master { curve.is_opaque() } else { curve.is_identity() },
     }))
 }
 
@@ -134,6 +154,14 @@ fn feature(session: &mut Session, params: &Params) -> Result<Value, CommandError
 
 fn shape(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     run(session, params, Which::Shape)
+}
+
+fn master(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    run(session, params, Which::Master)
+}
+
+fn easing(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    run(session, params, Which::Easing)
 }
 
 pub(crate) fn specs() -> Vec<CommandSpec> {
@@ -161,6 +189,30 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             disabled_reason: "the project has no sequences",
             edits: true,
             run: shape,
+        },
+        CommandSpec {
+            id: "curve.master",
+            label: "Master Curve",
+            menu: "Sequence/Master Curve",
+            shortcut: Some("Shift+Ctrl+M"),
+            description: "Edit (or report) the master curve, the sequence's overall opacity over time (a fade in or out). Starts and ends at full opacity; move the end points up or down with `move`.",
+            params: PARAMS,
+            enabled: Session::has_sequences,
+            disabled_reason: "the project has no sequences",
+            edits: true,
+            run: master,
+        },
+        CommandSpec {
+            id: "camera.curve",
+            label: "Camera Easing Curve",
+            menu: "Sequence/Camera Easing Curve",
+            shortcut: None,
+            description: "Edit (or report) the camera's easing curve, which remaps the time the camera keyframes are read at. The ends stay at (0, 0) and (1, 1).",
+            params: PARAMS,
+            enabled: Session::has_sequences,
+            disabled_reason: "the project has no sequences",
+            edits: true,
+            run: easing,
         },
     ]
 }

@@ -210,6 +210,7 @@ impl Planner {
                 hold_end: seq.hold_end,
                 feature_curve: seq.feature_curve.clone(),
                 shape_curve: seq.shape_curve.clone(),
+                track: seq.track.clone(),
                 ..Sequence::default()
             },
             kind,
@@ -219,6 +220,27 @@ impl Planner {
     /// Every frame of the sequence: hold, morph, hold.
     pub fn total_frames(&self) -> u32 {
         self.timing.total_frames()
+    }
+
+    /// Where a dot that starts at `a` and ends at `b` is when it has travelled `s` of its way:
+    /// on the straight line, or on the sequence's track curve when that bends the path. The
+    /// ends are exact either way.
+    fn dot_at(&self, a: Point, b: Point, s: f64) -> Point {
+        let track = &self.timing.track;
+        if !track.is_active() || s <= 0.0 {
+            return a.lerp(b, s);
+        }
+        if s >= 1.0 {
+            return b;
+        }
+        let (along, side) = track.offset(s);
+        let d = b - a;
+        let p = a + d * along + Point::new(-d.y, d.x) * side;
+        if p.is_finite() {
+            p
+        } else {
+            a.lerp(b, s)
+        }
     }
 
     /// Plan the frame at morph time `t` (clamped to 0..=1; NaN counts as 0). The feature curve
@@ -250,7 +272,7 @@ impl Planner {
         let mut now: Vec<Point> = first
             .iter()
             .zip(second)
-            .map(|(a, b)| a.lerp(*b, shape))
+            .map(|(a, b)| self.dot_at(*a, *b, shape))
             .collect();
         let per_frame;
         let connectivity: &[[usize; 3]] = if t >= 1.0 {
@@ -439,6 +461,40 @@ mod tests {
         for t in [0.0, 1.0] {
             assert_eq!(p.plan(t).unwrap(), plain.plan(t).unwrap());
         }
+    }
+
+    #[test]
+    fn a_bent_track_curves_the_paths_but_keeps_the_ends() {
+        use inbetween_doc::{Track, TrackPoint};
+        let mut s = two_dots();
+        let straight = Planner::new(&s, 100, 100).unwrap().plan(0.5).unwrap();
+        s.track = Track {
+            enabled: true,
+            points: vec![
+                TrackPoint { u: 0.0, v: 0.0 },
+                TrackPoint { u: 0.5, v: 0.3 },
+                TrackPoint { u: 1.0, v: 0.0 },
+            ],
+            ..Track::default()
+        };
+        let p = Planner::new(&s, 100, 100).unwrap();
+        let bent = p.plan(0.5).unwrap();
+        assert_ne!(straight.tris, bent.tris);
+        // The ends of the plan do not change.
+        for t in [0.0, 1.0] {
+            let (a, b) = (
+                Planner::new(&two_dots(), 100, 100)
+                    .unwrap()
+                    .plan(t)
+                    .unwrap(),
+                p.plan(t).unwrap(),
+            );
+            assert_eq!(a.tris, b.tris, "t = {t}");
+        }
+        // A disabled track changes nothing.
+        s.track.enabled = false;
+        let off = Planner::new(&s, 100, 100).unwrap().plan(0.5).unwrap();
+        assert_eq!(straight.tris, off.tris);
     }
 
     #[test]

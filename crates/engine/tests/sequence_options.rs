@@ -18,6 +18,7 @@ fn session() -> Session {
                 frames: 10,
                 ..Sequence::default()
             }],
+            ..Project::default()
         },
         None,
     );

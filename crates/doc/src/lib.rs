@@ -11,16 +11,22 @@
     clippy::unreachable
 )]
 
+mod camera;
 mod curve;
 mod dots;
 mod effects;
 mod error;
 mod project;
 mod sequence;
+mod track;
 
+pub use camera::{
+    Camera, CameraAspect, CameraKey, MAX_CAMERA_KEYS, MAX_OFFSET, MAX_SCALE, MIN_SCALE,
+};
 pub use curve::{Curve, CurvePoint, MAX_CURVE_POINTS};
 pub use dots::{DotPair, DotSet};
-pub use effects::{BackColor, Effects, ImageLayer, Mask};
+pub use effects::{BackColor, Effects, ImageLayer, Light, Mask, Radial, Trail, Transition};
 pub use error::DocError;
-pub use project::{OutputSettings, Project, MAX_SIDE};
+pub use project::{OutputSettings, Project, ProjectType, MAX_SIDE};
 pub use sequence::{FitMode, ImageRef, MeshPolicy, MorphType, Sequence, MAX_FRAMES, MAX_HOLD};
+pub use track::{Track, TrackPoint, MAX_TENSION, MAX_TRACK_POINTS, MAX_TRACK_REACH};

@@ -127,7 +127,7 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 | [x] | `sequence.link` | Make Image 1 equal the previous sequence's Image 2 (seamless join) | P1 |
 | [~] | `sequence.copyFrame` | Copy a source image with its dots into another sequence (drag between image icons) | P1 |
 | [~] | `project.type.sequence` | Sequences play one after another; movie length is the sum | P1 |
-| [ ] | `project.type.layer` | All sequences play at once as stacked layers (first = top); all share one length; switchable at any time | P2 |
+| [~] | `project.type.layer` | All sequences play at once as stacked layers (first = top); all share one length; switchable at any time | P2 |
 | [x] | `view.sequenceList` | Panel listing sequences with both thumbnails, name, visibility (F2) | P1 |
 
 ---
@@ -140,8 +140,8 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 |---|---|---|---|
 | [x] | `curve.feature` | Remaps the colour-dissolve amount over time | P1 |
 | [x] | `curve.shape` | Remaps the shape-interpolation amount over time | P1 |
-| [ ] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
-| [ ] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
+| [~] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
+| [~] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
 | [x] | `curve.edit` | Click to add point, drag to move, right-click to delete, linear toggle, reset | P1 |
 | [ ] | `curve.library` | Save, load, delete library curves | P2 |
 
@@ -149,13 +149,15 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 
 ## 6. Camera (per sequence, and per effect)
 
+*Status: `camera.keyframes` and `camera.curve` are built per sequence (commands, CPU renderer, D36). On-canvas handles, copy/paste, load/save and the per-effect camera are open; aspect lock only keeps the two scales equal.*
+
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `camera.keyframes` | Keyframes of offset/scale/rotation along a timeline; frames between are interpolated smoothly | P2 |
+| [~] | `camera.keyframes` | Keyframes of offset/scale/rotation along a timeline; frames between are interpolated smoothly | P2 |
 | [ ] | `camera.handles` | On-canvas frame: drag to move, square handles to scale, circle handle to rotate; numeric entry; negative scale flips | P2 |
-| [ ] | `camera.aspect` | Lock keyframe proportion to movie, Image 1 or Image 2, or free | P2 |
-| [ ] | `camera.curve` | Optional easing curve for the camera path | P2 |
-| [ ] | `camera.copyPaste/reset/applyAll/load/save` | | P2 |
+| [~] | `camera.aspect` | Lock keyframe proportion to movie, Image 1 or Image 2, or free | P2 |
+| [~] | `camera.curve` | Optional easing curve for the camera path | P2 |
+| [~] | `camera.copyPaste/reset/applyAll/load/save` | | P2 |
 | [ ] | `effect.camera` | Same camera controls drive an individual effect layer (animates a still effect) | P2 |
 
 ---
@@ -172,10 +174,10 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 | [~] | `effect.background` | Image behind the morph, opacity 0–100 (visible through alpha or a mask) | P1 |
 | [~] | `effect.mask` | Grayscale image controls morph opacity; intensity −100..100; invert option | P1 |
 | [~] | `effect.foreground` | RGBA overlay (frames, graphics), opacity 0–100 | P1 |
-| [ ] | `effect.transition` | Grayscale image controls *when* each pixel dissolves (dark first); border softness 0–100; invert | P2 |
-| [ ] | `effect.light` | Grayscale image brightens/darkens the morph; separate bright and dark intensity | P2 |
-| [ ] | `effect.trail` | Motion blur (overlay on) or motion trail (overlay off); tint colour; intensity | P2 |
-| [ ] | `effect.radial` | Radiating rays over or under the morph; tint colour; intensity | P2 |
+| [~] | `effect.transition` | Grayscale image controls *when* each pixel dissolves (dark first); border softness 0–100; invert | P2 |
+| [~] | `effect.light` | Grayscale image brightens/darkens the morph; separate bright and dark intensity | P2 |
+| [~] | `effect.trail` | Motion blur (overlay on) or motion trail (overlay off); tint colour; intensity | P2 |
+| [~] | `effect.radial` | Radiating rays over or under the morph; tint colour; intensity | P2 |
 | [ ] | `effect.sound` | WAV/MP3 track starting at frame 0; cut at movie end, loop, fade in/out lengths | P2 |
 | [ ] | `movie.adjust` / `movie.filter.*` | Same adjustments and filters as §2, applied to the output (filters also per sequence) | P2 |
 

@@ -114,9 +114,9 @@ impl Preview {
             return;
         }
         self.drawn = Some((revision, frame));
-        // Effects are drawn by the CPU renderer only (D34), so a sequence with any switched on
-        // previews on the CPU even when a GPU is available.
-        let gpu = handle.filter(|_| !self.gpu_failed && !prepared.sequence.effects.any_active());
+        // Effects, the camera and the master fade are drawn by the CPU renderer only (D34, D36),
+        // so a sequence with any of them on previews on the CPU even when a GPU is available.
+        let gpu = handle.filter(|_| !self.gpu_failed && !prepared.sequence.needs_post_pass());
         let outcome = match gpu {
             Some(h) => self.refresh_gpu(h, prepared, revision, frame),
             None => {

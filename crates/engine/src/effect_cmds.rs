@@ -8,7 +8,7 @@ use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
 use inbetween_doc::{BackColor, Effects, ImageLayer, ImageRef, Mask};
 use serde_json::{json, Value};
 
-const SEQUENCE: ParamSpec = ParamSpec::new(
+pub(crate) const SEQUENCE: ParamSpec = ParamSpec::new(
     "sequence",
     ParamKind::Integer,
     false,
@@ -17,21 +17,21 @@ const SEQUENCE: ParamSpec = ParamSpec::new(
 .range(0.0, 1_000_000.0)
 .default_is("0");
 
-const ENABLED: ParamSpec = ParamSpec::new(
+pub(crate) const ENABLED: ParamSpec = ParamSpec::new(
     "enabled",
     ParamKind::Bool,
     false,
     "Switch the effect on or off; omit to leave it as it is",
 );
 
-const CLEAR: ParamSpec = ParamSpec::new(
+pub(crate) const CLEAR: ParamSpec = ParamSpec::new(
     "clear",
     ParamKind::Bool,
     false,
     "Reset the effect to its defaults and remove its image",
 );
 
-const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg"];
+pub(crate) const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg"];
 
 const BACK_COLOR_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
@@ -125,12 +125,12 @@ pub(crate) fn parse_color(text: &str) -> Result<[u8; 4], CommandError> {
     ])
 }
 
-fn hex(c: [u8; 4]) -> String {
+pub(crate) fn hex(c: [u8; 4]) -> String {
     format!("#{:02x}{:02x}{:02x}{:02x}", c[0], c[1], c[2], c[3])
 }
 
 /// Load the `image` parameter (so a bad file is refused now) and return its absolute path.
-fn take_image(
+pub(crate) fn take_image(
     session: &mut Session,
     params: &Params,
     index: usize,
@@ -154,7 +154,7 @@ fn take_image(
 }
 
 /// Refuse to leave an effect switched on without its image.
-fn need_image(on: bool, image: &ImageRef, name: &str) -> Result<(), CommandError> {
+pub(crate) fn need_image(on: bool, image: &ImageRef, name: &str) -> Result<(), CommandError> {
     if on && image.0.is_empty() {
         return Err(CommandError::BadParams(format!(
             "the {name} effect needs an `image` before it can be switched on"
@@ -163,7 +163,10 @@ fn need_image(on: bool, image: &ImageRef, name: &str) -> Result<(), CommandError
     Ok(())
 }
 
-fn effects_of(session: &mut Session, index: usize) -> Result<&mut Effects, CommandError> {
+pub(crate) fn effects_of(
+    session: &mut Session,
+    index: usize,
+) -> Result<&mut Effects, CommandError> {
     Ok(&mut session.sequence_mut(index)?.effects)
 }
 

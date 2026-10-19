@@ -21,27 +21,83 @@ impl Default for OutputSettings {
     }
 }
 
+/// How the sequences of a project combine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectType {
+    /// Visible sequences play one after another.
+    #[default]
+    Sequence,
+    /// Visible sequences play at once as stacked layers, the first in the list on top. The
+    /// movie is as long as the longest layer; a shorter layer holds its last frame.
+    Layer,
+}
+
+impl ProjectType {
+    pub const ALL: [Self; 2] = [Self::Sequence, Self::Layer];
+
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Sequence => "sequence",
+            Self::Layer => "layer",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.id() == id)
+    }
+}
+
 /// A whole project: output settings and its sequences.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Project {
+    pub kind: ProjectType,
     pub output: OutputSettings,
     pub sequences: Vec<Sequence>,
 }
 
 impl Project {
-    /// Frames in the whole movie: the visible sequences play one after another.
+    /// Frames in the whole movie: the visible sequences play one after another, or (layer
+    /// projects) the longest of them.
     pub fn total_frames(&self) -> u64 {
-        self.sequences
+        let lengths = self
+            .sequences
             .iter()
             .filter(|s| s.visible)
-            .map(|s| u64::from(s.total_frames()))
-            .sum()
+            .map(|s| u64::from(s.total_frames()));
+        match self.kind {
+            ProjectType::Sequence => lengths.sum(),
+            ProjectType::Layer => lengths.max().unwrap_or(0),
+        }
+    }
+
+    /// The layers showing movie frame `frame` (counting from 0) in a layer project, bottom
+    /// layer first: `(sequence index, that sequence's own frame)`. A layer shorter than the
+    /// movie holds its last frame. Empty past the end or in a sequence project.
+    pub fn layers_at(&self, frame: u64) -> Vec<(usize, u32)> {
+        if self.kind != ProjectType::Layer || frame >= self.total_frames() {
+            return Vec::new();
+        }
+        self.sequences
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_, s)| s.visible && s.total_frames() > 0)
+            .filter_map(|(i, s)| {
+                let last = u64::from(s.total_frames()) - 1;
+                u32::try_from(frame.min(last)).ok().map(|f| (i, f))
+            })
+            .collect()
     }
 
     /// Which sequence shows movie frame `frame` (counting from 0 across the visible sequences)
-    /// and which of its own frames that is. `None` past the end.
+    /// and which of its own frames that is. `None` past the end. In a layer project this is
+    /// the top layer.
     pub fn locate(&self, frame: u64) -> Option<(usize, u32)> {
+        if self.kind == ProjectType::Layer {
+            return self.layers_at(frame).last().copied();
+        }
         let mut start = 0u64;
         for (i, s) in self.sequences.iter().enumerate().filter(|(_, s)| s.visible) {
             let len = u64::from(s.total_frames());
@@ -100,6 +156,29 @@ mod tests {
     }
 
     #[test]
+    fn layer_projects_play_everything_at_once() {
+        let seq = |frames, visible| Sequence {
+            frames,
+            visible,
+            ..Sequence::default()
+        };
+        let p = Project {
+            kind: ProjectType::Layer,
+            sequences: vec![seq(3, true), seq(5, true), seq(9, false)],
+            ..Project::default()
+        };
+        assert_eq!(p.total_frames(), 5);
+        // Bottom layer first: the second sequence, then the top (first) one.
+        assert_eq!(p.layers_at(0), [(1, 0), (0, 0)]);
+        assert_eq!(p.layers_at(4), [(1, 4), (0, 2)]);
+        assert!(p.layers_at(5).is_empty());
+        assert_eq!(p.locate(4), Some((0, 2)));
+        assert_eq!(p.locate(5), None);
+        assert!(Project::default().layers_at(0).is_empty());
+        assert_eq!(ProjectType::from_id("layer"), Some(ProjectType::Layer));
+    }
+
+    #[test]
     fn output_size_limits() {
         for (w, h) in [(0, 10), (10, 0), (MAX_SIDE + 1, 10), (10, u32::MAX)] {
             let p = Project {
@@ -107,7 +186,7 @@ mod tests {
                     width: w,
                     height: h,
                 },
-                sequences: vec![],
+                ..Project::default()
             };
             assert!(
                 matches!(p.validate(), Err(DocError::BadOutputSize { .. })),

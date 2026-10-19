@@ -71,8 +71,7 @@ fn validate(project: &Project) -> Result<(), FormatError> {
     for seq in &project.sequences {
         check_relative(&seq.image1.0)?;
         check_relative(&seq.image2.0)?;
-        let fx = &seq.effects;
-        for image in [&fx.background.image, &fx.mask.image, &fx.foreground.image] {
+        for image in seq.effects.all_images() {
             check_relative(&image.0)?;
         }
     }
@@ -83,8 +82,9 @@ fn validate(project: &Project) -> Result<(), FormatError> {
 mod tests {
     use super::*;
     use inbetween_doc::{
-        BackColor, Curve, CurvePoint, DotPair, DotSet, Effects, FitMode, ImageLayer, ImageRef,
-        Mask, MeshPolicy, MorphType, OutputSettings, Sequence,
+        BackColor, Camera, CameraKey, Curve, CurvePoint, DotPair, DotSet, Effects, FitMode,
+        ImageLayer, ImageRef, Light, Mask, MeshPolicy, MorphType, OutputSettings, ProjectType,
+        Radial, Sequence, Track, TrackPoint, Trail, Transition,
     };
     use inbetween_geom::Point;
 
@@ -98,6 +98,7 @@ mod tests {
             ),
         ]);
         Project {
+            kind: ProjectType::Layer,
             output: OutputSettings {
                 width: 640,
                 height: 480,
@@ -141,6 +142,68 @@ mod tests {
                             invert: true,
                         },
                         foreground: ImageLayer::default(),
+                        transition: Transition {
+                            enabled: true,
+                            image: ImageRef::new("t/wipe.png"),
+                            softness: 7.5,
+                            invert: true,
+                        },
+                        light: Light {
+                            enabled: true,
+                            image: ImageRef::new("l.png"),
+                            bright: 0.1 + 0.2,
+                            dark: 99.0,
+                        },
+                        trail: Trail {
+                            enabled: true,
+                            overlay: false,
+                            rgba: [9, 8, 7, 6],
+                            intensity: 33.3,
+                        },
+                        radial: Radial {
+                            enabled: true,
+                            overlay: false,
+                            rgba: [1, 1, 1, 1],
+                            intensity: 1.0 / 3.0,
+                        },
+                    },
+                    camera: Camera {
+                        enabled: true,
+                        keys: vec![
+                            CameraKey::identity(0.0),
+                            CameraKey {
+                                t: 0.1 + 0.2,
+                                x: -0.25,
+                                y: 1.0 / 3.0,
+                                scale_x: -2.0,
+                                scale_y: 1.5,
+                                rotation: 45.5,
+                            },
+                        ],
+                        easing: Curve {
+                            points: vec![
+                                CurvePoint::new(0.0, 0.0),
+                                CurvePoint::new(0.5, 0.25),
+                                CurvePoint::new(1.0, 1.0),
+                            ],
+                            linear: false,
+                        },
+                        aspect: inbetween_doc::CameraAspect::Locked,
+                    },
+                    master_curve: Curve {
+                        points: vec![CurvePoint::new(0.0, 0.25), CurvePoint::new(1.0, 0.0)],
+                        linear: true,
+                    },
+                    track: Track {
+                        enabled: true,
+                        points: vec![
+                            TrackPoint { u: 0.0, v: 0.0 },
+                            TrackPoint { u: 0.4, v: -0.3 },
+                            TrackPoint { u: 1.0, v: 0.0 },
+                        ],
+                        tension: 2.5,
+                        flip_h: true,
+                        flip_v: false,
                     },
                 },
                 Sequence::default(),
@@ -158,6 +221,36 @@ mod tests {
             project_to_string(&project_from_str(&text).unwrap()).unwrap(),
             text
         );
+    }
+
+    #[test]
+    fn invalid_camera_track_and_effects_are_refused() {
+        for field in [
+            r#""camera":{"keys":[{"t":0.5,"scale_x":0.0}]}"#,
+            r#""camera":{"keys":[{"t":2.0}]}"#,
+            r#""camera":{"keys":[{"t":0.5},{"t":0.5}]}"#,
+            r#""track":{"tension":99.0}"#,
+            r#""track":{"points":[{"u":0.0,"v":0.0},{"u":0.5,"v":0.0}]}"#,
+            r#""master_curve":{"points":[{"x":0.1,"y":1.0},{"x":1.0,"y":1.0}]}"#,
+            r#""master_curve":{"points":[{"x":0.0,"y":3.0},{"x":1.0,"y":1.0}]}"#,
+            r#""effects":{"transition":{"softness":500.0}}"#,
+            r#""effects":{"light":{"enabled":true,"image":"/abs/l.png"}}"#,
+        ] {
+            let text = format!(
+                r#"{{"format":"inbetween-project","version":1,"project":{{"sequences":[{{{field}}}]}}}}"#
+            );
+            assert!(project_from_str(&text).is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn older_projects_get_sequence_kind_and_neutral_camera() {
+        let text = r#"{"format":"inbetween-project","version":1,"project":{"sequences":[{}]}}"#;
+        let p = project_from_str(text).unwrap();
+        assert_eq!(p.kind, ProjectType::Sequence);
+        let s = &p.sequences[0];
+        assert!(!s.camera.is_active() && !s.track.is_active() && s.master_curve.is_opaque());
+        assert!(!s.needs_post_pass());
     }
 
     #[test]

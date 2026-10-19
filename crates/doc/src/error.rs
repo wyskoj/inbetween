@@ -16,6 +16,10 @@ pub enum DocError {
     BadCurve(&'static str),
     /// An effect setting is out of range (the text says which).
     BadEffect(&'static str),
+    /// A camera setting is out of range (the text says which).
+    BadCamera(&'static str),
+    /// A track curve setting is out of range (the text says which).
+    BadTrack(&'static str),
 }
 
 impl fmt::Display for DocError {
@@ -36,6 +40,8 @@ impl fmt::Display for DocError {
             Self::NonFiniteDot(i) => write!(f, "dot pair {i} has a NaN or infinite coordinate"),
             Self::BadCurve(why) => write!(f, "invalid curve: {why}"),
             Self::BadEffect(why) => write!(f, "invalid effect: {why}"),
+            Self::BadCamera(why) => write!(f, "invalid camera: {why}"),
+            Self::BadTrack(why) => write!(f, "invalid track: {why}"),
             Self::BadOutputSize { width, height } => write!(
                 f,
                 "output size {width} x {height} is not allowed (each side 1 to {})",

@@ -1,7 +1,8 @@
 //! Rendering the whole movie frame by frame, for exports.
 
 use crate::{CommandError, Session};
-use inbetween_raster::Image;
+use inbetween_doc::ProjectType;
+use inbetween_raster::{over, Image};
 
 /// Most frames one movie export writes.
 pub(crate) const MAX_MOVIE_FRAMES: u64 = 10_000_000;
@@ -55,6 +56,9 @@ pub(crate) fn render_movie(
     range: MovieRange,
     each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
 ) -> Result<u64, CommandError> {
+    if session.project().kind == ProjectType::Layer {
+        return render_layers(session, range, each);
+    }
     // (sequence index, movie frame where it starts counting from 0, length)
     let mut segments = Vec::new();
     let mut start = 0u64;
@@ -96,6 +100,66 @@ pub(crate) fn render_movie(
             each(n, &image)?;
             sent += 1;
         }
+    }
+    Ok(sent)
+}
+
+/// Layer projects: every movie frame is the visible sequences' frames stacked, the first
+/// sequence on top. (Joins between sequences do not exist here, so `drop_duplicates` is
+/// ignored.)
+fn render_layers(
+    session: &mut Session,
+    range: MovieRange,
+    each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
+) -> Result<u64, CommandError> {
+    let indexes: Vec<usize> = session
+        .project()
+        .sequences
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.visible && s.total_frames() > 0)
+        .map(|(i, _)| i)
+        .collect();
+    let mut prepared = Vec::with_capacity(indexes.len());
+    for &i in &indexes {
+        prepared.push(session.prepare(i)?);
+    }
+    let mut renderers = Vec::with_capacity(prepared.len());
+    for (&i, p) in indexes.iter().zip(&prepared) {
+        renderers.push((i, p.renderer()?));
+    }
+    let numbers: Box<dyn Iterator<Item = u64>> = if range.reverse {
+        Box::new((range.first..=range.last).rev())
+    } else {
+        Box::new(range.first..=range.last)
+    };
+    let mut sent = 0u64;
+    for n in numbers {
+        let frames = session.project().layers_at(n.saturating_sub(1));
+        let mut stack: Option<Image> = None;
+        for (sequence, local) in frames {
+            let Some((_, renderer)) = renderers.iter().find(|(i, _)| *i == sequence) else {
+                continue;
+            };
+            let layer = renderer.render_frame(local)?;
+            stack = Some(match stack {
+                None => layer,
+                Some(mut below) => {
+                    for (b, t) in below
+                        .as_mut_slice()
+                        .chunks_exact_mut(4)
+                        .zip(layer.as_slice().chunks_exact(4))
+                    {
+                        let px = over([t[0], t[1], t[2], t[3]], [b[0], b[1], b[2], b[3]]);
+                        b.copy_from_slice(&px);
+                    }
+                    below
+                }
+            });
+        }
+        let Some(image) = stack else { continue };
+        each(n, &image)?;
+        sent += 1;
     }
     Ok(sent)
 }

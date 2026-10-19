@@ -14,11 +14,13 @@
     clippy::unreachable
 )]
 
+pub mod camera;
 mod effects;
+mod trail;
 
-pub use effects::{mask_factor, EffectImages};
+pub use effects::{light_pixel, mask_factor, ray_strength, transition_amount, EffectImages};
 
-use inbetween_doc::{Effects, Sequence};
+use inbetween_doc::{Camera, Curve, Effects, MorphType, Sequence, Trail};
 use inbetween_geom::{Affine, Point};
 use inbetween_morph::{
     fit_transform, transparent_outside, FramePlan, MeshTri, Mix, MixMode, MorphError, Planner,
@@ -101,6 +103,20 @@ pub struct Renderer<'a> {
     source2: Option<Source<'a>>,
     effects: Effects,
     effect_images: EffectImages<'a>,
+    morph: MorphType,
+    /// Frame counts and holds only, for frame times.
+    timing: Sequence,
+    feature: Curve,
+    camera: Camera,
+    master: Curve,
+}
+
+/// The transition effect for one frame: the image and the colour-dissolve time.
+struct TransitionCtx<'i> {
+    image: &'i Image,
+    softness: f64,
+    invert: bool,
+    t: f64,
 }
 
 impl<'a> Renderer<'a> {
@@ -137,6 +153,16 @@ impl<'a> Renderer<'a> {
             source2,
             effects: seq.effects.clone(),
             effect_images: EffectImages::default(),
+            morph: seq.morph,
+            timing: Sequence {
+                frames: seq.frames,
+                hold_start: seq.hold_start,
+                hold_end: seq.hold_end,
+                ..Sequence::default()
+            },
+            feature: seq.feature_curve.clone(),
+            camera: seq.camera.clone(),
+            master: seq.master_curve.clone(),
         })
     }
 
@@ -152,24 +178,68 @@ impl<'a> Renderer<'a> {
         self.planner.total_frames()
     }
 
-    /// Render frame `index`, counting hold frames (clamped to the last frame).
+    /// Render frame `index`, counting hold frames (clamped to the last frame). This is the one
+    /// call that knows the frames before it, so it is the one that draws the trail.
     pub fn render_frame(&self, index: u32) -> Result<Image, RenderError> {
-        let plan = self.planner.plan_frame(index)?;
-        self.draw_with_effects(&plan)
+        let t = self.timing.frame_time(index);
+        self.render_at(t, Some(index))
     }
 
-    /// Render at morph time `t` (0 = Image 1, 1 = Image 2).
+    /// Render at morph time `t` (0 = Image 1, 1 = Image 2). No trail: that needs a frame index.
     pub fn render_t(&self, t: f64) -> Result<Image, RenderError> {
-        let plan = self.planner.plan(t)?;
-        self.draw_with_effects(&plan)
+        self.render_at(t, None)
     }
 
-    fn draw_with_effects(&self, plan: &FramePlan) -> Result<Image, RenderError> {
+    fn render_at(&self, t: f64, index: Option<u32>) -> Result<Image, RenderError> {
         // Check first so a missing effect image fails before the expensive morph.
         effects::check(&self.effects, &self.effect_images)?;
-        let mut image = self.draw(plan)?;
-        effects::apply(&self.effects, &self.effect_images, &mut image)?;
+        let plan = self.planner.plan(t)?;
+        let mut image = self.moved_morph(&plan)?;
+        if let Some(index) = index.filter(|_| self.effects.trail.enabled) {
+            image = self.with_trail(image, index, plan.t)?;
+        }
+        effects::apply(&self.effects, &self.effect_images, &mut image, plan.t)?;
+        if !self.master.is_opaque() {
+            let k = self.master.eval(plan.t) as f32;
+            for v in image.as_mut_slice() {
+                *v *= k;
+            }
+        }
         Ok(image)
+    }
+
+    /// The morph at the planned time, seen through the camera.
+    fn moved_morph(&self, plan: &FramePlan) -> Result<Image, RenderError> {
+        camera::apply(&self.camera, plan.t, self.draw(plan)?)
+    }
+
+    /// Mix in the frames before `index` as the trail effect says.
+    fn with_trail(&self, current: Image, index: u32, t: f64) -> Result<Image, RenderError> {
+        let settings: Trail = self.effects.trail;
+        let count = trail::past_frames(settings.intensity);
+        let mut past = Vec::new();
+        for back in 1..=count {
+            let Some(earlier) = index.checked_sub(back) else {
+                break;
+            };
+            let at = self.timing.frame_time(earlier);
+            // A hold repeats the picture; it adds nothing to a trail.
+            if at != t {
+                past.push(self.moved_morph(&self.planner.plan(at)?)?);
+            }
+        }
+        trail::combine(&settings, current, &past)
+    }
+
+    fn transition(&self, plan: &FramePlan) -> Option<TransitionCtx<'_>> {
+        let tr = &self.effects.transition;
+        let image = self.effect_images.transition.filter(|_| tr.enabled)?;
+        Some(TransitionCtx {
+            image,
+            softness: tr.softness,
+            invert: tr.invert,
+            t: self.feature.eval(plan.t),
+        })
     }
 
     fn draw(&self, plan: &FramePlan) -> Result<Image, RenderError> {
@@ -183,19 +253,28 @@ impl<'a> Renderer<'a> {
         // Rows are shaded in independent bands. Inside a band, triangles claim pixels in
         // triangle order (the last claim wins), so the result does not depend on how the
         // bands are scheduled across threads.
+        let transition = self.transition(plan);
         let mut out = Image::new(self.width, self.height)?;
         let row_len = self.width as usize * 4;
         out.as_mut_slice()
             .par_chunks_mut(row_len * BAND_ROWS as usize)
             .enumerate()
             .for_each(|(band, pixels)| {
-                self.shade_band(pixels, band as u32 * BAND_ROWS, &setups, &plan.mix);
+                let y = band as u32 * BAND_ROWS;
+                self.shade_band(pixels, y, &setups, &plan.mix, transition.as_ref());
             });
         Ok(out)
     }
 
     /// Shade the rows held in `pixels`, which start at output row `y_start`.
-    fn shade_band(&self, pixels: &mut [f32], y_start: u32, setups: &[TriSetup], mix: &Mix) {
+    fn shade_band(
+        &self,
+        pixels: &mut [f32],
+        y_start: u32,
+        setups: &[TriSetup],
+        mix: &Mix,
+        transition: Option<&TransitionCtx>,
+    ) {
         let width = self.width as usize;
         let rows = (pixels.len() / (width * 4)) as u32;
         let y_end = y_start + rows;
@@ -224,6 +303,23 @@ impl<'a> Renderer<'a> {
             let x = (i % width) as u32;
             let y = y_start + (i / width) as u32;
             let p = Point::new(f64::from(x) + 0.5, f64::from(y) + 0.5);
+            // With a transition every pixel dissolves on its own schedule.
+            let own;
+            let mix = match transition {
+                Some(tr) => {
+                    let light = effects::luminance(effects::sample(
+                        tr.image,
+                        x,
+                        y,
+                        self.width,
+                        self.height,
+                    ));
+                    let amount = transition_amount(light, tr.t, tr.softness, tr.invert);
+                    own = Mix::for_type(self.morph, amount);
+                    &own
+                }
+                None => mix,
+            };
             let colour = match setups.get(who as usize) {
                 Some(s) => {
                     let q1 = s.to1.map_or(p, |m| m.apply(p));
