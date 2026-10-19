@@ -439,3 +439,200 @@ fn render_writes_hold_frames_and_other_morph_types() {
     assert_eq!(read(7), read(9));
     assert_ne!(read(3), read(5));
 }
+
+/// A tiny flattened PSD (RGB, raw) with a single colour.
+fn psd_bytes(w: u32, h: u32, rgb: [u8; 3]) -> Vec<u8> {
+    let mut v = b"8BPS".to_vec();
+    v.extend_from_slice(&1u16.to_be_bytes());
+    v.extend_from_slice(&[0; 6]);
+    v.extend_from_slice(&3u16.to_be_bytes());
+    v.extend_from_slice(&h.to_be_bytes());
+    v.extend_from_slice(&w.to_be_bytes());
+    v.extend_from_slice(&8u16.to_be_bytes());
+    v.extend_from_slice(&3u16.to_be_bytes());
+    v.extend_from_slice(&[0; 12]); // colour mode, resources, layers: all empty
+    v.extend_from_slice(&0u16.to_be_bytes()); // raw
+    for c in rgb {
+        v.extend(std::iter::repeat_n(c, (w * h) as usize));
+    }
+    v
+}
+
+fn json_of(o: &Output) -> serde_json::Value {
+    serde_json::from_str(&stdout(o)).unwrap_or_else(|e| panic!("{e}: {}", stdout(o)))
+}
+
+#[test]
+fn wizard_builds_a_looped_project_from_mixed_formats_and_saves_it() {
+    use image::ImageEncoder;
+    let out = Scratch::new("wizard");
+    let data = [90u8, 160, 220, 255].repeat(24 * 16);
+    let mut bmp = Vec::new();
+    image::codecs::bmp::BmpEncoder::new(&mut bmp)
+        .write_image(&data, 24, 16, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    let mut tga = Vec::new();
+    image::codecs::tga::TgaEncoder::new(&mut tga)
+        .write_image(&data, 24, 16, image::ExtendedColorType::Rgba8)
+        .unwrap();
+    std::fs::write(out.path("a.bmp"), bmp).unwrap();
+    std::fs::write(out.path("b.psd"), psd_bytes(24, 16, [200, 80, 40])).unwrap();
+    std::fs::write(out.path("c.tga"), tga).unwrap();
+    let images: Vec<String> = ["a.bmp", "b.psd", "c.tga"]
+        .iter()
+        .map(|n| out.path(n).display().to_string())
+        .collect();
+    let saved = out.path("chain.inbetween");
+
+    let params = serde_json::json!({"images": images, "loop": true, "frames": 5}).to_string();
+    let o = ib(&[
+        "run",
+        "file.wizard",
+        "--params",
+        &params,
+        "--save",
+        saved.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(json_of(&o)["sequences"], 3);
+
+    // The saved project describes three sequences whose images sit beside it.
+    let o = ib(&["info", saved.to_str().unwrap(), "--json"]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let info = json_of(&o);
+    let seqs = info["sequences"].as_array().unwrap();
+    assert_eq!(seqs.len(), 3);
+    assert_eq!(seqs[0]["image1"], "a.bmp");
+    assert_eq!(
+        seqs[2]["image2"], "a.bmp",
+        "the loop returns to the first image"
+    );
+    assert_eq!(info["output"]["width"], 24);
+
+    // And it renders: a frame from the PSD-to-TGA sequence.
+    let frame = out.path("f.png");
+    let o = ib(&[
+        "frame",
+        saved.to_str().unwrap(),
+        "--sequence",
+        "1",
+        "--t",
+        "0.5",
+        "--out",
+        frame.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(read_file(&frame).unwrap().width, 24);
+
+    // Open Visually lists it with the thumbnail written on save.
+    let params = serde_json::json!({ "folder": out.0.display().to_string() }).to_string();
+    let o = ib(&["run", "file.openVisual", "--params", &params]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let list = json_of(&o);
+    let entry = &list["projects"][0];
+    assert_eq!(entry["name"], "chain");
+    assert_eq!(entry["sequences"], 3);
+    assert!(entry["thumbnail_png_base64"].is_string());
+
+    // A bad image in the list is a clean error and writes nothing.
+    let junk = out.path("junk.bmp");
+    std::fs::write(&junk, b"BMnope").unwrap();
+    let nothing = out.path("nothing.inbetween");
+    let params =
+        serde_json::json!({"images": [images[0].clone(), junk.display().to_string()]}).to_string();
+    let o = ib(&[
+        "run",
+        "file.wizard",
+        "--params",
+        &params,
+        "--save",
+        nothing.to_str().unwrap(),
+    ]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(stderr(&o).starts_with("error: "), "{}", stderr(&o));
+    assert!(!nothing.exists());
+}
+
+#[test]
+fn export_edit_then_import_moves_a_frames_dots_into_a_new_sequence() {
+    let out = Scratch::new("exportedit");
+    let png = out.path("mid.png");
+    let dots = out.path("mid.inbetweendots");
+    let params = serde_json::json!({"out": png.to_str().unwrap(), "t": 0.5}).to_string();
+    let o = ib(&[
+        "run",
+        "frame.exportEdit",
+        "--project",
+        &project_arg(),
+        "--params",
+        &params,
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert!(png.exists());
+    assert_eq!(inbetween_format::read_dots(&dots).unwrap().len(), 25);
+
+    // A new project starting from that frame takes the dots back through dots.import.
+    let wizard = serde_json::json!({
+        "images": [png.to_str().unwrap(), demo_dir().join("moon.png").to_str().unwrap()],
+    })
+    .to_string();
+    let saved = out.path("next.inbetween");
+    let o = ib(&[
+        "run",
+        "file.wizard",
+        "--params",
+        &wizard,
+        "--save",
+        saved.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let import = serde_json::json!({"path": dots.to_str().unwrap()}).to_string();
+    let o = ib(&[
+        "run",
+        "dots.import",
+        "--project",
+        saved.to_str().unwrap(),
+        "--params",
+        &import,
+        "--save",
+        saved.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    assert_eq!(
+        inbetween_format::read_project(&saved).unwrap().sequences[0]
+            .dots
+            .len(),
+        25
+    );
+}
+
+#[test]
+fn append_merges_another_projects_sequences_from_the_command_line() {
+    let out = Scratch::new("append");
+    let merged = out.path("merged.inbetween");
+    let params = serde_json::json!({"path": project_arg()}).to_string();
+    let o = ib(&[
+        "run",
+        "file.appendProject",
+        "--project",
+        &project_arg(),
+        "--params",
+        &params,
+        "--save",
+        merged.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+    let project = inbetween_format::read_project(&merged).unwrap();
+    assert_eq!(project.sequences.len(), 2);
+    // The images stay findable from the new folder (stored relative to it, or absolute).
+    let frame = out.path("m.png");
+    let o = ib(&[
+        "frame",
+        merged.to_str().unwrap(),
+        "--sequence",
+        "1",
+        "--out",
+        frame.to_str().unwrap(),
+    ]);
+    assert!(o.status.success(), "{}", stderr(&o));
+}

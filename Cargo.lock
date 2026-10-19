@@ -1916,6 +1916,7 @@ name = "inbetween-cli"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "image",
  "inbetween-codecs",
  "inbetween-doc",
  "inbetween-engine",

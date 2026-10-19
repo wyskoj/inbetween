@@ -78,6 +78,13 @@ enum Cmd {
         json: bool,
     },
     /// Run any command by id, with JSON parameters
+    #[command(after_help = "\
+Examples:
+  ib run dots.export --project demo.inbetween --params '{\"path\": \"dots.inbetweendots\"}'
+  ib run file.wizard --params '{\"images\": [\"a.png\", \"b.bmp\", \"c.psd\"], \"loop\": true}' --save chain.inbetween
+  ib run file.appendProject --project a.inbetween --params '{\"path\": \"b.inbetween\"}' --save merged.inbetween
+  ib run file.openVisual --params '{\"folder\": \".\"}'
+  ib run frame.exportEdit --project demo.inbetween --params '{\"out\": \"mid.png\", \"t\": 0.5}'")]
     Run {
         /// Command id, e.g. dots.export
         id: String,
@@ -87,6 +94,10 @@ enum Cmd {
         /// Open this project first
         #[arg(long)]
         project: Option<PathBuf>,
+        /// Save the project to this .inbetween file after the command (so a command that
+        /// builds or edits a project, such as file.wizard, leaves a file behind)
+        #[arg(long)]
+        save: Option<PathBuf>,
     },
 }
 
@@ -198,6 +209,7 @@ fn run(command: Cmd) -> Result<String, String> {
             id,
             params,
             project,
+            save,
         } => {
             if let Some(project) = project {
                 engine.open(&project)?;
@@ -207,7 +219,12 @@ fn run(command: Cmd) -> Result<String, String> {
                     .map_err(|e| format!("--params is not valid JSON: {e}"))?,
                 None => Value::Null,
             };
-            pretty(&engine.run(&id, params)?)
+            let result = engine.run(&id, params)?;
+            if let Some(path) = save {
+                engine.run("project.saveAs", json!({ "path": path_str(&path)? }))?;
+                eprintln!("Saved {}", path.display());
+            }
+            pretty(&result)
         }
     }
 }

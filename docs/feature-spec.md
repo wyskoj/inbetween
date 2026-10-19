@@ -17,7 +17,7 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 | [x] | `engine.triangulate` | Triangulate paired dots, auto-adding the 4 image corners | P0 |
 | [x] | `engine.warp` | Per-triangle affine warp of each source toward the interpolated dot positions | P0 |
 | [x] | `engine.dissolve` | Cross-dissolve the two warped images by the feature amount | P0 |
-| [x] | `engine.alpha` | Full alpha pipeline: 32-bit RGBA sources in, RGBA frames out (PNG today; other alpha formats are the §1 image-import row) | P0 |
+| [x] | `engine.alpha` | Full alpha pipeline: 32-bit RGBA sources in, RGBA frames out (PNG, BMP, TIFF, TGA, GIF and PSD in; PNG and JPEG out) | P0 |
 | [x] | `morph.option.dropCornerTris` | Option: discard triangles touching the 4 corners (backdrop effect on non-alpha images) | P1 |
 | [x] | `morph.option.retriangulate` | Option: re-triangulate every intermediate frame instead of only frame 0 | P1 |
 | [x] | `engine.outsideDots` | Dots may sit outside the image bounds (engine, files, CLI and MCP; the shell only adds dots inside the frame, though a dot can be dragged past the edge) | P1 |
@@ -42,13 +42,13 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `file.new` / `project.open` / `project.save` | `.inbetween` project file | P0 |
-| [ ] | `file.openVisual` | Open dialog that shows project thumbnails | P2 |
-| [ ] | `file.appendProject` | Merge another project's sequences into this one | P1 |
-| [ ] | `file.wizard` | New-project wizard: pick type, pick an ordered image list, build sequences | P1 |
+| [x] | `file.new` / `project.open` / `project.save` / `project.saveAs` | `.inbetween` project file: blank New (Ctrl+N), Open, Save, Save As (Ctrl+Shift+S), recent files, unsaved-changes prompt on replace and on close, cross-drive images kept as absolute paths, embedded thumbnail | P0 |
+| [x] | `file.openVisual` | Open dialog that shows project thumbnails: recent projects or a chosen folder | P2 |
+| [x] | `file.appendProject` | Merge another project's sequences into this one | P1 |
+| [x] | `file.wizard` | New-project wizard: pick type, pick an ordered image list (Add, Up, Down, Remove), optional loop back to the first, build sequences | P1 |
 | [x] | `dots.export` / `dots.import` | Export/import a dot set on its own (`.inbetweendots`) | P1 |
-| [ ] | `frame.exportEdit` | Export a single frame together with its dot set | P2 |
-| [ ] | `file.dragDrop` | Drop images onto either source panel or effect slots | P1 |
+| [x] | `frame.exportEdit` | Export a single frame together with its dot set | P2 |
+| [~] | `file.dragDrop` | Drop images onto either source panel (done), a project or dot file, or several images to open the wizard; effect slots open | P1 |
 
 **Image import:** BMP, JPEG, TIFF, PNG, PSD (flattened), TGA, GIF; keep alpha for BMP/TIFF/PNG/PSD/TGA. P0 for PNG/JPEG, P1 for the rest. *Status: done (`codecs` reads all of them; PSD is an in-house flattened-composite reader; GIF reads the first frame; import only, export stays PNG/JPEG).*
 

@@ -18,6 +18,7 @@ serde = "1"
 serde_json = "1"
 
 [dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["bmp", "tga"] }
 inbetween-codecs = { path = "../../crates/codecs" }
 inbetween-doc = { path = "../../crates/doc" }
 inbetween-format = { path = "../../crates/format" }
