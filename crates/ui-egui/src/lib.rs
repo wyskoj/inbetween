@@ -13,6 +13,7 @@
 
 pub mod app;
 pub mod curves;
+pub mod dragdrop;
 pub mod fonts;
 pub mod form;
 pub mod hit;

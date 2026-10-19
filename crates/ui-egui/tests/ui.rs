@@ -1032,3 +1032,208 @@ fn the_open_visual_grid_lists_a_folder_from_thumbnails_and_opens_a_project() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ----------------------------------------------------------------------------- drag and drop
+
+fn dropped(path: &str) -> egui::DroppedFile {
+    egui::DroppedFile {
+        path: Some(std::path::PathBuf::from(path)),
+        name: std::path::Path::new(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        ..Default::default()
+    }
+}
+
+/// Move the pointer to `at`, then deliver `files` as a drop on the next frame.
+fn drop_files(h: &mut H, at: Pos2, files: Vec<egui::DroppedFile>) {
+    frame(h, vec![mv(at)]);
+    h.input_mut().dropped_files.extend(files);
+    h.step();
+    h.run();
+}
+
+#[test]
+fn dropping_an_image_on_a_panel_sets_that_image() {
+    let (dir, path) = demo_copy("drop-image");
+    let other = dir.join("other.png");
+    std::fs::copy(dir.join("sun.png"), &other).unwrap();
+    let mut h = demo_harness_at(&path);
+    let before = h.state().session().project().sequences[0].image1.0.clone();
+
+    let on2 = screen(&h, Panel::Source2, 200.0, 150.0);
+    drop_files(&mut h, on2, vec![dropped(&other.display().to_string())]);
+    let seq = &h.state().session().project().sequences[0];
+    assert!(seq.image2.0.ends_with("other.png"), "{}", seq.image2.0);
+    assert_eq!(seq.image1.0, before, "Image 1 is untouched");
+    assert!(h.state().session().is_dirty());
+    assert_eq!(h.state().status().map(|s| s.is_error), Some(false));
+
+    // On Image 1's panel it goes to Image 1 instead.
+    let on1 = screen(&h, Panel::Source1, 200.0, 150.0);
+    drop_files(&mut h, on1, vec![dropped(&other.display().to_string())]);
+    let seq = &h.state().session().project().sequences[0];
+    assert!(seq.image1.0.ends_with("other.png"), "{}", seq.image1.0);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dropping_an_image_on_an_empty_app_starts_a_project_with_it() {
+    let demo = format!("{}/../../demo", env!("CARGO_MANIFEST_DIR"));
+    let mut h = harness_with(empty_app());
+    drop_files(
+        &mut h,
+        Pos2::new(700.0, 450.0),
+        vec![dropped(&format!("{demo}/sun.png"))],
+    );
+    let seqs = &h.state().session().project().sequences;
+    assert_eq!(seqs.len(), 1);
+    assert!(seqs[0].image1.0.ends_with("sun.png"));
+    assert!(seqs[0].image2.0.is_empty());
+}
+
+#[test]
+fn dropping_a_project_opens_it_after_the_unsaved_prompt() {
+    let (dir, path) = demo_copy("drop-project");
+    let other = dir.join("other.inbetween");
+    std::fs::copy(&path, &other).unwrap();
+    let mut h = dirty_demo(&path);
+    drop_files(
+        &mut h,
+        Pos2::new(700.0, 450.0),
+        vec![dropped(&other.display().to_string())],
+    );
+    assert!(h.state().prompt_open(), "unsaved changes: ask first");
+    h.state_mut().answer_prompt(PromptChoice::DontSave);
+    h.run();
+    assert_eq!(
+        h.state().session().path().map(|p| p.display().to_string()),
+        Some(other.display().to_string())
+    );
+    assert!(!h.state().session().is_dirty());
+
+    // A clean project opens straight away.
+    drop_files(&mut h, Pos2::new(700.0, 450.0), vec![dropped(&path)]);
+    assert!(!h.state().prompt_open());
+    assert_eq!(
+        h.state().session().path().map(|p| p.display().to_string()),
+        Some(path)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dropping_a_dot_file_imports_it_into_the_current_sequence() {
+    let (dir, path) = demo_copy("drop-dots");
+    let dots_file = dir.join("exported.inbetweendots");
+    let mut app = empty_app();
+    app.run_command("project.open", &json!({ "path": path }))
+        .unwrap();
+    let count = app.session().project().sequences[0].dots.len();
+    app.run_command(
+        "dots.export",
+        &json!({"path": dots_file.display().to_string()}),
+    )
+    .unwrap();
+    app.run_command("file.new", &json!({})).unwrap();
+    assert_eq!(app.session().project().sequences[0].dots.len(), 0);
+    let mut h = harness_with(app);
+    drop_files(
+        &mut h,
+        Pos2::new(700.0, 450.0),
+        vec![dropped(&dots_file.display().to_string())],
+    );
+    assert_eq!(h.state().session().project().sequences[0].dots.len(), count);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn dropping_several_images_opens_the_wizard_filled_in_drop_order() {
+    let (dir, _) = demo_copy("drop-wizard");
+    let moon = dir.join("moon.png").display().to_string();
+    let sun = dir.join("sun.png").display().to_string();
+    let mut h = harness_with(empty_app());
+    drop_files(
+        &mut h,
+        Pos2::new(700.0, 450.0),
+        vec![dropped(&moon), dropped(&sun), dropped(&moon)],
+    );
+    let form = h.state().form().expect("the wizard form opens");
+    assert_eq!(form.id, "file.wizard");
+    let params = form.to_params().unwrap();
+    assert_eq!(params["images"], json!([moon, sun, moon]));
+    // Running it builds the chain.
+    h.state_mut().submit_form();
+    h.run();
+    assert_eq!(h.state().session().project().sequences.len(), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn unusable_drops_say_so_and_change_nothing() {
+    let (dir, path) = demo_copy("drop-bad");
+    let mut h = demo_harness_at(&path);
+    let before = h.state().session().project().clone();
+    let txt = dir.join("notes.txt");
+    std::fs::write(&txt, b"hello").unwrap();
+    drop_files(
+        &mut h,
+        Pos2::new(700.0, 450.0),
+        vec![dropped(&txt.display().to_string())],
+    );
+    let status = h.state().status().unwrap();
+    assert!(
+        status.is_error && status.text.contains("notes.txt"),
+        "{}",
+        status.text
+    );
+    assert_eq!(h.state().session().project(), &before);
+
+    // Bytes with no path (a browser drop) are refused politely too.
+    drop_files(
+        &mut h,
+        Pos2::new(700.0, 450.0),
+        vec![egui::DroppedFile {
+            name: "photo.png".into(),
+            bytes: Some(vec![1, 2, 3].into()),
+            ..Default::default()
+        }],
+    );
+    assert!(h.state().status().unwrap().is_error);
+    assert_eq!(h.state().session().project(), &before);
+
+    // An image file that cannot be decoded is an error from the engine, not a crash.
+    let junk = dir.join("junk.png");
+    std::fs::write(&junk, b"not an image").unwrap();
+    let on2 = screen(&h, Panel::Source2, 200.0, 150.0);
+    drop_files(&mut h, on2, vec![dropped(&junk.display().to_string())]);
+    assert!(h.state().status().unwrap().is_error);
+    assert_eq!(h.state().session().project(), &before);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn hovering_files_shows_where_they_would_land() {
+    let (dir, path) = demo_copy("drop-hover");
+    let mut h = demo_harness_at(&path);
+    let on2 = screen(&h, Panel::Source2, 200.0, 150.0);
+    frame(&mut h, vec![mv(on2)]);
+    h.input_mut().hovered_files.push(egui::HoveredFile {
+        path: Some(dir.join("sun.png")),
+        mime: String::new(),
+    });
+    h.step();
+    h.step();
+    shot(&mut h, "drop_hover");
+    // Nothing happens until the drop itself.
+    assert!(!h.state().session().is_dirty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn demo_harness_at(path: &str) -> H {
+    let mut app = empty_app();
+    app.run_command("project.open", &json!({ "path": path }))
+        .unwrap();
+    harness_with(app)
+}
