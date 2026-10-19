@@ -248,6 +248,24 @@ impl Planner {
         }
     }
 
+    /// Where the dots are at morph time `t`, as the frame plan places them: remapped by the
+    /// shape curve and bent by the track. `None` for morph types that never warp, which ignore
+    /// their dots.
+    pub fn dots_at(&self, t: f64) -> Option<Vec<Point>> {
+        let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) };
+        let shape = self.timing.shape_curve.eval(t);
+        match &self.kind {
+            Kind::Warp { first, second, .. } => Some(
+                first
+                    .iter()
+                    .zip(second)
+                    .map(|(a, b)| self.dot_at(*a, *b, shape))
+                    .collect(),
+            ),
+            Kind::Still(_) => None,
+        }
+    }
+
     /// Plan the frame at morph time `t` (clamped to 0..=1; NaN counts as 0). The feature curve
     /// remaps `t` into the colour-dissolve amount and the shape curve into how far the dots
     /// have moved; both leave 0 and 1 where they are.
@@ -486,6 +504,25 @@ mod tests {
                 .collect(),
             linear: true,
         }
+    }
+
+    #[test]
+    fn dots_at_matches_the_ends_and_the_shape_curve() {
+        let mut s = seq(&[
+            ((10.0, 10.0), (30.0, 10.0)),
+            ((10.0, 50.0), (10.0, 70.0)),
+            ((60.0, 40.0), (80.0, 20.0)),
+        ]);
+        let p = Planner::new(&s, 100, 100).unwrap();
+        assert_eq!(p.dots_at(0.0).unwrap(), s.dots.first_positions());
+        assert_eq!(p.dots_at(1.0).unwrap(), s.dots.second_positions());
+        assert_eq!(p.dots_at(0.5).unwrap(), s.dots.interpolated(0.5));
+        assert_eq!(p.dots_at(f64::NAN).unwrap(), s.dots.first_positions());
+        s.shape_curve = curve(&[(0.0, 0.0), (0.5, 0.9), (1.0, 1.0)]);
+        let p = Planner::new(&s, 100, 100).unwrap();
+        assert_eq!(p.dots_at(0.5).unwrap(), s.dots.interpolated(0.9));
+        s.morph = MorphType::Direct;
+        assert!(Planner::new(&s, 100, 100).unwrap().dots_at(0.5).is_none());
     }
 
     #[test]

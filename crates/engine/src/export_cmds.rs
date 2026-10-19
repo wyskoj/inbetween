@@ -1,4 +1,4 @@
-//! Export commands: `export.frame`, `export.sequence`, `export.movie`.
+//! Export commands: `export.frame`, `frame.exportEdit`, `export.sequence`, `export.movie`.
 
 use crate::CommandSpec;
 
@@ -13,12 +13,14 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 mod files {
     use super::*;
     use crate::movie::{self, MAX_MOVIE_FRAMES};
+    use crate::Prepared;
     use crate::{CommandError, ParamKind, ParamSpec, Params, Session};
     use inbetween_codecs::Rgba8Image;
-    use inbetween_doc::MAX_FRAMES;
+    use inbetween_doc::{DotPair, DotSet, MAX_FRAMES};
+    use inbetween_morph::Planner;
     use inbetween_raster::Image;
     use serde_json::{json, Value};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     const SEQUENCE: ParamSpec = ParamSpec::new(
         "sequence",
@@ -51,6 +53,21 @@ mod files {
             "Frame number, starting at 0 (instead of `t`)",
         )
         .range(0.0, MAX_FRAMES as f64),
+        SEQUENCE,
+    ];
+
+    const EDIT_PARAMS: &[ParamSpec] = &[
+        FRAME_PARAMS[0],
+        ParamSpec::new(
+            "dots_out",
+            ParamKind::Path,
+            false,
+            "Dot file to write: the dots as they sit in the frame, on both sides",
+        )
+        .save_file(&["inbetweendots"])
+        .default_is("the image path with .inbetweendots"),
+        FRAME_PARAMS[1],
+        FRAME_PARAMS[2],
         SEQUENCE,
     ];
 
@@ -98,7 +115,12 @@ mod files {
         Ok(())
     }
 
-    fn frame(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    /// Render the frame `t` or `frame` picks (frame 0 by default): the sequence index, the
+    /// image, and the morph time it shows.
+    fn render_one(
+        session: &mut Session,
+        params: &Params,
+    ) -> Result<(usize, Image, f64, Prepared), CommandError> {
         if params.has("t") && params.has("frame") {
             return Err(CommandError::BadParams(
                 "give either `t` or `frame`, not both".into(),
@@ -107,15 +129,61 @@ mod files {
         let index = session.sequence_index(params)?;
         let prepared = session.prepare(index)?;
         let renderer = prepared.renderer()?;
-        let image = match (params.number("t"), params.integer("frame")) {
-            (Some(t), _) => renderer.render_t(t)?,
-            (None, Some(n)) => renderer.render_frame(n as u32)?,
-            (None, None) => renderer.render_frame(0)?,
+        let (image, t) = match (params.number("t"), params.integer("frame")) {
+            (Some(t), _) => (renderer.render_t(t)?, t),
+            (None, Some(n)) => (
+                renderer.render_frame(n as u32)?,
+                prepared.sequence.frame_time(n as u32),
+            ),
+            (None, None) => (renderer.render_frame(0)?, prepared.sequence.frame_time(0)),
         };
+        drop(renderer);
+        Ok((index, image, t, prepared))
+    }
+
+    fn frame(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let (_, image, _, _) = render_one(session, params)?;
         let out = params.string("out").unwrap_or_default();
         write_image(Path::new(out), &image)?;
         Ok(json!({
             "out": out,
+            "width": image.width(),
+            "height": image.height(),
+        }))
+    }
+
+    /// A frame as an image plus its dots, ready to be edited as a new starting point: the
+    /// dots sit where the frame draws them, the same on both sides of every pair.
+    fn export_edit(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let (index, image, t, prepared) = render_one(session, params)?;
+        let out = params.string("out").unwrap_or_default();
+        let dots_path = match params.string("dots_out") {
+            Some(p) => PathBuf::from(p),
+            None => Path::new(out).with_extension("inbetweendots"),
+        };
+        let seq = &prepared.sequence;
+        let planned = Planner::new(seq, prepared.output.0, prepared.output.1)
+            .map_err(|e| CommandError::Render(e.into()))?
+            .dots_at(t);
+        // Morph types that never warp ignore their dots: place them by the shape curve alone.
+        let positions = planned.unwrap_or_else(|| seq.dots.interpolated(seq.shape_curve.eval(t)));
+        let dots = DotSet::new(positions.iter().map(|p| DotPair::fixed(*p)).collect());
+        // Dots first, so a bad dot path stops before an image is written; if the image then
+        // fails, take back the dot file this call created.
+        let dots_existed = dots_path.exists();
+        inbetween_format::write_dots(&dots_path, &dots)?;
+        if let Err(e) = write_image(Path::new(out), &image) {
+            if !dots_existed {
+                let _ = std::fs::remove_file(&dots_path);
+            }
+            return Err(e);
+        }
+        Ok(json!({
+            "out": out,
+            "dots_out": dots_path.display().to_string(),
+            "sequence": index,
+            "t": t,
+            "dots": dots.len(),
             "width": image.width(),
             "height": image.height(),
         }))
@@ -260,6 +328,18 @@ mod files {
                 disabled_reason: "the project has no sequences to render",
                 edits: false,
                 run: frame,
+            },
+            CommandSpec {
+                id: "frame.exportEdit",
+                label: "Export Frame For Editing",
+                menu: "File/Export/Frame For Editing...",
+                shortcut: None,
+                description: "Render one frame to an image file and write the dots as they sit in that frame to a .inbetweendots file beside it, so the frame can start a new sequence.",
+                params: EDIT_PARAMS,
+                enabled: has_sequence,
+                disabled_reason: "the project has no sequences to render",
+                edits: false,
+                run: export_edit,
             },
             CommandSpec {
                 id: "export.sequence",
