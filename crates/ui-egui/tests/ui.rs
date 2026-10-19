@@ -721,3 +721,40 @@ fn sequence_option_menu_items_flip_on_and_off_and_undo() {
     assert_eq!(seq(&h).mesh, inbetween_doc::MeshPolicy::Frame0);
     h.run();
 }
+
+#[test]
+fn file_new_and_the_wizard_replace_the_project_through_the_menu_path() {
+    let mut h = demo_harness();
+    h.state_mut().invoke("file.new");
+    h.run();
+    assert!(h.state().form().is_none(), "New needs no input");
+    assert_eq!(h.state().session().project().sequences.len(), 1);
+    assert!(h.state().session().path().is_none());
+
+    let demo = format!("{}/../../demo", env!("CARGO_MANIFEST_DIR"));
+    h.state_mut().invoke("file.wizard");
+    h.run();
+    let form = h.state().form().expect("the wizard needs images");
+    assert_eq!(form.id, "file.wizard");
+    h.state_mut().submit_form();
+    assert!(h
+        .state()
+        .form()
+        .unwrap()
+        .error
+        .as_deref()
+        .unwrap()
+        .contains("required"));
+    h.state_mut().form_mut().unwrap().set_list(
+        "images",
+        vec![format!("{demo}/sun.png"), format!("{demo}/moon.png")],
+    );
+    shot(&mut h, "wizard_form");
+    h.state_mut().submit_form();
+    h.run();
+    assert!(h.state().form().is_none());
+    let seqs = &h.state().session().project().sequences;
+    assert_eq!(seqs.len(), 1);
+    assert!(seqs[0].image1.0.ends_with("sun.png"));
+    assert_eq!(h.state().status().map(|s| s.is_error), Some(false));
+}

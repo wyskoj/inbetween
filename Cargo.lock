@@ -1946,6 +1946,7 @@ dependencies = [
 name = "inbetween-engine"
 version = "0.0.0"
 dependencies = [
+ "image",
  "inbetween-codecs",
  "inbetween-doc",
  "inbetween-export",

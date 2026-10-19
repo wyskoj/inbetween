@@ -219,7 +219,10 @@ impl InbetweenApp {
         let result = self.registry.run_caught(&mut self.session, id, params);
         match &result {
             Ok(done) => {
-                if matches!(id, "project.open" | "project.new") {
+                if matches!(
+                    id,
+                    "project.open" | "project.new" | "file.new" | "file.wizard"
+                ) {
                     self.state.refit_all();
                     self.state.sequence = 0;
                     self.state.selected = None;
@@ -294,6 +297,11 @@ impl InbetweenApp {
                 Some(n),
             ) => {
                 self.select_sequence(n);
+            }
+            ("file.appendProject", _) => {
+                if let Some(first) = done["first"].as_u64() {
+                    self.select_sequence(first as usize);
+                }
             }
             ("sequence.delete", _) => {
                 let deleted = done["deleted"].as_u64().map_or(usize::MAX, |n| n as usize);
@@ -1294,7 +1302,9 @@ impl InbetweenApp {
                             ui.label(format!("{}{required}", field.spec.name))
                                 .on_hover_text(field.spec.description);
                             ui.horizontal(|ui| {
-                                if field.spec.kind == ParamKind::Bool {
+                                if field.spec.kind == ParamKind::PathList {
+                                    path_list_editor(ui, field);
+                                } else if field.spec.kind == ParamKind::Bool {
                                     ui.checkbox(&mut field.flag, "");
                                 } else {
                                     let hint = field.spec.default.unwrap_or(field.spec.description);
@@ -1482,6 +1492,60 @@ fn menu_items(
 }
 
 /// A native file dialog for a path parameter.
+/// The editor for a list of paths: one row per path with move and remove buttons, and an
+/// Add button that opens a multi-select file dialog.
+fn path_list_editor(ui: &mut egui::Ui, field: &mut crate::form::Field) {
+    ui.vertical(|ui| {
+        let mut remove = None;
+        let mut swap = None;
+        let count = field.list.len();
+        for (i, path) in field.list.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(format!("{}.", i + 1));
+                let name = std::path::Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone());
+                ui.label(name).on_hover_text(path);
+                if ui.add_enabled(i > 0, egui::Button::new("Up")).clicked() {
+                    swap = Some((i - 1, i));
+                }
+                if ui
+                    .add_enabled(i + 1 < count, egui::Button::new("Down"))
+                    .clicked()
+                {
+                    swap = Some((i, i + 1));
+                }
+                if ui.button("Remove").clicked() {
+                    remove = Some(i);
+                }
+            });
+        }
+        if let Some((a, b)) = swap {
+            field.list.swap(a, b);
+        }
+        if let Some(i) = remove {
+            field.list.remove(i);
+        }
+        if ui.button("Add...").clicked() {
+            field.list.extend(browse_many(&field.spec));
+        }
+    });
+}
+
+fn browse_many(spec: &inbetween_engine::ParamSpec) -> Vec<String> {
+    let mut dialog = rfd::FileDialog::new();
+    if !spec.extensions.is_empty() {
+        dialog = dialog.add_filter("Files", spec.extensions);
+    }
+    dialog
+        .pick_files()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.display().to_string())
+        .collect()
+}
+
 fn browse(spec: &inbetween_engine::ParamSpec) -> Option<String> {
     let mut dialog = rfd::FileDialog::new();
     if !spec.extensions.is_empty() {

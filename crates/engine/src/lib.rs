@@ -39,6 +39,6 @@ mod session;
 mod track_cmds;
 
 pub use error::CommandError;
-pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_STRING_BYTES};
+pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_LIST_ENTRIES, MAX_STRING_BYTES};
 pub use registry::{CommandInfo, CommandSpec, Registry};
 pub use session::{Prepared, Session};

@@ -163,19 +163,7 @@ mod files {
     /// Longest side of the embedded thumbnail, in pixels.
     const THUMBNAIL_SIDE: u32 = 256;
 
-    /// An absolute path as a string, whether or not the file exists yet.
-    fn absolute(path: &str) -> Result<String, CommandError> {
-        std::path::absolute(path)
-            .map(|p| p.display().to_string())
-            .map_err(|e| CommandError::Io(format!("{path}: {e}")))
-    }
-
-    fn stem(path: &str) -> String {
-        Path::new(path)
-            .file_stem()
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    }
+    use crate::file_cmds::{absolute, stem};
 
     fn new(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
         let (one, two) = (

@@ -11,6 +11,15 @@ pub struct Field {
     pub text: String,
     /// For `Bool` parameters.
     pub flag: bool,
+    /// For `PathList` parameters: the paths, in order.
+    pub list: Vec<String>,
+}
+
+impl Field {
+    /// A boolean that is on unless said otherwise has to send `false` explicitly.
+    fn defaults_on(&self) -> bool {
+        self.spec.default == Some("true")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -32,10 +41,15 @@ impl Form {
             fields: spec
                 .params
                 .iter()
-                .map(|p| Field {
-                    spec: *p,
-                    text: String::new(),
-                    flag: false,
+                .map(|p| {
+                    let mut field = Field {
+                        spec: *p,
+                        text: String::new(),
+                        flag: false,
+                        list: Vec::new(),
+                    };
+                    field.flag = field.defaults_on();
+                    field
                 })
                 .collect(),
             error: None,
@@ -50,9 +64,24 @@ impl Form {
             let name = field.spec.name;
             let text = field.text.trim();
             if field.spec.kind == ParamKind::Bool {
-                if field.flag {
-                    object.insert(name.to_string(), Value::Bool(true));
+                if field.flag || field.defaults_on() {
+                    object.insert(name.to_string(), Value::Bool(field.flag));
                 }
+                continue;
+            }
+            if field.spec.kind == ParamKind::PathList {
+                if field.list.is_empty() {
+                    if field.spec.required {
+                        return Err(format!("`{name}` is required"));
+                    }
+                    continue;
+                }
+                let items = field
+                    .list
+                    .iter()
+                    .map(|p| Value::String(p.clone()))
+                    .collect();
+                object.insert(name.to_string(), Value::Array(items));
                 continue;
             }
             if text.is_empty() {
@@ -76,11 +105,18 @@ impl Form {
                     }
                     Value::from(n)
                 }
-                ParamKind::Bool => continue,
+                ParamKind::Bool | ParamKind::PathList => continue,
             };
             object.insert(name.to_string(), value);
         }
         Ok(Value::Object(object))
+    }
+
+    /// Set a path-list field, e.g. from dropped files.
+    pub fn set_list(&mut self, name: &str, paths: Vec<String>) {
+        if let Some(f) = self.fields.iter_mut().find(|f| f.spec.name == name) {
+            f.list = paths;
+        }
     }
 
     /// Set a field's text, e.g. from a file dialog.
@@ -161,5 +197,29 @@ mod tests {
         let params = f.to_params().unwrap();
         let spec = registry.get("project.new").unwrap();
         assert!(inbetween_engine::Params::parse(spec.params, &params).is_ok());
+    }
+
+    #[test]
+    fn path_lists_become_json_arrays() {
+        let mut f = form("file.wizard");
+        assert_eq!(f.to_params().unwrap_err(), "`images` is required");
+        f.set_list("images", vec!["a.png".into(), "b.png".into()]);
+        let p = f.to_params().unwrap();
+        assert_eq!(p["images"], serde_json::json!(["a.png", "b.png"]));
+        // `loop` is off by default and left out; the engine accepts the result.
+        assert!(p.get("loop").is_none());
+        let spec = Registry::standard().get("file.wizard").copied().unwrap();
+        assert!(inbetween_engine::Params::parse(spec.params, &p).is_ok());
+    }
+
+    #[test]
+    fn booleans_that_default_on_send_an_explicit_choice() {
+        let mut f = form("project.saveAs");
+        f.set("path", "x.inbetween");
+        assert_eq!(f.to_params().unwrap()["thumbnail"], true);
+        if let Some(field) = f.fields.iter_mut().find(|f| f.spec.name == "thumbnail") {
+            field.flag = false;
+        }
+        assert_eq!(f.to_params().unwrap()["thumbnail"], false);
     }
 }
