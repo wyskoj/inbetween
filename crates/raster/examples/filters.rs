@@ -11,7 +11,10 @@ fn time(name: &str, f: impl Fn() -> Image) {
     for _ in 0..runs {
         let _ = f();
     }
-    println!("{name:<14} {:>8.1} ms", start.elapsed().as_secs_f64() * 1000.0 / f64::from(runs));
+    println!(
+        "{name:<14} {:>8.1} ms",
+        start.elapsed().as_secs_f64() * 1000.0 / f64::from(runs)
+    );
 }
 
 fn main() {
@@ -28,19 +31,32 @@ fn main() {
     time("rotate90", || ok(transform::rotate_quarter(&img, 1)));
     time("flip", || ok(transform::flip(&img, true, false)));
     time("resample", || {
-        ok(transform::resample(&img, 1920, 1080, [0.98, 0.17, 10.0, -0.17, 0.98, 30.0]))
+        ok(transform::resample(
+            &img,
+            1920,
+            1080,
+            [0.98, 0.17, 10.0, -0.17, 0.98, 30.0],
+        ))
     });
     time("adjust", || {
         ok(inbetween_raster::adjust(
             &img,
-            &Adjust { brightness: 20.0, contrast: 10.0, hue: 30.0, saturation: 10.0, ..Adjust::default() },
+            &Adjust {
+                brightness: 20.0,
+                contrast: 10.0,
+                hue: 30.0,
+                saturation: 10.0,
+                ..Adjust::default()
+            },
         ))
     });
     time("smooth", || ok(filter::smooth(&img, 1.0)));
     time("box r=10", || ok(filter::box_blur(&img, 10)));
     time("gaussian s=10", || ok(filter::gaussian(&img, 10.0)));
     time("zoom blur", || ok(filter::zoom_blur(&img, 0.5, 0.5, 0.3)));
-    time("radial blur", || ok(filter::radial_blur(&img, 0.5, 0.5, 20.0)));
+    time("radial blur", || {
+        ok(filter::radial_blur(&img, 0.5, 0.5, 20.0))
+    });
     time("sharpen", || ok(filter::sharpen(&img, 1.0, 2.0)));
     time("emboss", || ok(filter::emboss(&img, 45.0, 1.0, 0.5)));
     time("mosaic 16", || ok(filter::mosaic(&img, 16)));

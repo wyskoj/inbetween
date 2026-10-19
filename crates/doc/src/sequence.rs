@@ -1,4 +1,4 @@
-use crate::{Camera, Curve, DocError, DotSet, Effects, Track};
+use crate::{Camera, Caption, Curve, DocError, DotSet, Effects, ImageEdit, Track};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 
@@ -170,6 +170,14 @@ pub struct Sequence {
     pub master_curve: Curve,
     /// Bends the path every dot travels.
     pub track: Track,
+    /// Edits applied to Image 1 and Image 2 before they are morphed.
+    #[serde(skip_serializing_if = "ImageEdit::is_identity")]
+    pub edit1: ImageEdit,
+    #[serde(skip_serializing_if = "ImageEdit::is_identity")]
+    pub edit2: ImageEdit,
+    /// A caption drawn over every frame of this sequence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caption: Option<Caption>,
 }
 
 impl Default for Sequence {
@@ -193,6 +201,9 @@ impl Default for Sequence {
             camera: Camera::default(),
             master_curve: Curve::opaque(),
             track: Track::default(),
+            edit1: ImageEdit::default(),
+            edit2: ImageEdit::default(),
+            caption: None,
         }
     }
 }
@@ -204,6 +215,55 @@ impl Sequence {
             image2,
             ..Self::default()
         }
+    }
+
+    /// The edit of Image 1 (`which` 1) or Image 2 (any other value).
+    pub fn edit(&self, which: u8) -> &ImageEdit {
+        if which == 1 {
+            &self.edit1
+        } else {
+            &self.edit2
+        }
+    }
+
+    pub fn edit_mut(&mut self, which: u8) -> &mut ImageEdit {
+        if which == 1 {
+            &mut self.edit1
+        } else {
+            &mut self.edit2
+        }
+    }
+
+    /// Every file this sequence refers to: both images, the effect images and caption fonts.
+    pub fn all_paths(&self) -> Vec<&ImageRef> {
+        let mut out = vec![&self.image1, &self.image2];
+        out.extend(self.effects.all_images());
+        let captions = [&self.edit1.caption, &self.edit2.caption, &self.caption];
+        out.extend(
+            captions
+                .into_iter()
+                .flatten()
+                .filter_map(|c| c.font.as_ref()),
+        );
+        out
+    }
+
+    /// Mutable form of [`Sequence::all_paths`], for rebasing paths.
+    pub fn all_paths_mut(&mut self) -> Vec<&mut ImageRef> {
+        let mut out = vec![&mut self.image1, &mut self.image2];
+        out.extend(self.effects.all_images_mut());
+        let captions = [
+            &mut self.edit1.caption,
+            &mut self.edit2.caption,
+            &mut self.caption,
+        ];
+        out.extend(
+            captions
+                .into_iter()
+                .flatten()
+                .filter_map(|c| c.font.as_mut()),
+        );
+        out
     }
 
     /// Whether the frame needs more than the plain morph that the GPU renderer draws: any
@@ -269,6 +329,11 @@ impl Sequence {
         self.camera.validate()?;
         self.track.validate()?;
         self.effects.validate()?;
+        self.edit1.validate()?;
+        self.edit2.validate()?;
+        if let Some(c) = &self.caption {
+            c.validate()?;
+        }
         for (i, p) in self.dots.pairs.iter().enumerate() {
             if !(p.first.is_finite() && p.second.is_finite()) {
                 return Err(DocError::NonFiniteDot(i));

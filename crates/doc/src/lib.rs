@@ -12,8 +12,10 @@
 )]
 
 mod camera;
+mod caption;
 mod curve;
 mod dots;
+mod edit;
 mod effects;
 mod error;
 mod face;
@@ -24,8 +26,13 @@ mod track;
 pub use camera::{
     Camera, CameraAspect, CameraKey, MAX_CAMERA_KEYS, MAX_OFFSET, MAX_SCALE, MIN_SCALE,
 };
+pub use caption::{Align, Caption, Shadow, MAX_CAPTION_ANCHOR, MAX_CAPTION_SIZE, MAX_CAPTION_TEXT};
 pub use curve::{Curve, CurvePoint, MAX_CURVE_POINTS};
 pub use dots::{DotPair, DotSet};
+pub use edit::{
+    affine_apply, affine_inv, affine_mul, AdjustSettings, Affine, Crop, Filter, Geometry,
+    ImageEdit, IDENTITY, MAX_CROP_OFFSET, MAX_EDIT_PIXELS, MAX_EDIT_SIDE, MAX_FILTERS,
+};
 pub use effects::{BackColor, Effects, ImageLayer, Light, Mask, Radial, Trail, Transition};
 pub use error::DocError;
 pub use face::{FaceDot, FaceModel, FACE_PRESETS, MAX_FACE_DOTS, MAX_FACE_GUIDES, MAX_FACE_NAME};

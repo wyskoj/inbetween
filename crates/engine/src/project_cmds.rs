@@ -270,12 +270,8 @@ mod files {
             }
         };
         let mut out = project.clone();
-        for seq in &mut out.sequences {
-            seq.image1 = fix(&seq.image1);
-            seq.image2 = fix(&seq.image2);
-            for image in seq.effects.all_images_mut() {
-                *image = fix(image);
-            }
+        for image in out.all_paths_mut() {
+            *image = fix(image);
         }
         Ok((out, kept))
     }

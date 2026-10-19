@@ -137,11 +137,7 @@ pub fn smooth(img: &Image, strength: f64) -> Result<Image, RasterError> {
     }
     let blurred = separable(img, |d, w| kernel_rows(d, w, &[0.25, 0.5, 0.25]))?;
     let mut out = img.clone();
-    for (o, b) in out
-        .as_mut_slice()
-        .iter_mut()
-        .zip(blurred.as_slice().iter())
-    {
+    for (o, b) in out.as_mut_slice().iter_mut().zip(blurred.as_slice().iter()) {
         *o += (*b - *o) * s;
     }
     Ok(out)
@@ -239,10 +235,8 @@ pub fn radial_blur(img: &Image, cx: f64, cy: f64, angle: f64) -> Result<Image, R
         for k in 0..BLUR_SAMPLES {
             let a = angle * (k as f64 / (BLUR_SAMPLES - 1) as f64 - 0.5);
             let (s, c) = a.sin_cos();
-            let p = img.sample_bilinear(
-                (cx + dx * c - dy * s) as f32,
-                (cy + dx * s + dy * c) as f32,
-            );
+            let p =
+                img.sample_bilinear((cx + dx * c - dy * s) as f32, (cy + dx * s + dy * c) as f32);
             for (a, v) in acc.iter_mut().zip(p) {
                 *a += v;
             }
@@ -461,7 +455,13 @@ pub fn whirl(img: &Image, cx: f64, cy: f64, radius: f64, angle: f64) -> Result<I
 
 /// Pinch (`amount` in `0..=1`) or bulge (`-1..=0`) the area within `radius` pixels of the
 /// centre.
-pub fn pinch(img: &Image, cx: f64, cy: f64, radius: f64, amount: f64) -> Result<Image, RasterError> {
+pub fn pinch(
+    img: &Image,
+    cx: f64,
+    cy: f64,
+    radius: f64,
+    amount: f64,
+) -> Result<Image, RasterError> {
     let radius = num(radius, 0.0, 100_000.0, 0.0);
     let amount = num(amount, -1.0, 1.0, 0.0);
     if radius <= 0.0 || amount == 0.0 {
@@ -476,7 +476,9 @@ pub fn pinch(img: &Image, cx: f64, cy: f64, radius: f64, amount: f64) -> Result<
         if d >= radius || d == 0.0 {
             return img.get(x, y).unwrap_or_default();
         }
-        let s = (std::f64::consts::FRAC_PI_2 * d / radius).sin().powf(-amount);
+        let s = (std::f64::consts::FRAC_PI_2 * d / radius)
+            .sin()
+            .powf(-amount);
         img.sample_bilinear((cx + dx * s) as f32, (cy + dy * s) as f32)
     })
 }
@@ -508,9 +510,9 @@ mod tests {
     }
 
     fn valid(img: &Image) -> bool {
-        img.as_slice().chunks_exact(4).all(|p| {
-            p.iter().all(|v| v.is_finite()) && (0.0..=1.0).contains(&p[3])
-        })
+        img.as_slice()
+            .chunks_exact(4)
+            .all(|p| p.iter().all(|v| v.is_finite()) && (0.0..=1.0).contains(&p[3]))
     }
 
     fn all(img: &Image) -> Vec<Image> {
@@ -574,7 +576,10 @@ mod tests {
     fn nan_parameters_are_neutral() {
         let img = ramp(6, 6);
         assert_eq!(gaussian(&img, f64::NAN).unwrap(), img);
-        assert_eq!(whirl(&img, f64::NAN, f64::NAN, f64::NAN, f64::NAN).unwrap(), img);
+        assert_eq!(
+            whirl(&img, f64::NAN, f64::NAN, f64::NAN, f64::NAN).unwrap(),
+            img
+        );
         assert!(valid(&emboss(&img, f64::NAN, f64::NAN, f64::NAN).unwrap()));
         assert!(valid(&zoom_blur(&img, f64::NAN, f64::NAN, 1.0).unwrap()));
     }
@@ -601,7 +606,11 @@ mod tests {
     fn large_gaussian_spreads_and_keeps_flat_images_flat() {
         let flat = Image::filled(20, 20, [0.4, 0.4, 0.4, 1.0]).unwrap();
         let out = gaussian(&flat, 8.0).unwrap();
-        assert!(out.as_slice().iter().zip(flat.as_slice()).all(|(a, b)| (a - b).abs() < 1e-5));
+        assert!(out
+            .as_slice()
+            .iter()
+            .zip(flat.as_slice())
+            .all(|(a, b)| (a - b).abs() < 1e-5));
         let out = gaussian(&dot(41, 41), 5.0).unwrap();
         assert!(out.get(20, 20).unwrap()[0] < 0.1);
         assert!(out.get(25, 20).unwrap()[0] > 0.0);

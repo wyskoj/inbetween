@@ -156,12 +156,8 @@ fn validate(project: &Project) -> Result<(), FormatError> {
         });
     }
     project.validate()?;
-    for seq in &project.sequences {
-        check_image_path(&seq.image1.0)?;
-        check_image_path(&seq.image2.0)?;
-        for image in seq.effects.all_images() {
-            check_image_path(&image.0)?;
-        }
+    for image in project.all_paths() {
+        check_image_path(&image.0)?;
     }
     Ok(())
 }
@@ -170,9 +166,10 @@ fn validate(project: &Project) -> Result<(), FormatError> {
 mod tests {
     use super::*;
     use inbetween_doc::{
-        BackColor, Camera, CameraKey, Curve, CurvePoint, DotPair, DotSet, Effects, FitMode,
-        ImageLayer, ImageRef, Light, Mask, MeshPolicy, MorphType, OutputSettings, ProjectType,
-        Radial, Sequence, Track, TrackPoint, Trail, Transition,
+        AdjustSettings, Align, BackColor, Camera, CameraKey, Caption, Crop, Curve, CurvePoint,
+        DotPair, DotSet, Effects, Filter, FitMode, ImageEdit, ImageLayer, ImageRef, Light, Mask,
+        MeshPolicy, MorphType, OutputSettings, ProjectType, Radial, Sequence, Shadow, Track,
+        TrackPoint, Trail, Transition,
     };
     use inbetween_geom::Point;
 
@@ -294,6 +291,64 @@ mod tests {
                         flip_h: true,
                         flip_v: false,
                     },
+                    edit1: ImageEdit {
+                        quarter_turns: 3,
+                        flip_h: true,
+                        flip_v: false,
+                        crop: Some(Crop {
+                            x: -2.5,
+                            y: 1.0 / 3.0,
+                            w: 100.25,
+                            h: 50.5,
+                        }),
+                        angle: 12.5,
+                        expand: true,
+                        adjust: AdjustSettings {
+                            brightness: 10.5,
+                            contrast: -20.0,
+                            red: 1.0,
+                            green: 2.0,
+                            blue: 3.0,
+                            hue: -45.5,
+                            saturation: 33.3,
+                            negative: true,
+                            grayscale: false,
+                        },
+                        filters: vec![
+                            Filter::Gaussian { sigma: 0.1 + 0.2 },
+                            Filter::Mosaic { cell: 9 },
+                            Filter::Splash {
+                                radius: 7,
+                                seed: u64::MAX,
+                            },
+                            Filter::Whirl {
+                                cx: 0.5,
+                                cy: 1.0 / 3.0,
+                                radius: 120.5,
+                                angle: -90.0,
+                            },
+                        ],
+                        caption: Some(Caption {
+                            text: "image \"one\"
+line two"
+                                .into(),
+                            font: Some(ImageRef::new("fonts/x.ttf")),
+                            ..Caption::default()
+                        }),
+                    },
+                    edit2: ImageEdit::default(),
+                    caption: Some(Caption {
+                        text: "sequence".into(),
+                        bold: true,
+                        italic: true,
+                        border_size: 2.5,
+                        shadow: Shadow {
+                            size: 3.0,
+                            ..Shadow::default()
+                        },
+                        align: Align::Right,
+                        ..Caption::default()
+                    }),
                 },
                 Sequence::default(),
             ],
@@ -307,6 +362,11 @@ mod tests {
                 face.guides.push([0, 5]);
                 face
             },
+            caption: Some(Caption {
+                text: "movie".into(),
+                font: Some(ImageRef::new("../f/y.otf")),
+                ..Caption::default()
+            }),
         }
     }
 
@@ -320,6 +380,48 @@ mod tests {
             project_to_string(&project_from_str(&text).unwrap()).unwrap(),
             text
         );
+    }
+
+    #[test]
+    fn identity_edits_and_no_captions_are_not_written() {
+        let p = Project {
+            sequences: vec![Sequence::default()],
+            ..Project::default()
+        };
+        let text = project_to_string(&p).unwrap();
+        assert!(!text.contains("edit1") && !text.contains("edit2") && !text.contains("caption"));
+        assert_eq!(project_from_str(&text).unwrap(), p);
+    }
+
+    #[test]
+    fn invalid_edits_and_captions_are_refused() {
+        let with = |f: fn(&mut Project)| {
+            let mut p = sample();
+            f(&mut p);
+            let text = serde_json::to_string(&serde_json::json!({
+                "format": "inbetween-project", "version": 1, "project": p
+            }))
+            .unwrap();
+            project_from_str(&text).is_err()
+        };
+        assert!(
+            !with(|_| {}),
+            "the unchanged sample must load through this path"
+        );
+        assert!(with(|p| p.sequences[0].edit1.quarter_turns = 9));
+        assert!(with(
+            |p| p.sequences[0].edit2.filters = vec![Filter::Blur { radius: 0 }]
+        ));
+        assert!(with(|p| p.sequences[0].edit1.angle = 1e9));
+        assert!(with(|p| if let Some(c) = &mut p.caption {
+            c.size = -3.0
+        }));
+        assert!(with(|p| if let Some(c) = &mut p.sequences[0].caption {
+            c.text = "x".repeat(5000)
+        }));
+        assert!(with(|p| if let Some(c) = &mut p.caption {
+            c.font = Some(ImageRef::new("a b"))
+        }));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::{DocError, FaceModel, Sequence};
+use crate::{Caption, DocError, FaceModel, ImageRef, Sequence};
 use serde::{Deserialize, Serialize};
 
 /// Largest output side in pixels.
@@ -57,6 +57,9 @@ pub struct Project {
     pub sequences: Vec<Sequence>,
     /// The face dot model the face tools place and fit.
     pub face: FaceModel,
+    /// A caption drawn over every frame of the movie.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caption: Option<Caption>,
 }
 
 impl Project {
@@ -111,12 +114,37 @@ impl Project {
         None
     }
 
+    /// Every file the project refers to: images, effect images and caption fonts.
+    pub fn all_paths(&self) -> Vec<&ImageRef> {
+        let mut out: Vec<&ImageRef> = self
+            .sequences
+            .iter()
+            .flat_map(Sequence::all_paths)
+            .collect();
+        out.extend(self.caption.iter().filter_map(|c| c.font.as_ref()));
+        out
+    }
+
+    /// Mutable form of [`Project::all_paths`], for rebasing paths.
+    pub fn all_paths_mut(&mut self) -> Vec<&mut ImageRef> {
+        let mut out: Vec<&mut ImageRef> = self
+            .sequences
+            .iter_mut()
+            .flat_map(Sequence::all_paths_mut)
+            .collect();
+        out.extend(self.caption.iter_mut().filter_map(|c| c.font.as_mut()));
+        out
+    }
+
     pub fn validate(&self) -> Result<(), DocError> {
         let OutputSettings { width, height } = self.output;
         if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
             return Err(DocError::BadOutputSize { width, height });
         }
         self.face.validate()?;
+        if let Some(c) = &self.caption {
+            c.validate()?;
+        }
         self.sequences.iter().try_for_each(Sequence::validate)
     }
 }

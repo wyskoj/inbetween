@@ -45,9 +45,7 @@ fn rebased_sequences(other: Project, other_file: &Path) -> Result<Vec<Sequence>,
     };
     let mut sequences = other.sequences;
     for seq in &mut sequences {
-        fix(&mut seq.image1)?;
-        fix(&mut seq.image2)?;
-        for image in seq.effects.all_images_mut() {
+        for image in seq.all_paths_mut() {
             fix(image)?;
         }
     }

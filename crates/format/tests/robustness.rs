@@ -4,7 +4,8 @@
 //! Property: no input panics, and anything that parses re-serialises and parses back equal.
 
 use inbetween_doc::{
-    Curve, CurvePoint, DotPair, DotSet, FitMode, ImageRef, MeshPolicy, MorphType, Project, Sequence,
+    Caption, Crop, Curve, CurvePoint, DotPair, DotSet, Filter, FitMode, ImageEdit, ImageRef,
+    MeshPolicy, MorphType, Project, Sequence,
 };
 use inbetween_format::{dots_from_bytes, dots_to_string, project_from_bytes, project_to_string};
 use inbetween_geom::Point;
@@ -88,10 +89,35 @@ fn project_seed() -> String {
                     ],
                     linear: false,
                 },
+                edit1: ImageEdit {
+                    quarter_turns: 1,
+                    crop: Some(Crop {
+                        x: 1.0,
+                        y: 2.0,
+                        w: 30.0,
+                        h: 20.0,
+                    }),
+                    angle: 5.0,
+                    filters: vec![Filter::Gaussian { sigma: 2.0 }, Filter::Mosaic { cell: 4 }],
+                    caption: Some(Caption {
+                        text: "seed".into(),
+                        font: Some(ImageRef::new("f.ttf")),
+                        ..Caption::default()
+                    }),
+                    ..ImageEdit::default()
+                },
+                caption: Some(Caption {
+                    text: "seq".into(),
+                    ..Caption::default()
+                }),
                 ..Sequence::default()
             },
             Sequence::default(),
         ],
+        caption: Some(Caption {
+            text: "movie".into(),
+            ..Caption::default()
+        }),
         ..Project::default()
     };
     project_to_string(&project).unwrap()
