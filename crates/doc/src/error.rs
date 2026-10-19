@@ -14,6 +14,8 @@ pub enum DocError {
     BadOutputSize { width: u32, height: u32 },
     /// A curve breaks the rules (the text says which).
     BadCurve(&'static str),
+    /// An effect setting is out of range (the text says which).
+    BadEffect(&'static str),
 }
 
 impl fmt::Display for DocError {
@@ -33,6 +35,7 @@ impl fmt::Display for DocError {
             }
             Self::NonFiniteDot(i) => write!(f, "dot pair {i} has a NaN or infinite coordinate"),
             Self::BadCurve(why) => write!(f, "invalid curve: {why}"),
+            Self::BadEffect(why) => write!(f, "invalid effect: {why}"),
             Self::BadOutputSize { width, height } => write!(
                 f,
                 "output size {width} x {height} is not allowed (each side 1 to {})",

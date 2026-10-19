@@ -13,12 +13,16 @@
     clippy::unreachable
 )]
 
+mod anim_cmds;
 mod curve_cmds;
 mod dots_cmds;
 mod edit_cmds;
+mod effect_cmds;
 mod error;
 mod export_cmds;
 mod list_cmds;
+#[cfg(not(target_arch = "wasm32"))]
+mod movie;
 mod params;
 mod project_cmds;
 mod registry;

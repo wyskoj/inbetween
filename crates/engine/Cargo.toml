@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 inbetween-codecs = { path = "../codecs" }
 inbetween-doc = { path = "../doc" }
+inbetween-export = { path = "../export" }
 inbetween-format = { path = "../format" }
 inbetween-geom = { path = "../geom" }
 inbetween-raster = { path = "../raster" }
@@ -17,6 +18,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [dev-dependencies]
+png = "0.18"
 inbetween-testkit = { path = "../testkit" }
 
 [lints]

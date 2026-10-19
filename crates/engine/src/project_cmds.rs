@@ -183,6 +183,10 @@ mod files {
         for seq in &mut out.sequences {
             seq.image1 = fix(&seq.image1)?;
             seq.image2 = fix(&seq.image2)?;
+            let fx = &mut seq.effects;
+            fx.background.image = fix(&fx.background.image)?;
+            fx.mask.image = fix(&fx.mask.image)?;
+            fx.foreground.image = fix(&fx.foreground.image)?;
         }
         Ok(out)
     }

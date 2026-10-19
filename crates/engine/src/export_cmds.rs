@@ -12,11 +12,11 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 #[cfg(not(target_arch = "wasm32"))]
 mod files {
     use super::*;
+    use crate::movie::{self, MAX_MOVIE_FRAMES};
     use crate::{CommandError, ParamKind, ParamSpec, Params, Session};
     use inbetween_codecs::Rgba8Image;
     use inbetween_doc::MAX_FRAMES;
     use inbetween_raster::Image;
-    use inbetween_render_cpu::Renderer;
     use serde_json::{json, Value};
     use std::path::Path;
 
@@ -106,12 +106,7 @@ mod files {
         }
         let index = session.sequence_index(params)?;
         let prepared = session.prepare(index)?;
-        let renderer = Renderer::new(
-            &prepared.sequence,
-            prepared.output,
-            &prepared.image1,
-            prepared.image2.as_deref(),
-        )?;
+        let renderer = prepared.renderer()?;
         let image = match (params.number("t"), params.integer("frame")) {
             (Some(t), _) => renderer.render_t(t)?,
             (None, Some(n)) => renderer.render_frame(n as u32)?,
@@ -149,12 +144,7 @@ mod files {
         let dir = Path::new(params.string("out_dir").unwrap_or_default());
         std::fs::create_dir_all(dir)
             .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
-        let renderer = Renderer::new(
-            &prepared.sequence,
-            prepared.output,
-            &prepared.image1,
-            prepared.image2.as_deref(),
-        )?;
+        let renderer = prepared.renderer()?;
         for n in first..=last {
             let image = renderer.render_frame(n - 1)?;
             write_image(&dir.join(format!("{prefix}_{n:04}.png")), &image)?;
@@ -200,10 +190,19 @@ mod files {
         )
         .range(1.0, MAX_MOVIE_FRAMES as f64)
         .default_is("the last frame"),
+        ParamSpec::new(
+            "reverse",
+            ParamKind::Bool,
+            false,
+            "Write the frames in reverse order (numbering follows the movie, not the order written)",
+        ),
+        ParamSpec::new(
+            "drop_duplicates",
+            ParamKind::Bool,
+            false,
+            "Skip a sequence's first or last frame when it repeats the frame before it (the join of continued sequences)",
+        ),
     ];
-
-    /// Most frames one movie export writes.
-    const MAX_MOVIE_FRAMES: u64 = 10_000_000;
 
     /// Every visible sequence, one after another, as one continuously numbered frame series.
     fn movie(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
@@ -213,55 +212,14 @@ mod files {
                 "`prefix` is a file name prefix and must not contain / \\ or :".into(),
             ));
         }
+        let range = movie::range_from(session, params)?;
         let total = session.project().total_frames();
-        if total == 0 {
-            return Err(CommandError::BadParams(
-                "no visible sequence has any frames; show a sequence first".into(),
-            ));
-        }
-        let first = params.integer("first").map_or(1, |n| n as u64);
-        let last = params
-            .integer("last")
-            .map_or(total, |n| n as u64)
-            .min(total);
-        if first > last {
-            return Err(CommandError::BadParams(format!(
-                "`first` ({first}) is after the last frame to write ({last}); the movie has {total} frames"
-            )));
-        }
         let dir = Path::new(params.string("out_dir").unwrap_or_default());
         std::fs::create_dir_all(dir)
             .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
-        let mut written = 0u64;
-        let mut start = 0u64; // movie frame (from 0) where the current sequence begins
-        let count = session.project().sequences.len();
-        for index in 0..count {
-            let (visible, len) = {
-                let s = session.sequence(index)?;
-                (s.visible, u64::from(s.total_frames()))
-            };
-            if !visible {
-                continue;
-            }
-            let (lo, hi) = (start, start + len); // this sequence owns frames lo..hi
-            start = hi;
-            let wanted = first.max(lo + 1)..=last.min(hi);
-            if wanted.is_empty() {
-                continue;
-            }
-            let prepared = session.prepare(index)?;
-            let renderer = Renderer::new(
-                &prepared.sequence,
-                prepared.output,
-                &prepared.image1,
-                prepared.image2.as_deref(),
-            )?;
-            for n in wanted {
-                let image = renderer.render_frame(u32::try_from(n - 1 - lo).unwrap_or(u32::MAX))?;
-                write_image(&dir.join(format!("{prefix}_{n:04}.png")), &image)?;
-                written += 1;
-            }
-        }
+        let written = movie::render_movie(session, range, &mut |n, image| {
+            write_image(&dir.join(format!("{prefix}_{n:04}.png")), image)
+        })?;
         let (w, h) = (
             session.project().output.width,
             session.project().output.height,
@@ -269,8 +227,8 @@ mod files {
         Ok(json!({
             "dir": dir.display().to_string(),
             "frames": written,
-            "first": first,
-            "last": last,
+            "first": range.first,
+            "last": range.last,
             "total_frames": total,
             "width": w,
             "height": h,

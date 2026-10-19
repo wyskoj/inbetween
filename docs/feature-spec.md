@@ -162,14 +162,16 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 
 ## 7. Effects
 
+*Status: back colour, background, mask and foreground are built per sequence (`effect.*` commands, CPU renderer, D34). Movie-level effects, thumbnail slots, drag-and-drop onto slots and the camera zone are open.*
+
 Movie-level effects cover the whole frame; sequence-level effects apply only inside that sequence's camera zone. Each effect has an on/off switch, a thumbnail slot, and a clear action.
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `effect.backColor` | Solid colour behind the morph; can tint a background image | P1 |
-| [ ] | `effect.background` | Image behind the morph, opacity 0–100 (visible through alpha or a mask) | P1 |
-| [ ] | `effect.mask` | Grayscale image controls morph opacity; intensity −100..100; invert option | P1 |
-| [ ] | `effect.foreground` | RGBA overlay (frames, graphics), opacity 0–100 | P1 |
+| [~] | `effect.backColor` | Solid colour behind the morph; can tint a background image | P1 |
+| [~] | `effect.background` | Image behind the morph, opacity 0–100 (visible through alpha or a mask) | P1 |
+| [~] | `effect.mask` | Grayscale image controls morph opacity; intensity −100..100; invert option | P1 |
+| [~] | `effect.foreground` | RGBA overlay (frames, graphics), opacity 0–100 | P1 |
 | [ ] | `effect.transition` | Grayscale image controls *when* each pixel dissolves (dark first); border softness 0–100; invert | P2 |
 | [ ] | `effect.light` | Grayscale image brightens/darkens the morph; separate bright and dark intensity | P2 |
 | [ ] | `effect.trail` | Motion blur (overlay on) or motion trail (overlay off); tint colour; intensity | P2 |
@@ -219,14 +221,16 @@ Built on open landmark models (e.g. MediaPipe Face Mesh, dlib). Inbetween's face
 
 ## 11. Export
 
+*Status: `export.animation` (GIF, APNG, animated WebP) and `export.video` (MP4, WebM, ProRes through an installed ffmpeg) take `fps`, `first`/`last`, `reverse` and `drop_duplicates`. Open: JPEG quality, DPI, cancel, progress, a bundled encoder.*
+
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [x] | `export.frame` | Current frame to an image file | P0 |
 | [x] | `export.sequence` | Image sequence (PNG with alpha first) | P0 |
-| [ ] | `export.range` | All sequences, current one, or a range | P1 |
-| [ ] | `export.video` | Modern targets: MP4/H.264, WebM (with alpha), ProRes 4444 optional | P1 |
-| [ ] | `export.gif` | Animated GIF, loop or once, opaque or transparent (also APNG/animated WebP) | P1 |
-| [ ] | `export.options` | fps 1–60 (plus 29.97), JPEG quality, DPI, reverse frames, drop duplicate frames at sequence joins, cancellable | P1 |
+| [~] | `export.range` | All sequences, current one, or a range | P1 |
+| [~] | `export.video` | Modern targets: MP4/H.264, WebM (with alpha), ProRes 4444 optional | P1 |
+| [x] | `export.gif` | Animated GIF, loop or once, opaque or transparent (also APNG/animated WebP) | P1 |
+| [~] | `export.options` | fps 1–60 (plus 29.97), JPEG quality, DPI, reverse frames, drop duplicate frames at sequence joins, cancellable | P1 |
 | [ ] | `export.videoSource` | When a source is a video, include its clip before/after the morph | P2 |
 | [ ] | `export.afterSave/afterOpen` | Auto-save project before export; open the result afterwards | P2 |
 | [ ] |  | Output size not capped by the GPU (tile or fall back to CPU) | P1 |

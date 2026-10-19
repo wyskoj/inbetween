@@ -4,7 +4,7 @@
 
 **P0 is complete (tagged v0.1.0): a headless morph engine.** `ib` turns two images and a dot set into a correct, deterministic PNG frame sequence, and the morph invariants (AGENTS.md §3) pass. M0 to M6 are done; the baseline is in `docs/perf.md`.
 
-**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **M8 is done:** the egui shell (two source panels, live GPU preview, add/move/delete dots, zoom and pan, undo, playback). **M9 is done:** all seven morph types, hold frames at each end, and playback controls (first, previous, play, next, last, loop, ping-pong, 1 to 60 fps). **M10 is done:** feature and shape curves (with a curve editor), multi-sequence projects that play back to back, and the sequence list (thumbnails, show/hide/solo, reorder, duplicate, delete, rename, link). **Next: M11** (effects, animated and video export).
+**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **M8 is done:** the egui shell (two source panels, live GPU preview, add/move/delete dots, zoom and pan, undo, playback). **M9 is done:** all seven morph types, hold frames at each end, and playback controls (first, previous, play, next, last, loop, ping-pong, 1 to 60 fps). **M10 is done:** feature and shape curves (with a curve editor), multi-sequence projects that play back to back, and the sequence list (thumbnails, show/hide/solo, reorder, duplicate, delete, rename, link). **M11 is done:** per-sequence effects (back colour, background image, mask, foreground; `effect.*` commands, saved in the project, previewed on the CPU) and animated export (GIF, APNG, animated WebP in pure Rust; MP4, WebM and ProRes through an installed ffmpeg). **Next: M12** (P2 block: layer projects, camera, track curves, transition/light/trail/radial).
 
 *Original P0 goal, for reference:* a headless morph engine with no UI.
 
@@ -73,7 +73,7 @@
 | M8 | egui shell: two source panels, live preview, add/move/delete dots, zoom and pan, undo |
 | M9 | Remaining morph types, sequence length with hold frames, playback controls |
 | M10 | Feature and shape curves, multi-sequence projects, sequence list (done) |
-| M11 | Effects (background, mask, foreground), GIF/APNG/WebP and video export |
+| M11 | Effects (background, mask, foreground), GIF/APNG/WebP and video export (done) |
 | M12 | P2 block: layer projects, camera, track curves, transition/light/trail/radial |
 | M13 | Face tools on open landmark models |
 | M14 | MCP server, packaging and signed releases |

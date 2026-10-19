@@ -14,7 +14,11 @@
     clippy::unreachable
 )]
 
-use inbetween_doc::Sequence;
+mod effects;
+
+pub use effects::{mask_factor, EffectImages};
+
+use inbetween_doc::{Effects, Sequence};
 use inbetween_geom::{Affine, Point};
 use inbetween_morph::{
     fit_transform, transparent_outside, FramePlan, MeshTri, Mix, MixMode, MorphError, Planner,
@@ -33,6 +37,8 @@ pub enum RenderError {
     Raster(RasterError),
     /// The morph type needs Image 2 but none was given.
     MissingImage2,
+    /// An effect is switched on but its image was not given.
+    MissingEffectImage(&'static str),
 }
 
 impl fmt::Display for RenderError {
@@ -41,6 +47,9 @@ impl fmt::Display for RenderError {
             Self::Morph(e) => write!(f, "{e}"),
             Self::Raster(e) => write!(f, "{e}"),
             Self::MissingImage2 => write!(f, "this morph type needs Image 2, which is not loaded"),
+            Self::MissingEffectImage(which) => {
+                write!(f, "the {which} effect is on but its image is not loaded")
+            }
         }
     }
 }
@@ -90,6 +99,8 @@ pub struct Renderer<'a> {
     height: u32,
     source1: Source<'a>,
     source2: Option<Source<'a>>,
+    effects: Effects,
+    effect_images: EffectImages<'a>,
 }
 
 impl<'a> Renderer<'a> {
@@ -124,7 +135,16 @@ impl<'a> Renderer<'a> {
             height,
             source1,
             source2,
+            effects: seq.effects.clone(),
+            effect_images: EffectImages::default(),
         })
+    }
+
+    /// Give the renderer the images of the sequence's enabled effects. Rendering fails with
+    /// `MissingEffectImage` if an enabled effect has none.
+    pub fn with_effect_images(mut self, images: EffectImages<'a>) -> Self {
+        self.effect_images = images;
+        self
     }
 
     /// Every frame of the sequence, hold frames included.
@@ -135,13 +155,21 @@ impl<'a> Renderer<'a> {
     /// Render frame `index`, counting hold frames (clamped to the last frame).
     pub fn render_frame(&self, index: u32) -> Result<Image, RenderError> {
         let plan = self.planner.plan_frame(index)?;
-        self.draw(&plan)
+        self.draw_with_effects(&plan)
     }
 
     /// Render at morph time `t` (0 = Image 1, 1 = Image 2).
     pub fn render_t(&self, t: f64) -> Result<Image, RenderError> {
         let plan = self.planner.plan(t)?;
-        self.draw(&plan)
+        self.draw_with_effects(&plan)
+    }
+
+    fn draw_with_effects(&self, plan: &FramePlan) -> Result<Image, RenderError> {
+        // Check first so a missing effect image fails before the expensive morph.
+        effects::check(&self.effects, &self.effect_images)?;
+        let mut image = self.draw(plan)?;
+        effects::apply(&self.effects, &self.effect_images, &mut image)?;
+        Ok(image)
     }
 
     fn draw(&self, plan: &FramePlan) -> Result<Image, RenderError> {

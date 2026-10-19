@@ -1,5 +1,6 @@
 use inbetween_codecs::CodecError;
 use inbetween_doc::DocError;
+use inbetween_export::ExportError;
 use inbetween_format::FormatError;
 use inbetween_raster::RasterError;
 use inbetween_render_cpu::RenderError;
@@ -31,6 +32,7 @@ pub enum CommandError {
     Codec(CodecError),
     Raster(RasterError),
     Render(RenderError),
+    Export(ExportError),
     Io(String),
     /// A command panicked. Never expected; reported instead of crashing the shell.
     Internal(String),
@@ -50,6 +52,7 @@ impl CommandError {
             Self::Codec(_) => "image_file",
             Self::Raster(_) => "image_size",
             Self::Render(_) => "render",
+            Self::Export(_) => "export",
             Self::Io(_) => "io",
             Self::Internal(_) => "internal",
         }
@@ -79,6 +82,7 @@ impl fmt::Display for CommandError {
             Self::Codec(e) => write!(f, "{e}"),
             Self::Raster(e) => write!(f, "{e}"),
             Self::Render(e) => write!(f, "{e}"),
+            Self::Export(e) => write!(f, "{e}"),
             Self::Io(m) => write!(f, "file error: {m}"),
             Self::Internal(m) => write!(f, "internal error: {m}"),
         }
@@ -101,4 +105,5 @@ from_error! {
     CodecError => Codec,
     RasterError => Raster,
     RenderError => Render,
+    ExportError => Export,
 }

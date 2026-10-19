@@ -6,7 +6,7 @@
 use inbetween_engine::CommandSpec;
 
 /// Menus in the order they appear; any other top-level name follows, in registry order.
-const MENU_ORDER: &[&str] = &["File", "Edit", "Dots", "Sequence"];
+const MENU_ORDER: &[&str] = &["File", "Edit", "Dots", "Sequence", "Effects"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MenuNode {

@@ -1,4 +1,4 @@
-use crate::{Curve, DocError, DotSet};
+use crate::{Curve, DocError, DotSet, Effects};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 
@@ -158,6 +158,8 @@ pub struct Sequence {
     pub shape_curve: Curve,
     /// Hidden sequences are skipped by playback and export.
     pub visible: bool,
+    /// Back colour, background, mask and foreground.
+    pub effects: Effects,
 }
 
 impl Default for Sequence {
@@ -176,6 +178,7 @@ impl Default for Sequence {
             feature_curve: Curve::default(),
             shape_curve: Curve::default(),
             visible: true,
+            effects: Effects::default(),
         }
     }
 }
@@ -242,6 +245,7 @@ impl Sequence {
         }
         self.feature_curve.validate()?;
         self.shape_curve.validate()?;
+        self.effects.validate()?;
         for (i, p) in self.dots.pairs.iter().enumerate() {
             if !(p.first.is_finite() && p.second.is_finite()) {
                 return Err(DocError::NonFiniteDot(i));

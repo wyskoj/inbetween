@@ -1,6 +1,7 @@
 use crate::{CommandError, Params};
 use inbetween_doc::{Project, Sequence};
 use inbetween_raster::Image;
+use inbetween_render_cpu::{EffectImages, RenderError, Renderer};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -42,6 +43,27 @@ pub struct Prepared {
     pub output: (u32, u32),
     pub image1: Arc<Image>,
     pub image2: Option<Arc<Image>>,
+    /// Images of the effects that are switched on (`None` for the others).
+    pub background: Option<Arc<Image>>,
+    pub mask: Option<Arc<Image>>,
+    pub foreground: Option<Arc<Image>>,
+}
+
+impl Prepared {
+    /// A CPU renderer for this sequence, effects included.
+    pub fn renderer(&self) -> Result<inbetween_render_cpu::Renderer<'_>, RenderError> {
+        Ok(Renderer::new(
+            &self.sequence,
+            self.output,
+            &self.image1,
+            self.image2.as_deref(),
+        )?
+        .with_effect_images(EffectImages {
+            background: self.background.as_deref(),
+            mask: self.mask.as_deref(),
+            foreground: self.foreground.as_deref(),
+        }))
+    }
 }
 
 impl Session {
@@ -230,12 +252,50 @@ impl Session {
         } else {
             None
         };
+        let fx = &sequence.effects;
+        let background = self.load_effect(
+            fx.background.enabled,
+            &fx.background.image.0,
+            "background",
+            index,
+        )?;
+        let mask = self.load_effect(fx.mask.enabled, &fx.mask.image.0, "mask", index)?;
+        let foreground = self.load_effect(
+            fx.foreground.enabled,
+            &fx.foreground.image.0,
+            "foreground",
+            index,
+        )?;
         Ok(Prepared {
             sequence,
             output,
             image1,
             image2,
+            background,
+            mask,
+            foreground,
         })
+    }
+
+    /// Load an effect's image if the effect is switched on.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_effect(
+        &mut self,
+        enabled: bool,
+        reference: &str,
+        name: &str,
+        seq: usize,
+    ) -> Result<Option<Arc<Image>>, CommandError> {
+        if !enabled {
+            return Ok(None);
+        }
+        if reference.is_empty() {
+            return Err(CommandError::Image(format!(
+                "the {name} effect of sequence {seq} is on but has no image; set one with effect.{name}"
+            )));
+        }
+        self.load_path(reference, &format!("The {name} effect image"))
+            .map(Some)
     }
 
     /// Load one image reference through the cache.
@@ -251,6 +311,11 @@ impl Session {
                 "Image {which} of sequence {seq} has no file set; choose one with sequence.image"
             )));
         }
+        self.load_path(reference, &format!("Image {which}"))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_path(&mut self, reference: &str, label: &str) -> Result<Arc<Image>, CommandError> {
         // Project files only hold relative paths (checked when read and written); an absolute
         // path can only come from a command in this session, such as `project.new`.
         if !Path::new(reference).is_absolute() {
@@ -258,7 +323,7 @@ impl Session {
         }
         let full = self.resolve_image_path(reference);
         let meta = std::fs::metadata(&full)
-            .map_err(|e| CommandError::Image(format!("Image {which}: {}: {e}", full.display())))?;
+            .map_err(|e| CommandError::Image(format!("{label}: {}: {e}", full.display())))?;
         let stamp = (meta.modified().ok(), meta.len());
         if let Some(hit) = self.images.get(&full).filter(|c| c.stamp == stamp) {
             return Ok(Arc::clone(&hit.image));

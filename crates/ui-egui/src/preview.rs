@@ -6,7 +6,6 @@ use eframe::egui_wgpu::{self, RenderState};
 use eframe::wgpu;
 use egui::{TextureHandle, TextureId, TextureOptions};
 use inbetween_engine::Prepared;
-use inbetween_render_cpu::Renderer;
 use inbetween_render_gpu::{GpuContext, GpuRenderer};
 use std::sync::Arc;
 
@@ -115,9 +114,15 @@ impl Preview {
             return;
         }
         self.drawn = Some((revision, frame));
-        let outcome = match handle.filter(|_| !self.gpu_failed) {
+        // Effects are drawn by the CPU renderer only (D34), so a sequence with any switched on
+        // previews on the CPU even when a GPU is available.
+        let gpu = handle.filter(|_| !self.gpu_failed && !prepared.sequence.effects.any_active());
+        let outcome = match gpu {
             Some(h) => self.refresh_gpu(h, prepared, revision, frame),
-            None => self.refresh_cpu(ctx, prepared, frame),
+            None => {
+                self.release_gpu(handle);
+                self.refresh_cpu(ctx, prepared, frame)
+            }
         };
         self.error = outcome.err();
     }
@@ -185,13 +190,7 @@ impl Preview {
         prepared: &Prepared,
         frame: u32,
     ) -> Result<(), String> {
-        let renderer = Renderer::new(
-            &prepared.sequence,
-            prepared.output,
-            &prepared.image1,
-            prepared.image2.as_deref(),
-        )
-        .map_err(|e| e.to_string())?;
+        let renderer = prepared.renderer().map_err(|e| e.to_string())?;
         let image = renderer.render_frame(frame).map_err(|e| e.to_string())?;
         let color = to_color_image(&image, ctx.input(|i| i.max_texture_side));
         match &mut self.cpu {

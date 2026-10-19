@@ -71,6 +71,10 @@ fn validate(project: &Project) -> Result<(), FormatError> {
     for seq in &project.sequences {
         check_relative(&seq.image1.0)?;
         check_relative(&seq.image2.0)?;
+        let fx = &seq.effects;
+        for image in [&fx.background.image, &fx.mask.image, &fx.foreground.image] {
+            check_relative(&image.0)?;
+        }
     }
     Ok(())
 }
@@ -79,8 +83,8 @@ fn validate(project: &Project) -> Result<(), FormatError> {
 mod tests {
     use super::*;
     use inbetween_doc::{
-        Curve, CurvePoint, DotPair, DotSet, FitMode, ImageRef, MeshPolicy, MorphType,
-        OutputSettings, Sequence,
+        BackColor, Curve, CurvePoint, DotPair, DotSet, Effects, FitMode, ImageLayer, ImageRef,
+        Mask, MeshPolicy, MorphType, OutputSettings, Sequence,
     };
     use inbetween_geom::Point;
 
@@ -120,6 +124,24 @@ mod tests {
                     },
                     shape_curve: Curve::default(),
                     visible: false,
+                    effects: Effects {
+                        back_color: BackColor {
+                            enabled: true,
+                            rgba: [1, 2, 3, 4],
+                        },
+                        background: ImageLayer {
+                            enabled: true,
+                            image: ImageRef::new("bg/sky.png"),
+                            opacity: 12.5,
+                        },
+                        mask: Mask {
+                            enabled: true,
+                            image: ImageRef::new("m.png"),
+                            intensity: -33.3,
+                            invert: true,
+                        },
+                        foreground: ImageLayer::default(),
+                    },
                 },
                 Sequence::default(),
             ],

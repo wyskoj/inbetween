@@ -13,12 +13,14 @@
 
 mod curve;
 mod dots;
+mod effects;
 mod error;
 mod project;
 mod sequence;
 
 pub use curve::{Curve, CurvePoint, MAX_CURVE_POINTS};
 pub use dots::{DotPair, DotSet};
+pub use effects::{BackColor, Effects, ImageLayer, Mask};
 pub use error::DocError;
 pub use project::{OutputSettings, Project, MAX_SIDE};
 pub use sequence::{FitMode, ImageRef, MeshPolicy, MorphType, Sequence, MAX_FRAMES, MAX_HOLD};
