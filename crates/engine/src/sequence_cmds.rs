@@ -1,5 +1,5 @@
-//! Sequence commands: `sequence.length`, `sequence.morphType`, `sequence.fit`, `sequence.mesh`,
-//! `sequence.image`.
+//! Sequence commands: `sequence.length`, `sequence.morphType`, `sequence.fit`,
+//! `morph.option.retriangulate`, `morph.option.dropCornerTris`, `sequence.image`.
 
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
 use inbetween_doc::{FitMode, MeshPolicy, MorphType};
@@ -75,7 +75,6 @@ const MORPH_IDS: &[&str] = &[
     "direct",
 ];
 const FIT_IDS: &[&str] = &["stretch", "contain", "cover"];
-const MESH_IDS: &[&str] = &["frame0", "per_frame"];
 
 const MORPH_TYPE_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
@@ -99,15 +98,24 @@ const FIT_PARAMS: &[ParamSpec] = &[
     .one_of(FIT_IDS),
 ];
 
-const MESH_PARAMS: &[ParamSpec] = &[
+const RETRIANGULATE_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
     ParamSpec::new(
-        "mesh",
-        ParamKind::String,
+        "on",
+        ParamKind::Bool,
         false,
-        "When the mesh is triangulated: frame0 (once) or per_frame (re-triangulate every frame); omit to just report it",
-    )
-    .one_of(MESH_IDS),
+        "true re-triangulates the mesh on every frame, false only once from Image 1's dots; omit to just report it",
+    ),
+];
+
+const DROP_CORNER_PARAMS: &[ParamSpec] = &[
+    SEQUENCE,
+    ParamSpec::new(
+        "on",
+        ParamKind::Bool,
+        false,
+        "true discards the triangles that touch the frame corners (the rest of the frame turns transparent); omit to just report it",
+    ),
 ];
 
 fn morph_type(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
@@ -136,14 +144,25 @@ fn fit(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     Ok(json!({ "sequence": index, "fit": session.sequence(index)?.fit.id() }))
 }
 
-fn mesh(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+fn retriangulate(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     let index = session.sequence_index(params)?;
-    if let Some(id) = params.string("mesh") {
-        let m = MeshPolicy::from_id(id)
-            .ok_or_else(|| CommandError::BadParams(format!("unknown mesh policy `{id}`")))?;
-        session.sequence_mut(index)?.mesh = m;
+    if let Some(on) = params.boolean("on") {
+        session.sequence_mut(index)?.mesh = if on {
+            MeshPolicy::PerFrame
+        } else {
+            MeshPolicy::Frame0
+        };
     }
-    Ok(json!({ "sequence": index, "mesh": session.sequence(index)?.mesh.id() }))
+    let on = session.sequence(index)?.mesh == MeshPolicy::PerFrame;
+    Ok(json!({ "sequence": index, "on": on, "mesh": session.sequence(index)?.mesh.id() }))
+}
+
+fn drop_corner_tris(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    let index = session.sequence_index(params)?;
+    if let Some(on) = params.boolean("on") {
+        session.sequence_mut(index)?.drop_corner_tris = on;
+    }
+    Ok(json!({ "sequence": index, "on": session.sequence(index)?.drop_corner_tris }))
 }
 
 pub(crate) fn specs() -> Vec<CommandSpec> {
@@ -186,16 +205,28 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             run: fit,
         },
         CommandSpec {
-            id: "sequence.mesh",
-            label: "Mesh Policy",
-            menu: "Sequence/Mesh...",
+            id: "morph.option.retriangulate",
+            label: "Re-triangulate Every Frame",
+            menu: "Sequence/Re-triangulate Every Frame",
             shortcut: None,
-            description: "Set (or report) whether the mesh is triangulated once (frame0) or for every frame (per_frame).",
-            params: MESH_PARAMS,
+            description: "Set (or report) whether the mesh is re-triangulated for every intermediate frame (on) or only once from Image 1's dots (off).",
+            params: RETRIANGULATE_PARAMS,
             enabled: Session::has_sequences,
             disabled_reason: "the project has no sequences",
             edits: true,
-            run: mesh,
+            run: retriangulate,
+        },
+        CommandSpec {
+            id: "morph.option.dropCornerTris",
+            label: "Drop Corner Triangles",
+            menu: "Sequence/Drop Corner Triangles",
+            shortcut: None,
+            description: "Set (or report) whether triangles touching the four frame corners are discarded, leaving the area outside the dots' outline transparent so a backdrop or back colour shows through.",
+            params: DROP_CORNER_PARAMS,
+            enabled: Session::has_sequences,
+            disabled_reason: "the project has no sequences",
+            edits: true,
+            run: drop_corner_tris,
         },
     ];
     #[cfg(not(target_arch = "wasm32"))]

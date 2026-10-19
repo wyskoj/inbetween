@@ -79,6 +79,7 @@ fn project_seed() -> String {
                 morph: MorphType::Warp1,
                 fit: FitMode::Contain,
                 mesh: MeshPolicy::PerFrame,
+                drop_corner_tris: true,
                 feature_curve: Curve {
                     points: vec![
                         CurvePoint::new(0.0, 0.0),

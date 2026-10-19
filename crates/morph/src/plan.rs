@@ -110,6 +110,9 @@ pub struct FramePlan {
     pub t: f64,
     pub mix: Mix,
     pub tris: Vec<MeshTri>,
+    /// The sequence drops its corner triangles: pixels no triangle covers are transparent
+    /// instead of showing the unwarped sources.
+    pub backdrop: bool,
 }
 
 /// What the planner keeps between frames.
@@ -118,6 +121,7 @@ enum Kind {
     /// The dots deform the images.
     Warp {
         policy: MeshPolicy,
+        drop_corners: bool,
         dot_count: usize,
         /// Triangulation of Image 1's dots: the mesh shared by every frame.
         base: Triangulation,
@@ -177,6 +181,7 @@ impl Planner {
             let end = triangulate(&second, w, h).map_err(|e| map_geom(e, 2))?;
             Kind::Warp {
                 policy: seq.mesh,
+                drop_corners: seq.drop_corner_tris,
                 dot_count: first.len(),
                 first,
                 second,
@@ -250,22 +255,24 @@ impl Planner {
         let t = if t.is_nan() { 0.0 } else { t.clamp(0.0, 1.0) };
         let mix = Mix::for_type(self.morph, self.timing.feature_curve.eval(t));
         let shape = self.timing.shape_curve.eval(t);
-        let (dot_count, policy, base, end, first, second) = match &self.kind {
+        let (dot_count, policy, drop_corners, base, end, first, second) = match &self.kind {
             Kind::Still(tris) => {
                 return Ok(FramePlan {
                     t,
                     mix,
                     tris: tris.clone(),
+                    backdrop: false,
                 })
             }
             Kind::Warp {
                 dot_count,
                 policy,
+                drop_corners,
                 base,
                 end,
                 first,
                 second,
-            } => (*dot_count, *policy, base, end, first, second),
+            } => (*dot_count, *policy, *drop_corners, base, end, first, second),
         };
 
         // Dots at time t, then the frame corners (which never move).
@@ -293,6 +300,8 @@ impl Planner {
 
         let tris = connectivity
             .iter()
+            // Corner vertices come after the dots; a triangle using one touches a corner.
+            .filter(|idx| !drop_corners || idx.iter().all(|&i| i < dot_count))
             .filter_map(|&idx| {
                 Some(MeshTri {
                     src1: tri(&base.vertices, idx)?,
@@ -301,7 +310,12 @@ impl Planner {
                 })
             })
             .collect();
-        Ok(FramePlan { t, mix, tris })
+        Ok(FramePlan {
+            t,
+            mix,
+            tris,
+            backdrop: drop_corners,
+        })
     }
 
     /// Plan frame `index` of the sequence, counting hold frames (an index past the end gives
@@ -384,6 +398,46 @@ mod tests {
         // At t = 0.5 both dots land on (50, 20): triangulation fails, plan falls back.
         assert!(!p.plan(0.5).unwrap().tris.is_empty());
         assert!(!p.plan(0.3).unwrap().tris.is_empty());
+    }
+
+    fn square() -> Sequence {
+        seq(&[
+            ((30.0, 20.0), (32.0, 22.0)),
+            ((70.0, 20.0), (68.0, 22.0)),
+            ((70.0, 30.0), (68.0, 28.0)),
+            ((30.0, 30.0), (32.0, 28.0)),
+        ])
+    }
+
+    #[test]
+    fn dropping_corner_triangles_keeps_only_dot_triangles() {
+        let mut s = square();
+        let full = Planner::new(&s, 100, 50).unwrap().plan(0.5).unwrap();
+        assert!(!full.backdrop);
+        s.drop_corner_tris = true;
+        for policy in [MeshPolicy::Frame0, MeshPolicy::PerFrame] {
+            s.mesh = policy;
+            let p = Planner::new(&s, 100, 50).unwrap();
+            for t in [0.0, 0.5, 1.0] {
+                let plan = p.plan(t).unwrap();
+                assert!(plan.backdrop);
+                // The four dots make a rectangle: two triangles, all inside the hull.
+                assert_eq!(plan.tris.len(), 2, "{policy:?} t = {t}");
+                assert!(plan.tris.len() < full.tris.len());
+            }
+        }
+    }
+
+    #[test]
+    fn dropping_corner_triangles_with_too_few_dots_leaves_nothing() {
+        let mut s = seq(&[((30.0, 20.0), (40.0, 30.0)), ((70.0, 30.0), (60.0, 20.0))]);
+        s.drop_corner_tris = true;
+        let plan = Planner::new(&s, 100, 50).unwrap().plan(0.5).unwrap();
+        assert!(plan.tris.is_empty());
+        assert!(plan.backdrop);
+        s.dots = DotSet::default();
+        let plan = Planner::new(&s, 100, 50).unwrap().plan(0.5).unwrap();
+        assert!(plan.tris.is_empty());
     }
 
     #[test]

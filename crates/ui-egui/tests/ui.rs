@@ -700,3 +700,24 @@ fn editing_dots_updates_the_preview_without_errors() {
         h.state().status()
     );
 }
+
+#[test]
+fn sequence_option_menu_items_flip_on_and_off_and_undo() {
+    let mut h = demo_harness();
+    let seq = |h: &H| app(h).session().project().sequences[0].clone();
+    assert!(!seq(&h).drop_corner_tris);
+    h.state_mut().invoke("morph.option.dropCornerTris");
+    assert!(seq(&h).drop_corner_tris);
+    assert_eq!(
+        h.state().toggle_state("morph.option.dropCornerTris"),
+        Some(true)
+    );
+    h.state_mut().invoke("morph.option.dropCornerTris");
+    assert!(!seq(&h).drop_corner_tris);
+
+    h.state_mut().invoke("morph.option.retriangulate");
+    assert_eq!(seq(&h).mesh, inbetween_doc::MeshPolicy::PerFrame);
+    h.state_mut().invoke("morph.option.retriangulate");
+    assert_eq!(seq(&h).mesh, inbetween_doc::MeshPolicy::Frame0);
+    h.run();
+}

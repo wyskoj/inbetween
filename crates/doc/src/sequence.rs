@@ -152,6 +152,10 @@ pub struct Sequence {
     pub morph: MorphType,
     pub fit: FitMode,
     pub mesh: MeshPolicy,
+    /// Discard the mesh triangles that touch the four frame corners, so only the area inside
+    /// the dots' outline is drawn and the rest of the frame stays transparent (a backdrop or
+    /// back colour then shows through).
+    pub drop_corner_tris: bool,
     /// Remaps morph time into the colour-dissolve amount.
     pub feature_curve: Curve,
     /// Remaps morph time into the shape-interpolation amount (how far the dots have moved).
@@ -181,6 +185,7 @@ impl Default for Sequence {
             morph: MorphType::default(),
             fit: FitMode::default(),
             mesh: MeshPolicy::default(),
+            drop_corner_tris: false,
             feature_curve: Curve::default(),
             shape_curve: Curve::default(),
             visible: true,

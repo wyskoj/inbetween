@@ -16,7 +16,7 @@ fn pt(p: Point) -> [f32; 2] {
     [p.x as f32, p.y as f32]
 }
 
-/// Vertices for one frame: first a full-frame quad showing both sources unwarped (the
+/// Vertices for one frame: first (unless the plan is a backdrop plan) a full-frame quad showing both sources unwarped (the
 /// oracle's fallback for pixels no triangle claims), then three vertices per mesh triangle in
 /// plan order. `fit1` and `fit2` map output coordinates into source-image coordinates.
 pub fn build_vertices(
@@ -42,7 +42,10 @@ pub fn build_vertices(
         corner(w, h),
         corner(0.0, h),
     );
-    out.extend([a, b, c, a, c, d]);
+    // With the corner triangles dropped there is no fallback: uncovered pixels stay clear.
+    if !plan.backdrop {
+        out.extend([a, b, c, a, c, d]);
+    }
 
     for tri in &plan.tris {
         let dst = tri.dst;
@@ -91,6 +94,15 @@ mod tests {
         assert_eq!(v[0].pos, [0.0, 0.0]);
         assert_eq!(v[2].pos, [100.0, 60.0]);
         assert_eq!(v[5].pos, [0.0, 60.0]);
+    }
+
+    #[test]
+    fn backdrop_plans_have_no_fallback_quad() {
+        let mut p = plan(0.5);
+        let n = p.tris.len();
+        p.backdrop = true;
+        let v = build_vertices(&p, &Affine::IDENTITY, &Affine::IDENTITY, 100, 60);
+        assert_eq!(v.len(), n * 3);
     }
 
     #[test]

@@ -421,7 +421,9 @@ impl GpuRenderer {
                 mapped_at_creation: false,
             });
         }
-        queue.write_buffer(&self.vertex_buffer, 0, bytes);
+        if !bytes.is_empty() {
+            queue.write_buffer(&self.vertex_buffer, 0, bytes);
+        }
         let Mix {
             mode,
             w1,
@@ -470,8 +472,11 @@ impl GpuRenderer {
                 &self.pipeline
             });
             pass.set_bind_group(0, &self.bind_group, &[]);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..bytes.len() as u64));
-            pass.draw(0..vertices.len() as u32, 0..1);
+            // A backdrop plan with no triangles has nothing to draw: the frame stays clear.
+            if !vertices.is_empty() {
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..bytes.len() as u64));
+                pass.draw(0..vertices.len() as u32, 0..1);
+            }
         }
         queue.submit([encoder.finish()]);
         Ok(())

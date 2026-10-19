@@ -44,6 +44,16 @@ const LOOSE: Tolerance = Tolerance {
     mean: 1e-3,
 };
 
+/// Meshes with the corner triangles dropped. A pixel centre exactly on the outline's edge can
+/// be claimed by the CPU and not the GPU (or the reverse), which flips it between clear and
+/// drawn, so a few edge pixels may differ completely. Everything else must still match.
+const OUTLINE: Tolerance = Tolerance {
+    max: 1.0,
+    visible: 0.01,
+    visible_fraction: 0.01,
+    mean: 3e-3,
+};
+
 /// CI sets `INBETWEEN_REQUIRE_GPU=1` where a software driver is installed.
 fn require_gpu() -> bool {
     matches!(std::env::var("INBETWEEN_REQUIRE_GPU"), Ok(v) if !v.is_empty() && v != "0")
@@ -294,6 +304,21 @@ fn per_frame_mesh() {
     let mut seq = sequence(&moved(), 12);
     seq.mesh = MeshPolicy::PerFrame;
     compare("per-frame mesh", &seq, (48, 32), &a, &b, ALL);
+}
+
+#[test]
+fn dropped_corner_triangles() {
+    let (a, b) = (gradient(48, 32).unwrap(), labelled_grid(48, 32, 8).unwrap());
+    for policy in [MeshPolicy::Frame0, MeshPolicy::PerFrame] {
+        let mut seq = sequence(&moved(), 12);
+        seq.mesh = policy;
+        seq.drop_corner_tris = true;
+        let name = format!("drop corners {policy:?}");
+        check(&name, &OUTLINE, &seq, (48, 32), &a, &b, ALL);
+    }
+    let mut seq = sequence(&[((20.0, 10.0), (30.0, 20.0))], 12);
+    seq.drop_corner_tris = true;
+    compare("drop corners, one dot", &seq, (48, 32), &a, &b, ALL);
 }
 
 #[test]

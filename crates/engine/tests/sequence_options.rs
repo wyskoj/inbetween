@@ -109,13 +109,30 @@ fn fit_and_mesh_commands_set_their_options() {
     let mut s = session();
     let v = run(&mut s, "sequence.fit", json!({"fit": "cover"})).unwrap();
     assert_eq!(v["fit"], "cover");
-    let v = run(&mut s, "sequence.mesh", json!({"mesh": "per_frame"})).unwrap();
+    let v = run(&mut s, "morph.option.retriangulate", json!({"on": true})).unwrap();
     assert_eq!(v["mesh"], "per_frame");
     assert!(run(&mut s, "sequence.fit", json!({"fit": "zoom"})).is_err());
-    assert!(run(&mut s, "sequence.mesh", json!({"mesh": "never"})).is_err());
+    assert!(run(&mut s, "morph.option.retriangulate", json!({"on": "never"})).is_err());
     let seq = s.sequence(0).unwrap();
     assert_eq!(seq.fit.id(), "cover");
     assert_eq!(seq.mesh.id(), "per_frame");
+    let v = run(&mut s, "morph.option.retriangulate", json!({})).unwrap();
+    assert_eq!(v["on"], true);
+    let v = run(&mut s, "morph.option.retriangulate", json!({"on": false})).unwrap();
+    assert_eq!(v["mesh"], "frame0");
+}
+
+#[test]
+fn drop_corner_tris_is_an_undoable_toggle() {
+    let mut s = session();
+    let v = run(&mut s, "morph.option.dropCornerTris", json!({})).unwrap();
+    assert_eq!(v["on"], false);
+    let v = run(&mut s, "morph.option.dropCornerTris", json!({"on": true})).unwrap();
+    assert_eq!(v["on"], true);
+    assert!(s.sequence(0).unwrap().drop_corner_tris);
+    assert!(run(&mut s, "morph.option.dropCornerTris", json!({"on": 3})).is_err());
+    run(&mut s, "edit.undo", json!({})).unwrap();
+    assert!(!s.sequence(0).unwrap().drop_corner_tris);
 }
 
 #[test]

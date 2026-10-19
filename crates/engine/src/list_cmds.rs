@@ -437,6 +437,7 @@ mod files {
                 morph: p.morph,
                 fit: p.fit,
                 mesh: p.mesh,
+                drop_corner_tris: p.drop_corner_tris,
                 ..Sequence::default()
             },
             None => Sequence::default(),

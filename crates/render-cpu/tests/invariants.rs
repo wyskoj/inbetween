@@ -431,3 +431,67 @@ fn out_of_range_frame_indexes_clamp_to_the_last_frame() {
     assert!(r.render_t(f64::NAN).is_ok());
     assert!(r.render_t(f64::INFINITY).is_ok());
 }
+
+// ---- Option: drop the corner triangles ------------------------------------------------------
+
+#[test]
+fn dropped_corner_triangles_leave_the_outside_transparent_and_the_inside_exact() {
+    let (a, b) = (labelled_grid(W, H, 8).unwrap(), gradient(W, H).unwrap());
+    for policy in [MeshPolicy::Frame0, MeshPolicy::PerFrame] {
+        let mut seq = sequence(&moved_dots(), MorphType::Morph, 5);
+        seq.mesh = policy;
+        seq.drop_corner_tris = true;
+        let r = renderer(&seq, &a, &b);
+        for i in 0..5 {
+            let img = r.render_frame(i).unwrap();
+            assert_valid(&img);
+            // The frame corners are outside the dots' outline.
+            for (x, y) in [(0, 0), (W - 1, 0), (0, H - 1), (W - 1, H - 1)] {
+                assert_eq!(img.get(x, y).unwrap()[3], 0.0, "corner ({x},{y}) frame {i}");
+            }
+            // The middle is inside the outline at every frame.
+            assert!(img.get(W / 2, H / 2).unwrap()[3] > 0.99, "frame {i}");
+        }
+        // The ends still equal the sources wherever something is drawn.
+        for (frame, want) in [(0, &a), (4, &b)] {
+            let img = r.render_frame(frame).unwrap();
+            for y in 0..H {
+                for x in 0..W {
+                    let got = img.get(x, y).unwrap();
+                    if got[3] > 0.0 {
+                        let w = want.get(x, y).unwrap();
+                        assert!(
+                            got.iter().zip(w).all(|(g, w)| (g - w).abs() < 1e-4),
+                            "{policy:?} frame {frame} pixel ({x},{y})"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn dropped_corner_triangles_without_enough_dots_give_a_clear_frame() {
+    let (a, b) = (labelled_grid(W, H, 8).unwrap(), gradient(W, H).unwrap());
+    for pairs in [
+        vec![],
+        vec![(pt(20.0, 10.0), pt(30.0, 20.0))],
+        vec![
+            (pt(10.0, 16.0), pt(24.0, 5.0)),
+            (pt(20.0, 16.0), pt(24.0, 15.0)),
+            (pt(30.0, 16.0), pt(24.0, 25.0)),
+        ],
+        vec![
+            (pt(-40.0, -40.0), pt(-30.0, -35.0)),
+            (pt(90.0, 70.0), pt(80.0, 60.0)),
+        ],
+    ] {
+        let mut seq = sequence(&pairs, MorphType::Morph, 5);
+        seq.drop_corner_tris = true;
+        let r = renderer(&seq, &a, &b);
+        for i in 0..5 {
+            assert_valid(&r.render_frame(i).unwrap());
+        }
+    }
+}

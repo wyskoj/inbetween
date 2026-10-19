@@ -261,7 +261,7 @@ impl<'a> Renderer<'a> {
             .enumerate()
             .for_each(|(band, pixels)| {
                 let y = band as u32 * BAND_ROWS;
-                self.shade_band(pixels, y, &setups, &plan.mix, transition.as_ref());
+                self.shade_band(pixels, y, &setups, plan, transition.as_ref());
             });
         Ok(out)
     }
@@ -272,7 +272,7 @@ impl<'a> Renderer<'a> {
         pixels: &mut [f32],
         y_start: u32,
         setups: &[TriSetup],
-        mix: &Mix,
+        plan: &FramePlan,
         transition: Option<&TransitionCtx>,
     ) {
         let width = self.width as usize;
@@ -298,7 +298,8 @@ impl<'a> Renderer<'a> {
         }
 
         // Pass 2: colour. Pixels no triangle claimed (folded meshes can leave slivers) are
-        // sampled unwarped.
+        // sampled unwarped, unless the corner triangles were dropped: then they are transparent.
+        let mix = &plan.mix;
         for (i, (px, &who)) in pixels.chunks_exact_mut(4).zip(&owner).enumerate() {
             let x = (i % width) as u32;
             let y = y_start + (i / width) as u32;
@@ -326,6 +327,7 @@ impl<'a> Renderer<'a> {
                     let q2 = s.to2.map_or(p, |m| m.apply(p));
                     self.colour(q1, q2, mix)
                 }
+                None if plan.backdrop => TRANSPARENT,
                 None => self.colour(p, p, mix),
             };
             px.copy_from_slice(&colour);

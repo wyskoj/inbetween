@@ -315,6 +315,11 @@ impl InbetweenApp {
         if !self.registry.is_enabled(id, &self.session) {
             return;
         }
+        if let Some(now) = self.toggle_state(id) {
+            // An on/off option: flip it.
+            let _ = self.run_command(id, &json!({ "on": !now }));
+            return;
+        }
         let curve = match id {
             "curve.feature" => Some(CurveKind::Feature),
             "curve.shape" => Some(CurveKind::Shape),
@@ -340,6 +345,16 @@ impl InbetweenApp {
                 form.error = Some(e.to_string());
                 self.form = Some(form);
             }
+        }
+    }
+
+    /// The current value of an on/off sequence option (`None` for any other command).
+    pub fn toggle_state(&self, id: &str) -> Option<bool> {
+        let seq = self.session.sequence(self.state.sequence).ok()?;
+        match id {
+            "morph.option.retriangulate" => Some(seq.mesh == inbetween_doc::MeshPolicy::PerFrame),
+            "morph.option.dropCornerTris" => Some(seq.drop_corner_tris),
+            _ => None,
         }
     }
 
@@ -926,12 +941,23 @@ impl InbetweenApp {
             self.state.link_sources,
         );
         let mut view_action: Option<&'static str> = None;
+        let toggles: Vec<(&'static str, bool)> = TOGGLES
+            .iter()
+            .filter_map(|id| Some((*id, self.toggle_state(id)?)))
+            .collect();
         egui::TopBottomPanel::top("menu").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 for node in &self.menus {
                     if let MenuNode::Menu { name, children } = node {
                         ui.menu_button(name, |ui| {
-                            menu_items(ui, children, &self.registry, &self.session, &mut clicked);
+                            menu_items(
+                                ui,
+                                children,
+                                &self.registry,
+                                &self.session,
+                                &toggles,
+                                &mut clicked,
+                            );
                         });
                     }
                 }
@@ -1407,18 +1433,23 @@ impl Snapshot {
     }
 }
 
+/// Commands that switch a sequence option on or off. The menu shows a check box and a click
+/// flips the option; the engine command takes `on` and reports the state when it is left out.
+const TOGGLES: &[&str] = &["morph.option.retriangulate", "morph.option.dropCornerTris"];
+
 fn menu_items(
     ui: &mut egui::Ui,
     nodes: &[MenuNode],
     registry: &Registry,
     session: &Session,
+    toggles: &[(&'static str, bool)],
     clicked: &mut Option<&'static str>,
 ) {
     for node in nodes {
         match node {
             MenuNode::Menu { name, children } => {
                 ui.menu_button(name, |ui| {
-                    menu_items(ui, children, registry, session, clicked)
+                    menu_items(ui, children, registry, session, toggles, clicked)
                 });
             }
             MenuNode::Command { id, label } => {
@@ -1426,7 +1457,13 @@ fn menu_items(
                     continue;
                 };
                 let enabled = (spec.enabled)(session);
-                let mut button = egui::Button::new(label.as_str());
+                let mut text = label.clone();
+                if let Some((_, on)) = toggles.iter().find(|(t, _)| t == id) {
+                    // An on/off option shows its state instead of opening a form.
+                    let mark = if *on { "[x]" } else { "[  ]" };
+                    text = format!("{mark} {}", text.trim_end_matches("..."));
+                }
+                let mut button = egui::Button::new(text);
                 if let Some(sc) = spec.shortcut {
                     button = button.shortcut_text(shortcuts::label(sc));
                 }
