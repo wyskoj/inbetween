@@ -1244,3 +1244,26 @@ fn demo_harness_at(path: &str) -> H {
         .unwrap();
     harness_with(app)
 }
+
+#[test]
+fn the_preview_follows_a_dot_while_it_is_still_being_dragged() {
+    let mut h = demo_harness();
+    let original = dots(&h);
+    let revision = app(&h).session().revision();
+    let (_, _, x2, y2) = original[8];
+    let from = screen(&h, Panel::Source2, x2 as f32, y2 as f32);
+    frame(&mut h, vec![mv(from)]);
+    frame(&mut h, vec![button(from, PointerButton::Primary, true)]);
+    let mut seen = vec![revision];
+    for i in 1..=4 {
+        frame(&mut h, vec![mv(from + Vec2::new(8.0 * i as f32, 5.0 * i as f32))]);
+        // Button still down: the project already holds the dot's new place, and the revision
+        // the preview is keyed on has moved on.
+        let now = app(&h).session().revision();
+        assert!(now > *seen.last().unwrap(), "move {i} did not refresh the preview");
+        seen.push(now);
+    }
+    assert_ne!(dots(&h)[8], original[8]);
+    frame(&mut h, vec![button(from, PointerButton::Primary, false)]);
+    h.run();
+}

@@ -90,7 +90,7 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 | [x] | `dots.selectAll` / `dots.clearAll` | | P1 |
 | [x] | `dots.matching` | Paired vs unpaired dots shown in different colours; partner blinks when hovering an unpaired dot | P1 |
 | [x] | `dots.autoMatch` | Generate partner dots at plausible positions automatically | P2 |
-| [~] |  | Limit: at least 2048 dot pairs (saved, reloaded, rendered and drawn in tests) | P0 |
+| [x] |  | Limit: at least 2048 dot pairs (saved, reloaded, rendered and drawn in tests) | P0 |
 
 ### Lines (organizational only; never affect the morph)
 
@@ -201,7 +201,7 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 | [x] | `movie.size` / `movie.fps` | Match an image's size, presets, or custom; dots move with their pictures, sequence and movie captions scale; project frame rate | P0 |
 | [x] | `preview.scrub` | Scrub 0–100% in 1% steps; mouse wheel steps one frame; preview one sequence or all (sequence or whole movie, layers stacked) | P0 |
 | [x] | `play.*` | Play/pause, first, last, previous, next frame, loop, ping-pong; 1–60 fps | P1 |
-| [~] |  | Live preview updates while dragging dots, curves, camera, effects | P0 |
+| [x] |  | Live preview updates while dragging dots, curves, camera, effects | P0 |
 | [x] |  | Checkerboard behind transparent preview areas | P1 |
 
 ---
