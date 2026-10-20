@@ -39,6 +39,8 @@ mod crop_ui;
 mod curve_ui;
 mod drops_ui;
 mod effects_ui;
+mod export_job_ui;
+pub use export_job_ui::LONG_EXPORTS;
 mod face_library_ui;
 pub use face_library_ui::LibraryDrag;
 mod face_mix_ui;
@@ -244,6 +246,8 @@ pub struct InbetweenApp {
     /// What the face windows remember between frames.
     face: face_model_ui::FaceUi,
     track_ui: track_ui::TrackUi,
+    /// A long export running on its own thread (the session is away meanwhile).
+    export_job: Option<export_job_ui::ExportJob>,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -310,6 +314,7 @@ impl InbetweenApp {
             camera_drag: None,
             face: Default::default(),
             track_ui: Default::default(),
+            export_job: None,
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -691,6 +696,13 @@ impl InbetweenApp {
         if self.guard(form.id, &params) {
             return; // the form stays open until the prompt is answered
         }
+        if LONG_EXPORTS.contains(&form.id) {
+            // Run on a thread with a progress window; the result lands in the status bar.
+            if self.start_export(form.id, &params) {
+                self.form = None;
+            }
+            return;
+        }
         match self.run_command(form.id, &params) {
             Ok(_) => {
                 self.form = None;
@@ -1056,6 +1068,9 @@ impl InbetweenApp {
             ctx.options_mut(|o| o.zoom_with_keyboard = false);
             ctx.data_mut(|d| d.insert_temp(ready, true));
             ctx.request_repaint();
+            return;
+        }
+        if self.export_busy(ctx) {
             return;
         }
         // Playback runs at the movie's frame rate.

@@ -65,6 +65,9 @@ pub struct Session {
     prefs: DisplayPrefs,
     /// Set from another thread to stop the export in progress; cleared when one starts.
     cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Frames the running export has produced, and how many it expects (0 when unknown).
+    progress: Arc<std::sync::atomic::AtomicU64>,
+    progress_total: Arc<std::sync::atomic::AtomicU64>,
     /// The camera `camera.keyframes op=copy` took, for `op=paste`. Not part of undo.
     camera_clip: Option<inbetween_doc::Camera>,
     /// What `open_after` exports open their result with; `None` is the system's default.
@@ -186,8 +189,34 @@ impl Session {
         self.camera_clip = Some(camera);
     }
 
+    /// Counters a shell can watch while an export runs: frames done, and frames expected
+    /// (0 when the command does not know).
+    pub fn progress_handles(
+        &self,
+    ) -> (
+        Arc<std::sync::atomic::AtomicU64>,
+        Arc<std::sync::atomic::AtomicU64>,
+    ) {
+        (Arc::clone(&self.progress), Arc::clone(&self.progress_total))
+    }
+
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) fn tick(&self) {
+        self.progress
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) fn expect_frames(&self, total: u64) {
+        self.progress_total
+            .store(total, std::sync::atomic::Ordering::Relaxed);
+    }
+
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn begin_cancellable(&self) {
+        self.progress.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.progress_total
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         self.cancel
             .store(false, std::sync::atomic::Ordering::Relaxed);
     }

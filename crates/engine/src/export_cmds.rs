@@ -329,8 +329,10 @@ mod files {
             .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
         let renderer = prepared.renderer()?;
         session.begin_cancellable();
+        session.expect_frames(u64::from(last - first + 1));
         for n in first..=last {
             session.check_cancel()?;
+            session.tick();
             let image = renderer.render_frame(n - 1)?;
             write_image_with(
                 &dir.join(format!("{prefix}_{n:04}.png")),

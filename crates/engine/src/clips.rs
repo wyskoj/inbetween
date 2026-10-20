@@ -117,6 +117,7 @@ fn render(
     plan: &ClipPlan,
     each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
 ) -> Result<u64, CommandError> {
+    session.expect_frames(session.project().total_frames() + plan.extra_frames);
     let finish = session.movie_finish()?;
     let tools = crate::source_media::tools();
     let (width, height) = (
@@ -140,6 +141,7 @@ fn render(
                 session.check_cancel()?;
                 let image = Image::from_rgba8(width, height, &rgba)?;
                 each(*number, &finish.apply(image, progress)?)?;
+                session.tick();
                 *number += 1;
             }
             Ok(())

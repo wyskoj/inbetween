@@ -77,6 +77,7 @@ pub(crate) fn range_from(
             "`first` ({first}) is after the last frame to write ({last}); there are {total} frames to choose from"
         )));
     }
+    session.expect_frames(last - first + 1);
     let (first, last) = (first + base, last + base);
     Ok(MovieRange {
         first,
@@ -181,6 +182,7 @@ fn render_frames(
             }
             session.check_cancel()?;
             each(n, &image)?;
+            session.tick();
             sent += 1;
         }
     }
@@ -243,6 +245,7 @@ fn render_layers(
         let Some(image) = stack else { continue };
         session.check_cancel()?;
         each(n, &image)?;
+        session.tick();
         sent += 1;
     }
     Ok(sent)
