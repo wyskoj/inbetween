@@ -225,6 +225,22 @@ impl Effects {
         .filter_map(|(on, image)| on.then_some(image))
     }
 
+    /// Whether every effect is off and at its defaults (so nothing needs writing).
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Checks for effects on the whole movie: everything a sequence has except the
+    /// transition, which needs two images.
+    pub fn validate_movie(&self) -> Result<(), DocError> {
+        if self.transition.enabled {
+            return Err(DocError::BadEffect(
+                "a transition works on a sequence, not on the whole movie",
+            ));
+        }
+        self.validate()
+    }
+
     pub fn validate(&self) -> Result<(), DocError> {
         let ok = |v: f64, lo: f64, hi: f64| v.is_finite() && (lo..=hi).contains(&v);
         if !ok(self.background.opacity, 0.0, 100.0) || !ok(self.foreground.opacity, 0.0, 100.0) {
@@ -315,6 +331,15 @@ mod tests {
         e.light.enabled = true;
         assert_eq!(e.active_images().count(), 1);
         assert_eq!(e.all_images().len(), 5);
+    }
+
+    #[test]
+    fn movie_effects_refuse_a_transition() {
+        let mut e = Effects::default();
+        assert!(e.validate_movie().is_ok());
+        e.transition.enabled = true;
+        assert!(e.validate_movie().is_err());
+        assert!(e.validate().is_ok());
     }
 
     #[test]

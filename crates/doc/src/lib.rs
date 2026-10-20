@@ -21,6 +21,7 @@ mod error;
 mod face;
 mod project;
 mod sequence;
+mod sound;
 mod track;
 
 pub use camera::{
@@ -38,4 +39,5 @@ pub use error::DocError;
 pub use face::{FaceDot, FaceModel, FACE_PRESETS, MAX_FACE_DOTS, MAX_FACE_GUIDES, MAX_FACE_NAME};
 pub use project::{OutputSettings, Project, ProjectType, DEFAULT_FPS, MAX_SIDE};
 pub use sequence::{FitMode, ImageRef, MeshPolicy, MorphType, Sequence, MAX_FRAMES, MAX_HOLD};
+pub use sound::{Sound, MAX_FADE};
 pub use track::{Track, TrackPoint, MAX_TENSION, MAX_TRACK_POINTS, MAX_TRACK_REACH};

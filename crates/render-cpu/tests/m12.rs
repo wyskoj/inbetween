@@ -73,10 +73,36 @@ fn camera_pans_the_morph_and_shows_transparency_behind_it() {
     assert_eq!(last.get(3, 0), Some([0.0; 4]));
     assert_eq!(last.get(4, 0), Some(RED));
     assert_valid(&last);
-    // A back colour fills the uncovered side.
+    // Camera zone: a back colour moves with the camera, so the uncovered side stays
+    // transparent and the covered side shows the colour.
     s.effects.back_color.enabled = true;
     s.effects.back_color.rgba = [0, 0, 255, 255];
-    assert_eq!(plain(&s, &a, &b, 2).get(0, 0), Some(BLUE));
+    let zoned = plain(&s, &a, &b, 2);
+    assert_eq!(zoned.get(0, 0), Some([0.0; 4]));
+    assert_eq!(zoned.get(4, 0), Some(RED));
+    // Where the morph itself is transparent the colour shows inside the zone.
+    s.drop_corner_tris = false;
+    let (gap, _) = (Image::filled(8, 6, [0.0; 4]).unwrap(), 0);
+    assert_eq!(plain(&s, &gap, &gap, 2).get(4, 0), Some(BLUE));
+    assert_eq!(plain(&s, &gap, &gap, 2).get(0, 0), Some([0.0; 4]));
+    assert_valid(&zoned);
+}
+
+#[test]
+fn sequence_filters_run_after_the_camera_and_change_the_frame() {
+    let mut half = Image::filled(8, 6, RED).unwrap();
+    for y in 0..6 {
+        for x in 4..8 {
+            half.set(x, y, BLUE);
+        }
+    }
+    let mut s = seq(2);
+    let plain_frame = plain(&s, &half, &half, 0);
+    s.filters = vec![inbetween_doc::Filter::Blur { radius: 2 }];
+    let blurred = plain(&s, &half, &half, 0);
+    assert_ne!(plain_frame, blurred);
+    assert_valid(&blurred);
+    assert_eq!(blurred, plain(&s, &half, &half, 0));
 }
 
 #[test]

@@ -30,6 +30,8 @@ pub enum DocError {
     BadEdit(&'static str),
     /// A caption setting is out of range (the text says which).
     BadCaption(&'static str),
+    /// A sound setting is out of range (the text says which).
+    BadSound(&'static str),
 }
 
 impl fmt::Display for DocError {
@@ -56,6 +58,7 @@ impl fmt::Display for DocError {
             Self::BadFace(why) => write!(f, "invalid face model: {why}"),
             Self::BadEdit(why) => write!(f, "invalid image edit: {why}"),
             Self::BadCaption(why) => write!(f, "invalid caption: {why}"),
+            Self::BadSound(why) => write!(f, "invalid sound: {why}"),
             Self::BadFps => write!(f, "frames per second must be a number from 1 to 60"),
             Self::BadOutputSize { width, height } => write!(
                 f,

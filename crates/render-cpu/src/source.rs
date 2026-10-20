@@ -8,7 +8,7 @@ use crate::RenderError;
 use inbetween_doc::{AdjustSettings, Filter, ImageEdit};
 use inbetween_raster::{filter, transform, Adjust, Image};
 
-fn adjust_settings(a: &AdjustSettings) -> Adjust {
+pub fn adjust_settings(a: &AdjustSettings) -> Adjust {
     Adjust {
         brightness: a.brightness,
         contrast: a.contrast,

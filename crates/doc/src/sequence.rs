@@ -1,4 +1,4 @@
-use crate::{Camera, Caption, Curve, DocError, DotSet, Effects, ImageEdit, Track};
+use crate::{Camera, Caption, Curve, DocError, DotSet, Effects, Filter, ImageEdit, Track, MAX_FILTERS};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 
@@ -178,6 +178,9 @@ pub struct Sequence {
     /// A caption drawn over every frame of this sequence.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caption: Option<Caption>,
+    /// Filters run over every finished frame of this sequence (after the camera).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub filters: Vec<Filter>,
 }
 
 impl Default for Sequence {
@@ -204,6 +207,7 @@ impl Default for Sequence {
             edit1: ImageEdit::default(),
             edit2: ImageEdit::default(),
             caption: None,
+            filters: Vec::new(),
         }
     }
 }
@@ -271,6 +275,7 @@ impl Sequence {
     pub fn needs_post_pass(&self) -> bool {
         self.effects.any_active()
             || self.camera.is_active()
+            || !self.filters.is_empty()
             || !self.master_curve.is_opaque()
             || self.caption.as_ref().is_some_and(Caption::is_visible)
     }
@@ -332,6 +337,10 @@ impl Sequence {
         self.camera.validate()?;
         self.track.validate()?;
         self.effects.validate()?;
+        if self.filters.len() > MAX_FILTERS {
+            return Err(DocError::BadEdit("at most 16 filters per sequence"));
+        }
+        self.filters.iter().try_for_each(Filter::validate)?;
         self.edit1.validate()?;
         self.edit2.validate()?;
         if let Some(c) = &self.caption {

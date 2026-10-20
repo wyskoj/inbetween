@@ -350,6 +350,7 @@ line two"
                         align: Align::Right,
                         ..Caption::default()
                     }),
+                    filters: vec![Filter::Blur { radius: 2 }],
                 },
                 Sequence::default(),
             ],
@@ -367,6 +368,27 @@ line two"
                 text: "movie".into(),
                 font: Some(ImageRef::new("../f/y.otf")),
                 ..Caption::default()
+            }),
+            effects: Effects {
+                foreground: ImageLayer {
+                    enabled: true,
+                    image: ImageRef::new("movie/fg.png"),
+                    opacity: 40.0,
+                },
+                ..Effects::default()
+            },
+            adjust: inbetween_doc::AdjustSettings {
+                hue: 12.5,
+                grayscale: true,
+                ..inbetween_doc::AdjustSettings::default()
+            },
+            filters: vec![Filter::Gaussian { sigma: 1.5 }],
+            sound: Some(inbetween_doc::Sound {
+                path: ImageRef::new("audio/t.wav"),
+                looped: true,
+                fade_in: 0.5,
+                fade_out: 1.25,
+                ..inbetween_doc::Sound::default()
             }),
         }
     }

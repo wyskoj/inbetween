@@ -1,4 +1,7 @@
-use crate::{Caption, DocError, FaceModel, ImageRef, Sequence};
+use crate::{
+    AdjustSettings, Caption, DocError, Effects, FaceModel, Filter, ImageRef, Sequence, Sound,
+    MAX_FILTERS,
+};
 use serde::{Deserialize, Serialize};
 
 /// Largest output side in pixels.
@@ -64,6 +67,18 @@ pub struct Project {
     /// A caption drawn over every frame of the movie.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caption: Option<Caption>,
+    /// Effects over the whole movie, drawn on every finished frame (no transition).
+    #[serde(skip_serializing_if = "Effects::is_default")]
+    pub effects: Effects,
+    /// Colour adjustment of every finished frame.
+    #[serde(skip_serializing_if = "AdjustSettings::is_identity")]
+    pub adjust: AdjustSettings,
+    /// Filters over every finished frame, after the adjustment.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub filters: Vec<Filter>,
+    /// The sound under the movie.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sound: Option<Sound>,
 }
 
 /// Frames per second a new project plays and exports at.
@@ -82,11 +97,24 @@ impl Default for Project {
             sequences: Vec::new(),
             face: FaceModel::default(),
             caption: None,
+            effects: Effects::default(),
+            adjust: AdjustSettings::default(),
+            filters: Vec::new(),
+            sound: None,
         }
     }
 }
 
 impl Project {
+    /// Whether finished frames need the movie pass: movie effects, adjustment, filters or a
+    /// visible caption.
+    pub fn needs_movie_pass(&self) -> bool {
+        self.effects.any_active()
+            || !self.adjust.is_identity()
+            || !self.filters.is_empty()
+            || self.caption.as_ref().is_some_and(Caption::is_visible)
+    }
+
     /// Frames in the whole movie: the visible sequences play one after another, or (layer
     /// projects) the longest of them.
     pub fn total_frames(&self) -> u64 {
@@ -146,6 +174,8 @@ impl Project {
             .flat_map(Sequence::all_paths)
             .collect();
         out.extend(self.caption.iter().filter_map(|c| c.font.as_ref()));
+        out.extend(self.effects.all_images());
+        out.extend(self.sound.iter().map(|s| &s.path));
         out
     }
 
@@ -157,6 +187,8 @@ impl Project {
             .flat_map(Sequence::all_paths_mut)
             .collect();
         out.extend(self.caption.iter_mut().filter_map(|c| c.font.as_mut()));
+        out.extend(self.effects.all_images_mut());
+        out.extend(self.sound.iter_mut().map(|s| &mut s.path));
         out
     }
 
@@ -171,6 +203,15 @@ impl Project {
         self.face.validate()?;
         if let Some(c) = &self.caption {
             c.validate()?;
+        }
+        self.effects.validate_movie()?;
+        self.adjust.validate()?;
+        if self.filters.len() > MAX_FILTERS {
+            return Err(DocError::BadEdit("at most 16 filters on the movie"));
+        }
+        self.filters.iter().try_for_each(Filter::validate)?;
+        if let Some(s) = &self.sound {
+            s.validate()?;
         }
         self.sequences.iter().try_for_each(Sequence::validate)
     }
@@ -198,6 +239,40 @@ mod tests {
         assert!(!text.contains("fps"));
         let back: Project = serde_json::from_str("{}").unwrap();
         assert_eq!(back.fps, DEFAULT_FPS);
+    }
+
+    #[test]
+    fn movie_fields_default_off_and_are_not_written() {
+        let text = serde_json::to_string(&Project::default()).unwrap();
+        for key in ["effects", "adjust", "filters", "sound"] {
+            assert!(!text.contains(key), "{key}");
+        }
+        assert!(!Project::default().needs_movie_pass());
+    }
+
+    #[test]
+    fn movie_fields_validate_and_list_their_paths() {
+        let mut p = Project::default();
+        p.effects.foreground.image = ImageRef::new("f.png");
+        p.sound = Some(Sound {
+            path: ImageRef::new("s.wav"),
+            ..Sound::default()
+        });
+        assert_eq!(p.all_paths().len(), 6);
+        assert_eq!(p.all_paths_mut().len(), 6);
+        p.effects.transition.enabled = true;
+        assert!(p.validate().is_err());
+        p.effects.transition.enabled = false;
+        p.adjust.hue = 500.0;
+        assert!(p.validate().is_err());
+        p.adjust.hue = 0.0;
+        p.filters = vec![Filter::Blur { radius: 1 }; MAX_FILTERS + 1];
+        assert!(p.validate().is_err());
+        p.filters.pop();
+        assert!(p.validate().is_ok());
+        assert!(p.needs_movie_pass());
+        let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(back, p);
     }
 
     #[test]

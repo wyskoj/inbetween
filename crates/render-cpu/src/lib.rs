@@ -17,12 +17,13 @@
 pub mod camera;
 pub mod caption;
 mod effects;
+pub mod movie_pass;
 pub mod source;
 mod trail;
 
 pub use effects::{light_pixel, mask_factor, ray_strength, transition_amount, EffectImages};
 
-use inbetween_doc::{Camera, Curve, Effects, MorphType, Sequence, Trail};
+use inbetween_doc::{Camera, Curve, Effects, Filter, MorphType, Sequence, Trail};
 use inbetween_geom::{Affine, Point};
 use inbetween_morph::{
     fit_transform, transparent_outside, FramePlan, MeshTri, Mix, MixMode, MorphError, Planner,
@@ -125,6 +126,7 @@ pub struct Renderer<'a> {
     feature: Curve,
     camera: Camera,
     master: Curve,
+    filters: Vec<Filter>,
 }
 
 /// The transition effect for one frame: the image and the colour-dissolve time.
@@ -180,6 +182,7 @@ impl<'a> Renderer<'a> {
             feature: seq.feature_curve.clone(),
             camera: seq.camera.clone(),
             master: seq.master_curve.clone(),
+            filters: seq.filters.clone(),
         })
     }
 
@@ -218,11 +221,17 @@ impl<'a> Renderer<'a> {
         // Check first so a missing effect image fails before the expensive morph.
         effects::check(&self.effects, &self.effect_images)?;
         let plan = self.planner.plan(t)?;
-        let mut image = self.moved_morph(&plan)?;
+        // Effects sit under the camera (they move with it), so the trail is taken from the
+        // morph in the sequence's own frame and the camera moves the finished composite.
+        let mut image = self.draw(&plan)?;
         if let Some(index) = index.filter(|_| self.effects.trail.enabled) {
             image = self.with_trail(image, index, plan.t)?;
         }
         effects::apply(&self.effects, &self.effect_images, &mut image, plan.t)?;
+        let mut image = camera::apply(&self.camera, plan.t, image)?;
+        for f in &self.filters {
+            image = source::apply_filter(&image, f)?;
+        }
         if let Some(layer) = self.caption {
             caption::composite(&mut image, layer);
         }
@@ -233,11 +242,6 @@ impl<'a> Renderer<'a> {
             }
         }
         Ok(image)
-    }
-
-    /// The morph at the planned time, seen through the camera.
-    fn moved_morph(&self, plan: &FramePlan) -> Result<Image, RenderError> {
-        camera::apply(&self.camera, plan.t, self.draw(plan)?)
     }
 
     /// Mix in the frames before `index` as the trail effect says.
@@ -252,7 +256,7 @@ impl<'a> Renderer<'a> {
             let at = self.timing.frame_time(earlier);
             // A hold repeats the picture; it adds nothing to a trail.
             if at != t {
-                past.push(self.moved_morph(&self.planner.plan(at)?)?);
+                past.push(self.draw(&self.planner.plan(at)?)?);
             }
         }
         trail::combine(&settings, current, &past)
