@@ -15,6 +15,12 @@ pub enum ParamKind {
     Path,
     /// A JSON array of paths, in order. `min` and `max` bound the number of entries.
     PathList,
+    /// A JSON array of whole numbers (for example dot indices). `min` and `max` bound the
+    /// number of entries.
+    IntegerList,
+    /// A JSON array of finite numbers (for example x, y, x, y coordinates). `min` and `max`
+    /// bound the number of entries.
+    NumberList,
     String,
     Integer,
     Number,
@@ -178,6 +184,22 @@ impl Params {
             .map(|a| a.iter().filter_map(Value::as_str).collect())
     }
 
+    /// The entries of an `IntegerList` parameter, in order.
+    pub fn integers(&self, name: &str) -> Option<Vec<i64>> {
+        self.values
+            .get(name)?
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_i64).collect())
+    }
+
+    /// The entries of a `NumberList` parameter, in order.
+    pub fn numbers(&self, name: &str) -> Option<Vec<f64>> {
+        self.values
+            .get(name)?
+            .as_array()
+            .map(|a| a.iter().filter_map(Value::as_f64).collect())
+    }
+
     pub fn integer(&self, name: &str) -> Option<i64> {
         self.values.get(name)?.as_i64()
     }
@@ -194,6 +216,9 @@ impl Params {
         self.values.contains_key(name)
     }
 }
+
+/// Most entries an `IntegerList` or `NumberList` accepts.
+const MAX_NUMBER_LIST: usize = 100_000;
 
 fn bad(message: impl Into<String>) -> CommandError {
     CommandError::BadParams(message.into())
@@ -271,6 +296,43 @@ fn check(spec: &ParamSpec, v: &Value) -> Result<Value, CommandError> {
                 }
             }
             Ok(v.clone())
+        }
+        ParamKind::IntegerList | ParamKind::NumberList => {
+            let whole = spec.kind == ParamKind::IntegerList;
+            let Value::Array(items) = v else {
+                return Err(bad(format!("`{name}` must be a list of numbers")));
+            };
+            if items.len() > MAX_NUMBER_LIST {
+                return Err(bad(format!(
+                    "`{name}` has {} entries; at most {MAX_NUMBER_LIST} are accepted",
+                    items.len()
+                )));
+            }
+            in_range(spec, items.len() as f64).map_err(|_| {
+                bad(format!(
+                    "`{name}` needs between {} and {} entries, got {}",
+                    spec.min.unwrap_or(0.0),
+                    spec.max.unwrap_or(MAX_NUMBER_LIST as f64),
+                    items.len()
+                ))
+            })?;
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                let f = item.as_f64().filter(|f| f.is_finite()).ok_or_else(|| {
+                    bad(format!("every entry of `{name}` must be a finite number"))
+                })?;
+                if whole {
+                    if f.fract() != 0.0 || f.abs() > 9.0e15 {
+                        return Err(bad(format!(
+                            "every entry of `{name}` must be a whole number"
+                        )));
+                    }
+                    out.push(Value::from(f as i64));
+                } else {
+                    out.push(item.clone());
+                }
+            }
+            Ok(Value::Array(out))
         }
         ParamKind::Integer => {
             let n = v
@@ -398,6 +460,32 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(e.contains("bogus") && e.contains("path, n, t, flag"), "{e}");
+    }
+
+    #[test]
+    fn number_lists_are_validated() {
+        const LISTS: &[ParamSpec] = &[
+            ParamSpec::new("ids", ParamKind::IntegerList, false, "ids").range(1.0, 3.0),
+            ParamSpec::new("xs", ParamKind::NumberList, false, "xs"),
+        ];
+        let p = Params::parse(LISTS, &json!({"ids": [1, 2.0], "xs": [0.5, -1]})).unwrap();
+        assert_eq!(p.integers("ids"), Some(vec![1, 2]));
+        assert_eq!(p.numbers("xs"), Some(vec![0.5, -1.0]));
+        for bad in [
+            json!({"ids": []}),
+            json!({"ids": [1, 2, 3, 4]}),
+            json!({"ids": [1.5]}),
+            json!({"ids": ["a"]}),
+            json!({"ids": 1}),
+            json!({"xs": [f64::NAN]}),
+            json!({"xs": [null]}),
+        ] {
+            assert!(Params::parse(LISTS, &bad).is_err(), "accepted {bad}");
+        }
+        assert_eq!(
+            serde_json::to_value(LISTS[0]).unwrap()["kind"],
+            "integer_list"
+        );
     }
 
     #[test]

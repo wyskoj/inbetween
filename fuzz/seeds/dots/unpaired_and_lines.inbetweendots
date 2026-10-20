@@ -1,0 +1,10 @@
+{
+  "format": "inbetween-dots",
+  "version": 1,
+  "pairs": [
+    {"first": {"x": 1.5, "y": 2.5}, "second": {"x": 3.0, "y": 4.0}},
+    {"first": {"x": 9.0, "y": 9.5}, "second": {"x": 9.0, "y": 9.5}, "side": "Only1"},
+    {"first": {"x": 5.0, "y": 6.0}, "second": {"x": 5.0, "y": 6.0}, "side": "Only2"}
+  ],
+  "lines": [{"a": 0, "b": 1}, {"a": 1, "b": 2}]
+}

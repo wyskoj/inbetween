@@ -5,29 +5,73 @@
 
 use crate::crop::{CropTool, Handle};
 use crate::hit;
+use crate::state::Tool;
 use crate::view::View;
 use egui::{
     Align2, Color32, CursorIcon, FontId, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind,
     TextureId, Ui, Vec2,
 };
+use inbetween_engine::DisplayPrefs;
+use std::collections::BTreeSet;
 
 mod crop_view;
+pub mod overlay;
 use crop_view::{caption_drag, crop_mode, draw_caption_frame};
+use overlay::{dot_color, DotLook};
 
 /// How close, in screen points, the pointer must be to grab a dot.
 pub const GRAB_RADIUS: f32 = 9.0;
-const DOT_RADIUS: f32 = 5.0;
+/// How close, in screen points, the pointer must be to grab a line.
+pub const LINE_GRAB: f32 = 5.0;
+
+/// How a selection gesture combines with the current selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelMode {
+    Set,
+    Add,
+    Subtract,
+    Toggle,
+}
+
+impl SelMode {
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Set => "set",
+            Self::Add => "add",
+            Self::Subtract => "subtract",
+            Self::Toggle => "toggle",
+        }
+    }
+}
 
 /// What the person did on a canvas, in frame coordinates (output pixels).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
-    /// Click on empty image: add a dot pair here.
+    /// Click on empty image with the Add tool: add a dot here (`same`: partner at the same spot).
     Add {
         x: f64,
         y: f64,
+        image: u8,
+        same: bool,
     },
-    /// Click on a dot, or `None` to clear the selection.
-    Select(Option<usize>),
+    /// Click on a dot.
+    SelectDot {
+        index: usize,
+        mode: SelMode,
+    },
+    /// Click on a line: select its connected dots.
+    SelectLine {
+        index: usize,
+        mode: SelMode,
+    },
+    /// Click on empty image with the Edit tool.
+    SelectNone,
+    /// A marquee finished: x0, y0, x1, y1 in frame pixels on `image`.
+    Marquee {
+        image: u8,
+        rect: [f64; 4],
+        mode: SelMode,
+    },
     /// A drag on a dot began.
     BeginDrag {
         index: usize,
@@ -42,8 +86,37 @@ pub enum Action {
     },
     /// The drag ended.
     EndDrag,
-    /// Right-click on a dot: remove the pair.
+    /// Delete tool click, or right-click on a dot: remove the dot.
     Delete(usize),
+    /// Line tool click: drop a dot (or continue from `dot`) and join it to the last one.
+    LineClick {
+        x: f64,
+        y: f64,
+        image: u8,
+        dot: Option<usize>,
+        finish: bool,
+    },
+    /// Right-click, Enter or Esc with the Line tool: stop drawing the chain.
+    LineEnd,
+    /// Click on a line with the Add tool: put a dot on it.
+    InsertOnLine {
+        line: usize,
+        x: f64,
+        y: f64,
+        image: u8,
+    },
+    /// A drag on a line began.
+    LineDragBegin {
+        line: usize,
+    },
+    /// The dragged line's group moves by this much on `image`.
+    LineDrag {
+        line: usize,
+        image: u8,
+        dx: f64,
+        dy: f64,
+    },
+    LineDragEnd,
     /// The crop box was grabbed; `at` is the position in the turned picture's pixels.
     CropBegin {
         handle: Handle,
@@ -71,6 +144,8 @@ pub struct Grabs {
     pub crop: Option<Handle>,
     /// The caption is being dragged.
     pub caption: bool,
+    /// A line is being dragged.
+    pub line: Option<usize>,
 }
 
 /// A dot being dragged between frames.
@@ -90,6 +165,33 @@ pub struct Shown {
     pub uv: Rect,
 }
 
+/// A dot on one image: where it is, which dot it is, and whether it has a partner.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelDot {
+    pub pos: Pos2,
+    pub index: usize,
+    pub paired: bool,
+}
+
+/// A line between two dots that are both on this image.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PanelLine {
+    pub a: Pos2,
+    pub b: Pos2,
+    /// The line number.
+    pub index: usize,
+    /// The dot numbers at its two ends.
+    pub a_dot: usize,
+    pub b_dot: usize,
+}
+
+/// What the pointer is over in a panel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Hover {
+    pub dot: Option<usize>,
+    pub line: Option<usize>,
+}
+
 /// Everything a source panel draws.
 pub struct SourcePanel<'a> {
     /// 1 or 2.
@@ -98,13 +200,24 @@ pub struct SourcePanel<'a> {
     /// Output size in pixels.
     pub frame: Vec2,
     pub shown: Option<Shown>,
-    /// Dot positions on this image, frame coordinates, in dot order.
-    pub dots: &'a [Pos2],
+    /// The dots that are on this image, frame coordinates.
+    pub dots: &'a [PanelDot],
+    /// Lines between them.
+    pub lines: &'a [PanelLine],
     /// Mesh triangles on this image, frame coordinates.
     pub mesh: &'a [[Pos2; 3]],
-    pub selected: Option<usize>,
-    pub show_mesh: bool,
+    pub selected: &'a BTreeSet<usize>,
+    pub prefs: DisplayPrefs,
+    pub tool: Tool,
     pub show_numbers: bool,
+    /// The partner of the dot hovered on the other panel.
+    pub partner_hover: Option<usize>,
+    /// The dots of the line group being hovered.
+    pub hot_group: &'a [usize],
+    /// Where an unpaired dot hovered on the other panel would be matched, blinking.
+    pub ghost: Option<Pos2>,
+    /// The last dot of the Line tool's chain, to draw the rubber band from.
+    pub chain_from: Option<Pos2>,
     /// Shown in the middle when there is nothing to draw.
     pub message: Option<String>,
     /// While the crop tool is on this image: the box to draw and edit.
@@ -126,20 +239,11 @@ pub struct PanelOutput {
     /// The canvas rectangle on screen.
     pub rect: Rect,
     pub actions: Vec<Action>,
+    pub hover: Hover,
 }
 
 const BACKDROP: Color32 = Color32::from_gray(24);
 const FRAME_BG: Color32 = Color32::from_gray(40);
-
-fn dot_color(selected: bool, hovered: bool) -> Color32 {
-    if selected {
-        Color32::from_rgb(255, 205, 0)
-    } else if hovered {
-        Color32::WHITE
-    } else {
-        Color32::from_rgb(40, 200, 255)
-    }
-}
 
 /// Allocate a canvas that fills the remaining space under a one-line header.
 fn canvas(ui: &mut Ui, title: &str) -> (Rect, egui::Response) {
@@ -212,6 +316,16 @@ fn draw_message(painter: &egui::Painter, rect: Rect, text: &str) {
     );
 }
 
+fn mode_for_marquee(shift: bool, alt: bool) -> SelMode {
+    if alt {
+        SelMode::Subtract
+    } else if shift {
+        SelMode::Add
+    } else {
+        SelMode::Set
+    }
+}
+
 /// Draw a source panel and report what the person did in it.
 pub fn source_panel(
     ui: &mut Ui,
@@ -228,14 +342,44 @@ pub fn source_panel(
         return crop_mode(ui, panel, crop, view, grabs, rect, &resp);
     }
     let mut actions = Vec::new();
+    let tool = panel.tool;
+    let (shift, alt) = ui.input(|i| (i.modifiers.shift, i.modifiers.alt));
 
     let screen_dots: Vec<Pos2> = panel
         .dots
         .iter()
-        .map(|d| view.to_screen(rect, *d))
+        .map(|d| view.to_screen(rect, d.pos))
+        .collect();
+    let screen_lines: Vec<(Pos2, Pos2)> = panel
+        .lines
+        .iter()
+        .map(|l| (view.to_screen(rect, l.a), view.to_screen(rect, l.b)))
         .collect();
     let pointer = resp.interact_pointer_pos().or_else(|| resp.hover_pos());
-    let over = pointer.and_then(|p| hit::pick(&screen_dots, p, GRAB_RADIUS));
+    let over_slot = pointer.and_then(|p| hit::pick(&screen_dots, p, GRAB_RADIUS));
+    let over = over_slot.and_then(|i| panel.dots.get(i)).map(|d| d.index);
+    let over_line = if over.is_none() && panel.prefs.show_lines {
+        pointer
+            .and_then(|p| hit::pick_segment(&screen_lines, p, LINE_GRAB))
+            .and_then(|i| panel.lines.get(i))
+            .map(|l| l.index)
+    } else {
+        None
+    };
+    let dot_at = |p: Pos2| {
+        hit::pick(&screen_dots, p, GRAB_RADIUS)
+            .and_then(|i| panel.dots.get(i))
+            .map(|d| d.index)
+    };
+    let line_at = |p: Pos2| {
+        if !panel.prefs.show_lines {
+            return None;
+        }
+        hit::pick_segment(&screen_lines, p, LINE_GRAB)
+            .and_then(|i| panel.lines.get(i))
+            .map(|l| l.index)
+    };
+    let in_frame = |f: Pos2| Rect::from_min_size(Pos2::ZERO, panel.frame).contains(f);
 
     // --- input ---
     view_input(
@@ -252,34 +396,62 @@ pub fn source_panel(
     };
     if resp.drag_started_by(PointerButton::Primary) {
         if let Some(p) = resp.interact_pointer_pos() {
-            if caption_here(p) && hit::pick(&screen_dots, p, GRAB_RADIUS).is_none() {
+            if caption_here(p) && dot_at(p).is_none() {
                 grabs.caption = true;
                 actions.push(Action::CaptionBegin);
             }
         }
     }
+    let had_caption = grabs.caption;
     if grabs.caption {
         caption_drag(ui, &resp, rect, view, grabs, &mut actions);
     }
-    if !grabs.caption && resp.drag_started_by(PointerButton::Primary) {
-        if let Some(index) = resp
-            .interact_pointer_pos()
-            .and_then(|p| hit::pick(&screen_dots, p, GRAB_RADIUS))
-        {
-            *drag = Some(DotDrag {
-                index,
-                image: panel.image,
-            });
-            actions.push(Action::Select(Some(index)));
-            actions.push(Action::BeginDrag {
-                index,
-                image: panel.image,
-            });
+    if !had_caption && resp.drag_started_by(PointerButton::Primary) {
+        // egui reports the drag a few pixels after the press; what was grabbed is what was
+        // under the pointer when the button went down.
+        let pressed_at = ui
+            .input(|i| i.pointer.press_origin())
+            .or_else(|| resp.interact_pointer_pos());
+        if let Some(p) = pressed_at {
+            if let (Some(index), true) = (dot_at(p), matches!(tool, Tool::Edit | Tool::Add)) {
+                *drag = Some(DotDrag {
+                    index,
+                    image: panel.image,
+                });
+                if !panel.selected.contains(&index) {
+                    actions.push(Action::SelectDot {
+                        index,
+                        mode: if shift { SelMode::Add } else { SelMode::Set },
+                    });
+                }
+                actions.push(Action::BeginDrag {
+                    index,
+                    image: panel.image,
+                });
+            } else if let (Some(line), Tool::Edit) = (line_at(p), tool) {
+                grabs.line = Some(line);
+                actions.push(Action::SelectLine {
+                    index: line,
+                    mode: SelMode::Set,
+                });
+                actions.push(Action::LineDragBegin { line });
+            }
         }
     }
-    if !grabs.caption && resp.dragged_by(PointerButton::Primary) {
-        match (*drag, resp.interact_pointer_pos()) {
-            (Some(d), Some(p)) if d.image == panel.image => {
+    // The press position is gone by the frame the button is released, so keep it meanwhile.
+    let origin_id = egui::Id::new(("marquee origin", panel.image));
+    if let Some(o) = ui.input(|i| i.pointer.press_origin()) {
+        ui.data_mut(|d| d.insert_temp(origin_id, o));
+    }
+    let marquee_from: Option<Pos2> = ui.data(|d| d.get_temp(origin_id));
+    let marquee_live = tool == Tool::Edit
+        && !had_caption
+        && drag.is_none()
+        && grabs.line.is_none()
+        && resp.dragged_by(PointerButton::Primary);
+    if !had_caption && resp.dragged_by(PointerButton::Primary) {
+        match (*drag, grabs.line, resp.interact_pointer_pos()) {
+            (Some(d), _, Some(p)) if d.image == panel.image => {
                 let f = view.to_frame(rect, p);
                 actions.push(Action::Drag {
                     index: d.index,
@@ -288,46 +460,116 @@ pub fn source_panel(
                     y: f64::from(f.y),
                 });
             }
-            (None, _) => view.pan(resp.drag_delta()),
+            (None, Some(line), Some(p)) => {
+                let delta = resp.drag_delta();
+                let now = view.to_frame(rect, p);
+                let before = view.to_frame(rect, p - delta);
+                actions.push(Action::LineDrag {
+                    line,
+                    image: panel.image,
+                    dx: f64::from(now.x - before.x),
+                    dy: f64::from(now.y - before.y),
+                });
+            }
+            (None, None, _) if tool != Tool::Edit => view.pan(resp.drag_delta()),
             _ => {}
         }
     }
-    if resp.drag_stopped_by(PointerButton::Primary) && drag.take().is_some() {
-        actions.push(Action::EndDrag);
+    if resp.drag_stopped_by(PointerButton::Primary) && !had_caption {
+        if drag.take().is_some() {
+            actions.push(Action::EndDrag);
+        } else if grabs.line.take().is_some() {
+            actions.push(Action::LineDragEnd);
+        } else if tool == Tool::Edit {
+            if let (Some(a), Some(b)) = (marquee_from, resp.interact_pointer_pos()) {
+                let (fa, fb) = (view.to_frame(rect, a), view.to_frame(rect, b));
+                actions.push(Action::Marquee {
+                    image: panel.image,
+                    rect: [
+                        f64::from(fa.x),
+                        f64::from(fa.y),
+                        f64::from(fb.x),
+                        f64::from(fb.y),
+                    ],
+                    mode: mode_for_marquee(shift, alt),
+                });
+            }
+        }
     }
     if resp.clicked_by(PointerButton::Primary) {
         if let Some(p) = resp.interact_pointer_pos() {
-            match hit::pick(&screen_dots, p, GRAB_RADIUS) {
-                Some(i) => actions.push(Action::Select(Some(i))),
-                None => {
-                    let f = view.to_frame(rect, p);
-                    if Rect::from_min_size(Pos2::ZERO, panel.frame).contains(f) {
-                        actions.push(Action::Add {
-                            x: f64::from(f.x),
-                            y: f64::from(f.y),
+            let f = view.to_frame(rect, p);
+            let (fx, fy) = (f64::from(f.x), f64::from(f.y));
+            let dot = dot_at(p);
+            let line = if dot.is_none() { line_at(p) } else { None };
+            match tool {
+                Tool::Edit => match (dot, line) {
+                    (Some(index), _) => actions.push(Action::SelectDot {
+                        index,
+                        mode: if shift { SelMode::Toggle } else { SelMode::Set },
+                    }),
+                    (None, Some(index)) => actions.push(Action::SelectLine {
+                        index,
+                        mode: if shift { SelMode::Add } else { SelMode::Set },
+                    }),
+                    _ if !shift => actions.push(Action::SelectNone),
+                    _ => {}
+                },
+                Tool::Add => match (dot, line) {
+                    (Some(index), _) => actions.push(Action::SelectDot {
+                        index,
+                        mode: SelMode::Set,
+                    }),
+                    (None, Some(index)) if in_frame(f) => actions.push(Action::InsertOnLine {
+                        line: index,
+                        x: fx,
+                        y: fy,
+                        image: panel.image,
+                    }),
+                    _ if in_frame(f) => actions.push(Action::Add {
+                        x: fx,
+                        y: fy,
+                        image: panel.image,
+                        same: alt,
+                    }),
+                    _ => actions.push(Action::SelectNone),
+                },
+                Tool::Delete => {
+                    if let Some(index) = dot {
+                        actions.push(Action::Delete(index));
+                    }
+                }
+                Tool::Line => {
+                    if dot.is_some() || in_frame(f) {
+                        actions.push(Action::LineClick {
+                            x: fx,
+                            y: fy,
+                            image: panel.image,
+                            dot,
+                            finish: shift,
                         });
-                    } else {
-                        actions.push(Action::Select(None));
                     }
                 }
             }
         }
     }
     if resp.secondary_clicked() {
-        if let Some(i) = resp
-            .interact_pointer_pos()
-            .and_then(|p| hit::pick(&screen_dots, p, GRAB_RADIUS))
-        {
+        if tool == Tool::Line {
+            actions.push(Action::LineEnd);
+        } else if let Some(i) = resp.interact_pointer_pos().and_then(dot_at) {
             actions.push(Action::Delete(i));
         }
     }
     if resp.hovered() {
-        let icon = if drag.is_some() {
+        let icon = if drag.is_some() || grabs.line.is_some() {
             CursorIcon::Grabbing
-        } else if over.is_some() {
+        } else if over.is_some() || over_line.is_some() {
             CursorIcon::Grab
         } else {
-            CursorIcon::Crosshair
+            match tool {
+                Tool::Edit => CursorIcon::Default,
+                _ => CursorIcon::Crosshair,
+            }
         };
         ui.ctx().set_cursor_icon(icon);
     }
@@ -342,45 +584,83 @@ pub fn source_panel(
             panel.message.as_deref().unwrap_or("No image"),
         ),
     }
+    if panel.prefs.show_grid {
+        overlay::draw_grid(&painter, view, rect, panel.frame);
+    }
     painter.rect_stroke(
         frame_rect,
         0.0,
         Stroke::new(1.0_f32, Color32::from_gray(110)),
         StrokeKind::Outside,
     );
-    if panel.show_mesh {
+    if panel.prefs.show_triangles {
         draw_mesh(&painter, view, rect, panel.mesh);
     }
-    let hovered = over.filter(|_| drag.is_none());
-    for (i, p) in screen_dots.iter().enumerate() {
-        let selected = panel.selected == Some(i);
-        let r = if selected || hovered == Some(i) {
-            DOT_RADIUS + 1.5
-        } else {
-            DOT_RADIUS
-        };
-        painter.circle(*p, r + 1.0, Color32::from_black_alpha(190), Stroke::NONE);
-        painter.circle(*p, r, dot_color(selected, hovered == Some(i)), Stroke::NONE);
-        if panel.show_numbers {
-            let at = *p + Vec2::new(r + 3.0, -r - 3.0);
-            let font = FontId::proportional(12.0);
-            painter.text(
-                at + Vec2::splat(1.0),
-                Align2::LEFT_BOTTOM,
-                (i + 1).to_string(),
-                font.clone(),
-                Color32::BLACK,
-            );
-            painter.text(
-                at,
-                Align2::LEFT_BOTTOM,
-                (i + 1).to_string(),
-                font,
-                Color32::WHITE,
+    let hovering = drag.is_none() && grabs.line.is_none();
+    let hot = |i: usize| panel.hot_group.contains(&i);
+    if panel.prefs.show_lines {
+        for (l, (a, b)) in panel.lines.iter().zip(&screen_lines) {
+            let line_hot =
+                (hovering && over_line == Some(l.index)) || (hot(l.a_dot) && hot(l.b_dot));
+            overlay::draw_line(&painter, *a, *b, line_hot);
+        }
+    }
+    if let (Some(from), Some(p)) = (panel.chain_from, pointer) {
+        overlay::draw_line(&painter, view.to_screen(rect, from), p, true);
+    }
+    let mut loupe_dots = Vec::new();
+    if panel.prefs.show_dots {
+        for (d, p) in panel.dots.iter().zip(&screen_dots) {
+            let hovered = hovering && over == Some(d.index);
+            let look = DotLook {
+                paired: d.paired,
+                selected: panel.selected.contains(&d.index),
+                hovered,
+                partner_hovered: panel.partner_hover == Some(d.index),
+                group_hovered: hot(d.index),
+            };
+            let color = dot_color(&panel.prefs, d.index, look);
+            let big = look.selected || hovered || look.partner_hovered;
+            overlay::draw_dot(&painter, *p, panel.prefs.dot_style, color, big);
+            loupe_dots.push((*p, color));
+            if panel.show_numbers {
+                overlay::draw_number(&painter, *p, (d.index + 1).to_string());
+            }
+        }
+    }
+    if let Some(g) = panel.ghost {
+        let t = ui.input(|i| i.time);
+        overlay::draw_ghost(&painter, view.to_screen(rect, g), t);
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(120));
+    }
+    if marquee_live {
+        if let (Some(a), Some(b)) = (marquee_from, resp.interact_pointer_pos()) {
+            overlay::draw_marquee(&painter, a, b);
+        }
+    }
+    if panel.prefs.magnifier && resp.hovered() {
+        if let Some(p) = resp.hover_pos() {
+            overlay::draw_loupe(
+                &painter,
+                view,
+                rect,
+                panel.shown.as_ref(),
+                p,
+                panel.prefs.magnifier_power,
+                &loupe_dots,
+                panel.prefs.dot_style,
             );
         }
     }
-    PanelOutput { rect, actions }
+    PanelOutput {
+        rect,
+        actions,
+        hover: Hover {
+            dot: if hovering { over } else { None },
+            line: if hovering { over_line } else { None },
+        },
+    }
 }
 
 /// Everything the preview draws.
@@ -390,7 +670,9 @@ pub struct PreviewPanel<'a> {
     pub shown: Option<Shown>,
     /// Mesh triangles at the current frame, frame coordinates.
     pub mesh: &'a [[Pos2; 3]],
-    pub show_mesh: bool,
+    pub prefs: DisplayPrefs,
+    /// Each dot's path, frame coordinates (drawn when `prefs.show_track` is on).
+    pub tracks: &'a [Vec<Pos2>],
     pub message: Option<String>,
     /// While the caption window is open for the sequence or the movie: where the caption sits,
     /// in frame coordinates. A drag that starts on it moves it instead of panning.
@@ -443,14 +725,20 @@ pub fn preview_panel(
             panel.message.as_deref().unwrap_or("No preview"),
         ),
     }
+    if panel.prefs.show_grid {
+        overlay::draw_grid(&painter, view, rect, panel.frame);
+    }
     painter.rect_stroke(
         frame_rect,
         0.0,
         Stroke::new(1.0_f32, Color32::from_gray(110)),
         StrokeKind::Outside,
     );
-    if panel.show_mesh {
+    if panel.prefs.show_triangles {
         draw_mesh(&painter, view, rect, panel.mesh);
+    }
+    if panel.prefs.show_track {
+        overlay::draw_tracks(&painter, view, rect, panel.tracks);
     }
     if let Some(message) = panel.message.as_deref().filter(|_| panel.shown.is_some()) {
         // A problem with the current frame: keep the last good image and say so on top of it.
@@ -467,5 +755,9 @@ pub fn preview_panel(
     if let Some(caption) = panel.caption {
         draw_caption_frame(&painter, view, rect, caption);
     }
-    PanelOutput { rect, actions }
+    PanelOutput {
+        rect,
+        actions,
+        hover: Hover::default(),
+    }
 }

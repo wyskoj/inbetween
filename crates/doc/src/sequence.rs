@@ -342,6 +342,7 @@ impl Sequence {
                 return Err(DocError::NonFiniteDot(i));
             }
         }
+        self.dots.validate_lines()?;
         Ok(())
     }
 }

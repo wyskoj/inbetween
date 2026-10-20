@@ -126,19 +126,22 @@ fn remap_side(
 ) -> Result<(), CommandError> {
     let seq = session.sequence_mut(index)?;
     let mut moved = Vec::with_capacity(seq.dots.pairs.len());
-    for pair in &seq.dots.pairs {
-        let p = if which == 1 { pair.first } else { pair.second };
+    for (i, pair) in seq.dots.pairs.iter().enumerate() {
+        if !pair.has_end(which) {
+            continue;
+        }
+        let p = pair.end(which);
         let (x, y) = affine_apply(map, p.x, p.y);
         if !(x.is_finite() && y.is_finite()) {
             return Err(CommandError::BadParams(format!(
                 "that edit would move a dot of Image {which} to an invalid position"
             )));
         }
-        moved.push(Point::new(x, y));
+        moved.push((i, Point::new(x, y)));
     }
     let mut keys: Vec<(u64, u64)> = moved
         .iter()
-        .map(|p| (p.x.to_bits(), p.y.to_bits()))
+        .map(|(_, p)| (p.x.to_bits(), p.y.to_bits()))
         .collect();
     keys.sort_unstable();
     if keys.windows(2).any(|w| w[0] == w[1]) {
@@ -146,11 +149,9 @@ fn remap_side(
             "that edit would put two dots on the same spot of Image {which}; move one first, or pass keep_dots"
         )));
     }
-    for (pair, p) in seq.dots.pairs.iter_mut().zip(moved) {
-        if which == 1 {
-            pair.first = p;
-        } else {
-            pair.second = p;
+    for (i, p) in moved {
+        if let Some(pair) = seq.dots.pairs.get_mut(i) {
+            pair.set_end(which, p);
         }
     }
     Ok(())
@@ -556,7 +557,7 @@ fn swap(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     std::mem::swap(&mut seq.image1, &mut seq.image2);
     std::mem::swap(&mut seq.edit1, &mut seq.edit2);
     for pair in &mut seq.dots.pairs {
-        std::mem::swap(&mut pair.first, &mut pair.second);
+        pair.swap_ends();
     }
     Ok(json!({
         "sequence": index,

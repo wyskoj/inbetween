@@ -1,7 +1,7 @@
 //! Dot commands: `dots.add`, `dots.move`, `dots.delete`, `dots.import`, `dots.export`.
 
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
-use inbetween_doc::DotPair;
+use inbetween_doc::{DotPair, Sequence, Side};
 use inbetween_geom::Point;
 use serde_json::{json, Value};
 
@@ -29,8 +29,24 @@ const ADD_PARAMS: &[ParamSpec] = &[
         true,
     ),
     coord("y", "Vertical position on Image 1, in output pixels", true),
-    coord("x2", "Horizontal position on Image 2", false).default_is("the same as x"),
-    coord("y2", "Vertical position on Image 2", false).default_is("the same as y"),
+    coord("x2", "Horizontal position on Image 2", false)
+        .default_is("where the dots already placed carry (x, y)"),
+    coord("y2", "Vertical position on Image 2", false)
+        .default_is("where the dots already placed carry (x, y)"),
+    ParamSpec::new(
+        "image",
+        ParamKind::Integer,
+        false,
+        "Which image (1 or 2) x and y are on when x2 and y2 are left out",
+    )
+    .range(1.0, 2.0)
+    .default_is("1"),
+    SEQUENCE,
+];
+
+const ADD_SAME_PARAMS: &[ParamSpec] = &[
+    coord("x", "Horizontal position, in output pixels", true),
+    coord("y", "Vertical position, in output pixels", true),
     SEQUENCE,
 ];
 
@@ -93,23 +109,125 @@ fn occupied(which: u8) -> CommandError {
     ))
 }
 
-fn add(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
-    let first = Point::new(number(params, "x")?, number(params, "y")?);
-    let second = Point::new(
-        params.number("x2").unwrap_or(first.x),
-        params.number("y2").unwrap_or(first.y),
-    );
-    let seq = session.sequence_mut(index)?;
-    if seq.dots.pairs.iter().any(|p| p.first == first) {
-        return Err(occupied(1));
-    }
-    if seq.dots.pairs.iter().any(|p| p.second == second) {
-        return Err(occupied(2));
-    }
-    seq.dots.pairs.push(DotPair::new(first, second));
+/// Whether some dot other than `skip` already sits at `at` on image `which`.
+pub(crate) fn taken(seq: &Sequence, which: u8, at: Point, skip: Option<usize>) -> bool {
+    seq.dots
+        .pairs
+        .iter()
+        .enumerate()
+        .any(|(i, p)| Some(i) != skip && p.has_end(which) && p.end(which) == at)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Partner {
+    /// Map the point through the paired mesh, or leave the partner out, per the preference.
+    Auto,
+    /// Put the partner at identical coordinates.
+    Same,
+}
+
+/// Put a dot at `at` on image `image` (1 or 2): a full pair when `second` is given, `same` is
+/// set or `auto_partner` is on, otherwise a dot waiting for its partner (or completing the
+/// oldest one that is). Returns the dot number.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn place_dot(
+    seq: &mut Sequence,
+    size: (u32, u32),
+    auto_partner: bool,
+    image: u8,
+    at: Point,
+    second: Option<Point>,
+    same: bool,
+) -> Result<usize, CommandError> {
+    let pair = if let Some(second) = second {
+        Some(DotPair::new(at, second))
+    } else if same {
+        Some(DotPair::fixed(at))
+    } else if auto_partner {
+        let mapped = inbetween_morph::automatch::transfer_point(seq, at, image, size.0, size.1);
+        Some(if image == 1 {
+            DotPair::new(at, mapped)
+        } else {
+            DotPair::new(mapped, at)
+        })
+    } else {
+        None
+    };
+    let dot = match pair {
+        Some(pair) => {
+            if taken(seq, 1, pair.first, None) {
+                return Err(occupied(1));
+            }
+            if taken(seq, 2, pair.second, None) {
+                return Err(occupied(2));
+            }
+            seq.dots.pairs.push(pair);
+            seq.dots.len() - 1
+        }
+        None => {
+            if taken(seq, image, at, None) {
+                return Err(occupied(image));
+            }
+            // A dot that is still missing this image's end is completed first, oldest first.
+            let waiting = seq.dots.pairs.iter().position(|p| !p.has_end(image));
+            match waiting.and_then(|i| seq.dots.pairs.get_mut(i).map(|p| (i, p))) {
+                Some((i, p)) => {
+                    p.side = Side::Both;
+                    if image == 1 {
+                        p.first = at;
+                    } else {
+                        p.second = at;
+                    }
+                    i
+                }
+                None => {
+                    let side = if image == 1 { Side::Only1 } else { Side::Only2 };
+                    seq.dots.pairs.push(DotPair::unpaired(at, side));
+                    seq.dots.len() - 1
+                }
+            }
+        }
+    };
     seq.validate()?;
-    Ok(json!({ "sequence": index, "index": seq.dots.len() - 1, "dots": seq.dots.len() }))
+    Ok(dot)
+}
+
+fn add_dot(
+    session: &mut Session,
+    params: &Params,
+    partner: Partner,
+) -> Result<Value, CommandError> {
+    let index = session.sequence_index(params)?;
+    let image: u8 = if params.integer("image") == Some(2) {
+        2
+    } else {
+        1
+    };
+    let at = Point::new(number(params, "x")?, number(params, "y")?);
+    let size = (
+        session.project().output.width,
+        session.project().output.height,
+    );
+    let auto_partner = session.prefs().auto_partner;
+    let second = (params.has("x2") || params.has("y2")).then(|| {
+        Point::new(
+            params.number("x2").unwrap_or(at.x),
+            params.number("y2").unwrap_or(at.y),
+        )
+    });
+    let seq = session.sequence_mut(index)?;
+    let same = partner == Partner::Same;
+    let dot = place_dot(seq, size, auto_partner, image, at, second, same)?;
+    let paired = seq.dots.pairs.get(dot).is_some_and(DotPair::is_paired);
+    Ok(json!({ "sequence": index, "index": dot, "dots": seq.dots.len(), "paired": paired }))
+}
+
+fn add(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    add_dot(session, params, Partner::Auto)
+}
+
+fn add_same_pos(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    add_dot(session, params, Partner::Same)
 }
 
 fn move_dot(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
@@ -118,23 +236,23 @@ fn move_dot(session: &mut Session, params: &Params) -> Result<Value, CommandErro
     let image = params.integer("image").unwrap_or(1);
     let seq = session.sequence_mut(seq_index)?;
     let dot = index_of(params, seq.dots.len())?;
-    let clash = seq.dots.pairs.iter().enumerate().any(|(i, p)| {
-        i != dot
-            && if image == 1 {
-                p.first == to
-            } else {
-                p.second == to
-            }
-    });
+    let which = if image == 1 { 1 } else { 2 };
+    if !seq.dots.pairs.get(dot).is_some_and(|p| p.has_end(which)) {
+        return Err(CommandError::BadParams(format!(
+            "dot {dot} is not on Image {which}"
+        )));
+    }
+    let clash = seq
+        .dots
+        .pairs
+        .iter()
+        .enumerate()
+        .any(|(i, p)| i != dot && p.has_end(which) && p.end(which) == to);
     if clash {
         return Err(occupied(if image == 1 { 1 } else { 2 }));
     }
     if let Some(pair) = seq.dots.pairs.get_mut(dot) {
-        if image == 1 {
-            pair.first = to;
-        } else {
-            pair.second = to;
-        }
+        pair.set_end(which, to);
     }
     Ok(json!({ "sequence": seq_index, "index": dot, "image": image, "x": to.x, "y": to.y }))
 }
@@ -143,7 +261,7 @@ fn delete(session: &mut Session, params: &Params) -> Result<Value, CommandError>
     let seq_index = session.sequence_index(params)?;
     let seq = session.sequence_mut(seq_index)?;
     let dot = index_of(params, seq.dots.len())?;
-    seq.dots.pairs.remove(dot);
+    seq.dots.remove(dot);
     Ok(json!({ "sequence": seq_index, "deleted": dot, "dots": seq.dots.len() }))
 }
 
@@ -155,12 +273,24 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             label: "Add Dot",
             menu: "",
             shortcut: None,
-            description: "Add a dot pair. It starts at the same place on both images unless x2 and y2 say otherwise.",
+            description: "Add a dot. With auto-partner on (the default) the partner is placed where the existing dots carry that point, or at x2 and y2; with it off the dot waits on one image for its partner.",
             params: ADD_PARAMS,
             enabled: has_sequence,
             disabled_reason: "the project has no sequence to put dots in",
             edits: true,
             run: add,
+        },
+        CommandSpec {
+            id: "dots.addSamePos",
+            label: "Add Dot At Same Position",
+            menu: "",
+            shortcut: None,
+            description: "Add a dot pair with the partner at identical coordinates, for boundary and anchor dots.",
+            params: ADD_SAME_PARAMS,
+            enabled: has_sequence,
+            disabled_reason: "the project has no sequence to put dots in",
+            edits: true,
+            run: add_same_pos,
         },
         CommandSpec {
             id: "dots.move",
@@ -178,7 +308,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             id: "dots.delete",
             label: "Delete Dot",
             menu: "",
-            shortcut: Some("Delete"),
+            shortcut: None,
             description: "Delete a dot pair from both images.",
             params: DELETE_PARAMS,
             enabled: has_sequence,

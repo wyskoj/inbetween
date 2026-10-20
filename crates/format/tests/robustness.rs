@@ -83,6 +83,17 @@ const TOKENS: &[&str] = &[
     "\u{feff}",
 ];
 
+fn seed_dots() -> DotSet {
+    let mut dots = DotSet::new(vec![
+        DotPair::new(Point::new(10.5, 20.25), Point::new(30.0, 40.0)),
+        DotPair::fixed(Point::new(-5.0, 7.0)),
+        DotPair::unpaired(Point::new(2.0, 3.0), inbetween_doc::Side::Only2),
+    ]);
+    dots.connect(0, 1);
+    dots.connect(1, 2);
+    dots
+}
+
 fn project_seed() -> String {
     let project = Project {
         sequences: vec![
@@ -90,10 +101,7 @@ fn project_seed() -> String {
                 name: "seed".into(),
                 image1: ImageRef::new("images/a.png"),
                 image2: ImageRef::new("b.png"),
-                dots: DotSet::new(vec![
-                    DotPair::new(Point::new(10.5, 20.25), Point::new(30.0, 40.0)),
-                    DotPair::fixed(Point::new(-5.0, 7.0)),
-                ]),
+                dots: seed_dots(),
                 frames: 12,
                 hold_start: 2,
                 hold_end: 4,
@@ -144,11 +152,7 @@ fn project_seed() -> String {
 }
 
 fn dots_seed() -> String {
-    dots_to_string(&DotSet::new(vec![
-        DotPair::new(Point::new(1.5, 2.5), Point::new(3.0, 4.0)),
-        DotPair::fixed(Point::new(9.0, 9.5)),
-    ]))
-    .unwrap()
+    dots_to_string(&seed_dots()).unwrap()
 }
 
 fn mutate(rng: &mut Rng, seed: &[u8]) -> Vec<u8> {
@@ -281,6 +285,9 @@ fn committed_fuzz_seeds_are_valid_files() {
             .len(),
         2
     );
+    let rich = include_str!("../../../fuzz/seeds/dots/unpaired_and_lines.inbetweendots");
+    let set = dots_from_bytes(rich.as_bytes()).unwrap();
+    assert_eq!((set.len(), set.lines.len()), (3, 2));
 }
 
 /// Regression: without serde_json's `float_roundtrip` feature, parsing can be one bit off,

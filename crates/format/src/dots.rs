@@ -1,5 +1,5 @@
 use crate::{check_header, decode_text, parse_error, FormatError, MAX_FILE_BYTES};
-use inbetween_doc::{DocError, DotPair, DotSet};
+use inbetween_doc::{DocError, DotPair, DotSet, Line};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 
@@ -13,12 +13,16 @@ struct EnvelopeOut<'a> {
     format: &'static str,
     version: u32,
     pairs: &'a [DotPair],
+    #[serde(skip_serializing_if = "<[Line]>::is_empty")]
+    lines: &'a [Line],
 }
 
 #[derive(Deserialize)]
 struct EnvelopeIn {
     #[serde(default)]
     pairs: Vec<DotPair>,
+    #[serde(default)]
+    lines: Vec<Line>,
 }
 
 fn validate(set: &DotSet) -> Result<(), FormatError> {
@@ -36,6 +40,7 @@ fn validate(set: &DotSet) -> Result<(), FormatError> {
     {
         return Err(DocError::NonFiniteDot(i).into());
     }
+    set.validate_lines()?;
     Ok(())
 }
 
@@ -46,6 +51,7 @@ pub fn dots_to_string(set: &DotSet) -> Result<String, FormatError> {
         format: DOTS_FORMAT,
         version: DOTS_VERSION,
         pairs: &set.pairs,
+        lines: &set.lines,
     };
     let mut text = serde_json::to_string_pretty(&env)
         .map_err(|e| FormatError::Parse(format!("could not serialise: {e}")))?;
@@ -63,7 +69,8 @@ pub fn dots_from_bytes(bytes: &[u8]) -> Result<DotSet, FormatError> {
     let text = decode_text(bytes, MAX_FILE_BYTES)?;
     check_header(text, DOTS_FORMAT, DOTS_VERSION)?;
     let env: EnvelopeIn = serde_json::from_str(text).map_err(parse_error)?;
-    let set = DotSet::new(env.pairs);
+    let mut set = DotSet::new(env.pairs);
+    set.lines = env.lines;
     validate(&set)?;
     Ok(set)
 }
@@ -89,6 +96,19 @@ mod tests {
             dots_from_str(&dots_to_string(&DotSet::default()).unwrap()).unwrap(),
             DotSet::default()
         );
+    }
+
+    #[test]
+    fn sides_and_lines_round_trip_and_old_files_are_unchanged() {
+        let plain = dots_to_string(&sample()).unwrap();
+        assert!(!plain.contains("side") && !plain.contains("lines"));
+        let mut s = sample();
+        s.pairs[0] = DotPair::unpaired(Point::new(3.0, 4.0), inbetween_doc::Side::Only2);
+        assert!(s.connect(0, 1));
+        let text = dots_to_string(&s).unwrap();
+        assert_eq!(dots_from_str(&text).unwrap(), s);
+        let bad = r#"{"format":"inbetween-dots","version":1,"pairs":[{}],"lines":[{"a":0,"b":7}]}"#;
+        assert!(dots_from_str(bad).is_err());
     }
 
     #[test]

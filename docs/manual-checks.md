@@ -21,3 +21,9 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Image > Rotate 90 CW with the focus on each source panel (click in it first): only that image turns, its dots follow.
 - [ ] F3 swaps the two images and their dots; F3 again restores.
 - [ ] Image > Save To Library: the folder you used last time is pre-filled.
+- [ ] Dots: press E, then drag a marquee on Image 1 (Shift adds, Alt subtracts); arrows move the selection 1 px, Ctrl+arrow 10 px; with nothing selected they step frames again.
+- [ ] Dots: turn Auto partner off, click Image 1 then Image 2: the lone dot is magenta, hovering it makes a ring blink where its partner would go; Dots > Auto-Match fills it in.
+- [ ] Dots: Alt+click puts the partner on the same spot; Dots > Auto Jump moves the pointer to the partner on the other image after a click.
+- [ ] Lines: press L and click several points; Shift+click ends with a dot, right-click, Enter or Esc ends without one; hovering a line lights its whole group; dragging a line in the Edit tool moves the group.
+- [ ] View: Ctrl+G, Ctrl+D, Ctrl+L, Ctrl+T, Ctrl+M toggle the grid, dots, lines, triangles and tracks; the Magnifier follows the pointer, N and M change its power; Dot Style and Dot Color change the dots.
+- [ ] Dots: Ctrl+C, Ctrl+X, Ctrl+V move dots and their lines (pasted dots sit 10 px apart from the originals), Delete removes the selection, Ctrl+H, Ctrl+R and Ctrl+K open scale, rotate and skew.

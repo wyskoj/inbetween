@@ -92,7 +92,11 @@ pub(crate) fn check_distinct(seq: &Sequence) -> Result<(), CommandError> {
     for image in [1u8, 2] {
         let mut seen = HashSet::with_capacity(seq.dots.len());
         for (i, p) in seq.dots.pairs.iter().enumerate() {
-            let at = if image == 1 { p.first } else { p.second };
+            // A dot that is not on this image takes no spot on it.
+            if !p.has_end(image) {
+                continue;
+            }
+            let at = p.end(image);
             // Compare exact bit patterns (and fold -0.0 into 0.0).
             let key = ((at.x + 0.0).to_bits(), (at.y + 0.0).to_bits());
             if !seen.insert(key) {
@@ -419,11 +423,12 @@ fn locate(session: &mut Session, params: &Params) -> Result<Value, CommandError>
                 .extend(placed.iter().map(|p| DotPair::fixed(*p)));
         } else if image.is_none() {
             seq.dots.pairs = placed.iter().map(|p| DotPair::fixed(*p)).collect();
+            seq.dots.lines.clear();
         } else {
             for (k, p) in placed.iter().enumerate() {
                 match seq.dots.pairs.get_mut(k) {
-                    Some(pair) if image == Some(1) => pair.first = *p,
-                    Some(pair) => pair.second = *p,
+                    Some(pair) if image == Some(1) => pair.set_end(1, *p),
+                    Some(pair) => pair.set_end(2, *p),
                     None => seq.dots.pairs.push(DotPair::fixed(*p)),
                 }
             }
@@ -502,11 +507,7 @@ fn smart_drag(session: &mut Session, params: &Params) -> Result<Value, CommandEr
     )
     .map_err(morph_error)?;
     for (pair, p) in seq.dots.pairs.iter_mut().skip(first).zip(&moved) {
-        if image == 2 {
-            pair.second = *p;
-        } else {
-            pair.first = *p;
-        }
+        pair.set_end(if image == 2 { 2 } else { 1 }, *p);
     }
     seq.validate()?;
     check_distinct(seq)?;

@@ -1,3 +1,4 @@
+use crate::state::{DisplayPrefs, DotClip};
 use crate::{CommandError, Params};
 #[cfg(not(target_arch = "wasm32"))]
 use inbetween_doc::Caption;
@@ -5,7 +6,7 @@ use inbetween_doc::{Project, Sequence};
 use inbetween_raster::Image;
 use inbetween_render_cpu::caption::Font;
 use inbetween_render_cpu::{EffectImages, RenderError, Renderer};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -39,6 +40,13 @@ pub struct Session {
     /// Bumped by every change to the project, so a preview can tell when to redraw.
     revision: u64,
     saved_revision: u64,
+    /// Selected dots of `selection_sequence`. Not part of undo.
+    selection: BTreeSet<usize>,
+    selection_sequence: usize,
+    /// Set by a command that chose the selection after its own edit, so `record_edit` keeps it.
+    selection_pinned: bool,
+    clipboard: Option<DotClip>,
+    prefs: DisplayPrefs,
 }
 
 // Only read by the file-backed image loader, which does not exist on wasm.
@@ -151,6 +159,7 @@ impl Session {
     /// Replace the whole project (used by `project.open` and `project.new`). History is
     /// cleared and the project counts as saved.
     pub fn set_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.selection.clear();
         self.project = project;
         self.path = path;
         self.images.clear();
@@ -185,8 +194,82 @@ impl Session {
         self.project = project;
     }
 
+    /// The selected dot indices, ascending, in the sequence `selection_sequence`.
+    pub fn selection(&self) -> &BTreeSet<usize> {
+        &self.selection
+    }
+
+    /// The sequence the selection belongs to.
+    pub fn selection_sequence(&self) -> usize {
+        self.selection_sequence
+    }
+
+    /// Select `dots` of sequence `sequence`, dropping indices that do not exist.
+    pub fn set_selection(&mut self, sequence: usize, dots: BTreeSet<usize>) {
+        self.selection_sequence = sequence;
+        self.selection = dots;
+        self.clamp_selection();
+    }
+
+    /// Like `set_selection`, for an editing command that selects what it just made: the
+    /// registry then keeps the selection instead of clearing it for the changed dot count.
+    pub fn keep_selection(&mut self, sequence: usize, dots: BTreeSet<usize>) {
+        self.set_selection(sequence, dots);
+        self.selection_pinned = true;
+    }
+
+    pub fn clipboard(&self) -> Option<&DotClip> {
+        self.clipboard.as_ref()
+    }
+
+    pub fn set_clipboard(&mut self, clip: Option<DotClip>) {
+        self.clipboard = clip;
+    }
+
+    pub fn prefs(&self) -> &DisplayPrefs {
+        &self.prefs
+    }
+
+    /// Replace the display preferences (out-of-range values are pulled into range).
+    pub fn set_prefs(&mut self, prefs: DisplayPrefs) {
+        self.prefs = prefs.sanitized();
+    }
+
+    fn dot_count(&self) -> Option<usize> {
+        self.project
+            .sequences
+            .get(self.selection_sequence)
+            .map(|s| s.dots.len())
+    }
+
+    /// Drop selected dots that no longer exist.
+    fn clamp_selection(&mut self) {
+        match self.dot_count() {
+            Some(n) => self.selection.retain(|&i| i < n),
+            None => self.selection.clear(),
+        }
+    }
+
+    /// Clear the selection if the dot count changed (dots were renumbered), else clamp it.
+    fn fix_selection(&mut self, count_before: Option<usize>) {
+        if count_before != self.dot_count() {
+            self.selection.clear();
+        }
+        self.clamp_selection();
+    }
+
     /// Note that an edit command succeeded; `before` is the project as it was.
     pub(crate) fn record_edit(&mut self, before: Project) {
+        if std::mem::take(&mut self.selection_pinned) {
+            self.clamp_selection();
+        } else {
+            self.fix_selection(
+                before
+                    .sequences
+                    .get(self.selection_sequence)
+                    .map(|s| s.dots.len()),
+            );
+        }
         self.revision += 1;
         self.redo.clear();
         if self.group_depth > 0 {
@@ -221,8 +304,10 @@ impl Session {
         let Some(previous) = self.undo.pop() else {
             return false;
         };
+        let count = self.dot_count();
         self.redo
             .push(std::mem::replace(&mut self.project, previous));
+        self.fix_selection(count);
         self.group_depth = 0;
         self.group_recorded = false;
         self.revision += 1;
@@ -234,7 +319,9 @@ impl Session {
         let Some(next) = self.redo.pop() else {
             return false;
         };
+        let count = self.dot_count();
         self.undo.push(std::mem::replace(&mut self.project, next));
+        self.fix_selection(count);
         self.group_depth = 0;
         self.group_recorded = false;
         self.revision += 1;

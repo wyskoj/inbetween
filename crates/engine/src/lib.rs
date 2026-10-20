@@ -31,17 +31,24 @@ mod filter_cmds;
 mod fx_cmds;
 mod image_cmds;
 mod layer_cmds;
+mod lines_cmds;
 mod list_cmds;
+#[cfg(not(target_arch = "wasm32"))]
+mod match_cmds;
 #[cfg(not(target_arch = "wasm32"))]
 mod movie;
 mod params;
 mod project_cmds;
 mod registry;
+mod select_cmds;
 mod sequence_cmds;
 mod session;
+mod state;
 mod track_cmds;
+mod view_cmds;
 
 pub use error::CommandError;
 pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_LIST_ENTRIES, MAX_STRING_BYTES};
 pub use registry::{CommandInfo, CommandSpec, Registry};
 pub use session::{Prepared, Session};
+pub use state::{DisplayPrefs, DotClip, DotColorMode, DotStyle};

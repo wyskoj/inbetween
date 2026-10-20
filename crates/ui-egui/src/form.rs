@@ -105,6 +105,26 @@ impl Form {
                     }
                     Value::from(n)
                 }
+                ParamKind::IntegerList | ParamKind::NumberList => {
+                    let whole = field.spec.kind == ParamKind::IntegerList;
+                    let mut items = Vec::new();
+                    for part in text.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+                        if whole {
+                            items.push(Value::from(part.parse::<i64>().map_err(|_| {
+                                format!("`{name}` must be whole numbers separated by commas")
+                            })?));
+                        } else {
+                            let n: f64 = part.parse().map_err(|_| {
+                                format!("`{name}` must be numbers separated by commas")
+                            })?;
+                            if !n.is_finite() {
+                                return Err(format!("`{name}` must be finite numbers"));
+                            }
+                            items.push(Value::from(n));
+                        }
+                    }
+                    Value::Array(items)
+                }
                 ParamKind::Bool | ParamKind::PathList => continue,
             };
             object.insert(name.to_string(), value);

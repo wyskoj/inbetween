@@ -10,6 +10,8 @@ pub enum DocError {
     TooManyDots { count: usize, max: usize },
     /// A dot has a NaN or infinite coordinate (the pair index).
     NonFiniteDot(usize),
+    /// A line between dots breaks a rule (the text says which).
+    BadLine(&'static str),
     /// Output width or height is zero or above the limit.
     BadOutputSize { width: u32, height: u32 },
     /// A curve breaks the rules (the text says which).
@@ -44,6 +46,7 @@ impl fmt::Display for DocError {
                 write!(f, "{count} dot pairs exceeds the limit of {max}")
             }
             Self::NonFiniteDot(i) => write!(f, "dot pair {i} has a NaN or infinite coordinate"),
+            Self::BadLine(why) => write!(f, "invalid line: {why}"),
             Self::BadCurve(why) => write!(f, "invalid curve: {why}"),
             Self::BadEffect(why) => write!(f, "invalid effect: {why}"),
             Self::BadCamera(why) => write!(f, "invalid camera: {why}"),

@@ -78,39 +78,39 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [x] | `dots.add` | Click to add; partner dot auto-created on the other image | P0 |
-| [ ] | `dots.option.autoPartner` | Toggle auto-creating the partner dot; when off, dots are added per image and shown as unpaired | P1 |
-| [ ] | `dots.addSamePos` | Modifier (Alt) puts the partner at identical coordinates (boundary/anchor dots for warps) | P1 |
-| [ ] | `dots.option.autoJump` | Toggle moving the cursor to the partner position after adding | P2 |
+| [x] | `dots.option.autoPartner` | Toggle auto-creating the partner dot; when off, dots are added per image and shown as unpaired | P1 |
+| [x] | `dots.addSamePos` | Modifier (Alt) puts the partner at identical coordinates (boundary/anchor dots for warps) | P1 |
+| [x] | `dots.option.autoJump` | Toggle moving the cursor to the partner position after adding | P2 |
 | [x] | `dots.move` | Drag a dot; preview updates live | P0 |
 | [x] | `dots.delete` | Delete tool, or right-click any dot with any tool | P0 |
-| [ ] | `dots.select` | Marquee select; Shift adds, Alt subtracts; clicking a line selects its connected dots | P1 |
-| [ ] | `dots.transform` | Move, scale, rotate, skew, flip a selection | P1 |
-| [ ] | `dots.nudge` | Arrow keys move selection 1 px; Ctrl+arrow 10 px | P1 |
-| [ ] | `edit.cut/copy/paste/delete` | Clipboard ops on dots, keeping connected lines | P1 |
-| [ ] | `dots.selectAll` / `dots.clearAll` | | P1 |
-| [ ] | `dots.matching` | Paired vs unpaired dots shown in different colours; partner blinks when hovering an unpaired dot | P1 |
-| [ ] | `dots.autoMatch` | Generate partner dots at plausible positions automatically | P2 |
-| [ ] |  | Limit: at least 2048 dot pairs | P0 |
+| [x] | `dots.select` | Marquee select; Shift adds, Alt subtracts; clicking a line selects its connected dots | P1 |
+| [x] | `dots.transform` | Move, scale, rotate, skew, flip a selection | P1 |
+| [x] | `dots.nudge` | Arrow keys move selection 1 px; Ctrl+arrow 10 px | P1 |
+| [x] | `edit.cut/copy/paste/delete` | Clipboard ops on dots, keeping connected lines | P1 |
+| [x] | `dots.selectAll` / `dots.clearAll` | | P1 |
+| [x] | `dots.matching` | Paired vs unpaired dots shown in different colours; partner blinks when hovering an unpaired dot | P1 |
+| [x] | `dots.autoMatch` | Generate partner dots at plausible positions automatically | P2 |
+| [~] |  | Limit: at least 2048 dot pairs (saved, reloaded, rendered and drawn in tests) | P0 |
 
 ### Lines (organizational only; never affect the morph)
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `lines.addPolyline` | Click repeatedly to drop dots joined by segments; one modifier finishes with a final dot, another (or right-click) ends without one | P1 |
-| [ ] | `lines.connect` | Connect any two existing dots | P1 |
-| [ ] | `lines.insertDot` | Clicking on a segment inserts a dot into it | P1 |
-| [ ] | `lines.delete` | Remove a segment, keep its dots; deleting a dot removes its segments | P1 |
-| [ ] | `lines.drag` | Drag a segment to move it with all connected dots and lines | P1 |
+| [x] | `lines.addPolyline` | Click repeatedly to drop dots joined by segments; one modifier finishes with a final dot, another (or right-click) ends without one | P1 |
+| [x] | `lines.connect` | Connect any two existing dots | P1 |
+| [x] | `lines.insertDot` | Clicking on a segment inserts a dot into it | P1 |
+| [x] | `lines.delete` | Remove a segment, keep its dots; deleting a dot removes its segments | P1 |
+| [x] | `lines.drag` | Drag a segment to move it with all connected dots and lines | P1 |
 
 ### Display
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `view.toggle.dots/lines/triangles/track/grid` | Show/hide dots, lines, triangle mesh, morph track, grid | P1 |
-| [ ] | `prefs.dotStyle` | Several dot styles plus highlighted variants | P2 |
-| [ ] | `prefs.dotColor` | Single colour, or cycle 8 colours per pair; dot opacity 64–255; antialiased | P2 |
-| [ ] |  | Hover highlights a dot pair; hovering a line highlights everything connected | P1 |
-| [ ] | `view.magnifier` | Loupe around the cursor, 1×–4× | P2 |
+| [x] | `view.toggle.dots/lines/triangles/track/grid` | Show/hide dots, lines, triangle mesh, morph track, grid | P1 |
+| [x] | `prefs.dotStyle` | Several dot styles plus highlighted variants | P2 |
+| [x] | `prefs.dotColor` | Single colour, or cycle 8 colours per pair; dot opacity 64–255; antialiased | P2 |
+| [x] |  | Hover highlights a dot pair; hovering a line highlights everything connected | P1 |
+| [x] | `view.magnifier` | Loupe around the cursor, 1×–4× | P2 |
 
 ---
 

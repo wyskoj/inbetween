@@ -206,5 +206,9 @@ pub(super) fn crop_mode(
         }
     }
     view.pan(pan);
-    super::PanelOutput { rect, actions }
+    super::PanelOutput {
+        rect,
+        actions,
+        hover: super::Hover::default(),
+    }
 }

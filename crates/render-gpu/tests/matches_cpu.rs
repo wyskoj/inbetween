@@ -228,6 +228,24 @@ fn alpha_images() {
 }
 
 #[test]
+fn unpaired_dots_and_lines_change_nothing() {
+    let (a, b) = (gradient(48, 32).unwrap(), labelled_grid(48, 32, 8).unwrap());
+    let plain = sequence(&moved(), 12);
+    let mut extra = plain.clone();
+    extra.dots.pairs.push(DotPair::unpaired(
+        Point::new(7.0, 9.0),
+        inbetween_doc::Side::Only1,
+    ));
+    extra.dots.connect(0, extra.dots.len() - 1);
+    for i in [0, 6, 11] {
+        let x = Renderer::new(&plain, (48, 32), &a, Some(&b)).unwrap();
+        let y = Renderer::new(&extra, (48, 32), &a, Some(&b)).unwrap();
+        assert_eq!(x.render_frame(i).unwrap(), y.render_frame(i).unwrap());
+    }
+    compare("unpaired", &extra, (48, 32), &a, &b, &[0, 6, 11]);
+}
+
+#[test]
 fn no_dots_is_a_cross_dissolve() {
     let (a, b) = (gradient(64, 40).unwrap(), labelled_grid(64, 40, 8).unwrap());
     compare("no dots", &sequence(&[], 12), (64, 40), &a, &b, ALL);

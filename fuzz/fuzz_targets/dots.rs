@@ -9,5 +9,7 @@ fuzz_target!(|data: &[u8]| {
         let text = dots_to_string(&dots).expect("parsed dots must serialise");
         let again = dots_from_bytes(text.as_bytes()).expect("serialised text must parse");
         assert_eq!(again, dots);
+        // Lines that read are always in range, between two different dots, and not repeated.
+        assert!(dots.validate_lines().is_ok());
     }
 });

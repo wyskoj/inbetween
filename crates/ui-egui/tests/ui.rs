@@ -78,6 +78,16 @@ fn app(h: &H) -> &InbetweenApp {
     h.state()
 }
 
+/// The one selected dot, or None when nothing or several are selected.
+fn selected(h: &H) -> Option<usize> {
+    let sel = app(h).session().selection();
+    if sel.len() == 1 {
+        sel.iter().next().copied()
+    } else {
+        None
+    }
+}
+
 fn dots(h: &H) -> Vec<(f64, f64, f64, f64)> {
     app(h).session().project().sequences[0]
         .dots
@@ -207,12 +217,9 @@ fn clicking_empty_image_adds_a_dot_pair_and_selects_it() {
         (x1 - 60.0).abs() < 1.5 && (y1 - 120.0).abs() < 1.5,
         "{x1},{y1}"
     );
-    assert_eq!(
-        (x1, y1),
-        (x2, y2),
-        "a new dot starts at the same place on both images"
-    );
-    assert_eq!(app(&h).state.selected, Some(before));
+    // The partner is placed where the existing dots carry that point (not necessarily the same).
+    assert!(x2.is_finite() && y2.is_finite());
+    assert_eq!(selected(&h), Some(before));
 }
 
 #[test]
@@ -259,7 +266,7 @@ fn dragging_a_dot_moves_it_on_that_image_only_and_is_one_undo_step() {
         moved[8],
         original[8]
     );
-    assert_eq!(app(&h).state.selected, Some(8));
+    assert_eq!(selected(&h), Some(8));
     for (i, (a, b)) in original.iter().zip(&moved).enumerate() {
         if i != 8 {
             assert_eq!(a, b, "dot {i} must not move");
@@ -318,15 +325,15 @@ fn delete_key_removes_the_selected_dot_and_escape_deselects() {
     let before = dots(&h);
     let at = screen(&h, Panel::Source1, before[3].0 as f32, before[3].1 as f32);
     click(&mut h, at, PointerButton::Primary);
-    assert_eq!(app(&h).state.selected, Some(3));
+    assert_eq!(selected(&h), Some(3));
     h.press_key(Key::Escape);
     h.run();
-    assert_eq!(app(&h).state.selected, None);
+    assert_eq!(selected(&h), None);
     click(&mut h, at, PointerButton::Primary);
     h.press_key(Key::Delete);
     h.run();
     assert_eq!(dots(&h).len(), before.len() - 1);
-    assert_eq!(app(&h).state.selected, None);
+    assert_eq!(selected(&h), None);
 }
 
 #[test]
@@ -353,10 +360,10 @@ fn selection_is_clamped_after_undo_removes_the_dot() {
     let mut h = demo_harness();
     let at = screen(&h, Panel::Source1, 60.0, 120.0);
     click(&mut h, at, PointerButton::Primary);
-    assert_eq!(app(&h).state.selected, Some(25));
+    assert_eq!(selected(&h), Some(25));
     h.press_key_modifiers(Modifiers::COMMAND, Key::Z);
     h.run();
-    assert_eq!(app(&h).state.selected, None);
+    assert_eq!(selected(&h), None);
 }
 
 // ------------------------------------------------------------------------------ zoom and pan

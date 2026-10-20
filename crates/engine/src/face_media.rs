@@ -149,10 +149,8 @@ fn extract_sequence(
         };
         let target = session.sequence_mut(index)?;
         for pair in &mut target.dots.pairs {
-            if which == 1 {
-                pair.first = moved(pair.first);
-            } else {
-                pair.second = moved(pair.second);
+            if pair.has_end(which) {
+                pair.set_end(which, moved(pair.end(which)));
             }
         }
         let image_ref = ImageRef::new(path_text(&path));
@@ -598,7 +596,8 @@ fn add_to_library(session: &mut Session, params: &Params) -> Result<Value, Comma
         seq.dots
             .pairs
             .iter()
-            .map(|p| DotPair::fixed(fit.apply(if which == 2 { p.second } else { p.first })))
+            .filter(|p| p.has_end(if which == 2 { 2 } else { 1 }))
+            .map(|p| DotPair::fixed(fit.apply(p.end(if which == 2 { 2 } else { 1 }))))
             .collect(),
     );
     write_png(&entry.png, &image)?;
@@ -638,14 +637,11 @@ fn use_from_library(session: &mut Session, params: &Params) -> Result<Value, Com
     }
     if seq.dots.len() == placed.len() {
         for (pair, p) in seq.dots.pairs.iter_mut().zip(&placed) {
-            if which == 2 {
-                pair.second = *p;
-            } else {
-                pair.first = *p;
-            }
+            pair.set_end(if which == 2 { 2 } else { 1 }, *p);
         }
     } else {
         seq.dots.pairs = placed.iter().map(|p| DotPair::fixed(*p)).collect();
+        seq.dots.lines.clear();
     }
     seq.validate()?;
     check_distinct(seq)?;

@@ -11,6 +11,7 @@
     clippy::unreachable
 )]
 
+pub mod automatch;
 mod error;
 pub mod face;
 mod fit;

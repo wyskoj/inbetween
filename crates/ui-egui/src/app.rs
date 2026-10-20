@@ -9,7 +9,10 @@ use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
 use crate::open_visual::{OpenVisual, Outcome as VisualOutcome, Tab as VisualTab};
-use crate::panels::{self, Action, CropView, DotDrag, Grabs, PreviewPanel, Shown, SourcePanel};
+use crate::panels::{
+    self, Action, CropView, DotDrag, Grabs, Hover, PanelDot, PanelLine, PreviewPanel, Shown,
+    SourcePanel,
+};
 use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
 use crate::seqlist::{self, ListAction, Row};
@@ -22,7 +25,7 @@ use inbetween_engine::{
 };
 use inbetween_morph::{fit_transform, Planner};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
@@ -34,6 +37,7 @@ mod curve_ui;
 mod drops_ui;
 mod form_ui;
 mod prompt_ui;
+mod select_ui;
 mod visual_ui;
 
 /// Screen rectangles of the three canvases from the last frame (used by tests and screenshots).
@@ -136,10 +140,29 @@ struct MeshCache {
     /// Triangles on Image 1 and Image 2 (the same triangulation, so they correspond).
     on_image1: Vec<[Pos2; 3]>,
     on_image2: Vec<[Pos2; 3]>,
+    /// Each dot's path between the images, sampled through the planner.
+    tracks: Vec<Vec<Pos2>>,
 }
 
 fn pos(p: inbetween_geom::Point) -> Pos2 {
     Pos2::new(p.x as f32, p.y as f32)
+}
+
+/// Each dot's path through the morph, sampled at 17 times.
+fn dot_tracks(planner: &Planner) -> Vec<Vec<Pos2>> {
+    let mut paths: Vec<Vec<Pos2>> = Vec::new();
+    for k in 0..=16 {
+        let Some(dots) = planner.dots_at(f64::from(k) / 16.0) else {
+            return Vec::new();
+        };
+        if paths.is_empty() {
+            paths = vec![Vec::new(); dots.len()];
+        }
+        for (path, p) in paths.iter_mut().zip(dots) {
+            path.push(pos(p));
+        }
+    }
+    paths
 }
 
 fn tri_points(t: &inbetween_geom::Triangle) -> [Pos2; 3] {
@@ -160,6 +183,12 @@ pub struct InbetweenApp {
     mesh: Option<MeshCache>,
     drag: Option<DotDrag>,
     group_open: bool,
+    /// What the pointer was over in each source panel last frame.
+    hover: [Hover; 2],
+    /// The last dot of the Line tool's chain.
+    chain: Option<usize>,
+    /// Where to move the pointer after a dot was added (auto-jump).
+    jump: Option<Pos2>,
     list: Option<ListCache>,
     /// Thumbnails by image reference; the image is kept so a changed file is noticed.
     thumbs: HashMap<String, (Arc<inbetween_raster::Image>, TextureHandle)>,
@@ -202,10 +231,12 @@ impl InbetweenApp {
         state.playing = false;
         let registry = Registry::standard();
         let menus = menus::build(registry.specs());
+        let mut session = Session::new();
+        session.set_prefs(state.prefs);
         Self {
             registry,
             menus,
-            session: Session::new(),
+            session,
             state,
             gpu,
             form: None,
@@ -216,6 +247,9 @@ impl InbetweenApp {
             mesh: None,
             drag: None,
             group_open: false,
+            hover: [Hover::default(); 2],
+            chain: None,
+            jump: None,
             list: None,
             thumbs: HashMap::new(),
             curve_drag: None,
@@ -293,7 +327,7 @@ impl InbetweenApp {
                 ) {
                     self.state.refit_all();
                     self.state.sequence = 0;
-                    self.state.selected = None;
+                    self.chain = None;
                     self.state.frame = 0;
                     self.preview.clear(self.gpu.as_ref());
                     self.prepared = None;
@@ -320,7 +354,16 @@ impl InbetweenApp {
                     self.state.adjust_window.is_some() || self.state.caption_window.is_some();
                 if !curve_drag
                     && !live_window
-                    && !matches!(id, "dots.move" | "edit.beginGroup" | "edit.endGroup")
+                    && !matches!(
+                        id,
+                        "dots.move"
+                            | "dots.nudge"
+                            | "lines.drag"
+                            | "dots.select"
+                            | "dots.selectNone"
+                            | "edit.beginGroup"
+                            | "edit.endGroup"
+                    )
                 {
                     if let Some(spec) = self.registry.get(id) {
                         self.status = Some(Status {
@@ -332,7 +375,7 @@ impl InbetweenApp {
             }
             Err(e) => {
                 // A blocked drag onto another dot is not worth shouting about.
-                if id != "dots.move" {
+                if !matches!(id, "dots.move" | "dots.nudge" | "lines.drag") {
                     self.status = Some(Status {
                         text: e.to_string(),
                         is_error: true,
@@ -366,7 +409,8 @@ impl InbetweenApp {
             return;
         }
         self.state.sequence = index;
-        self.state.selected = None;
+        self.chain = None;
+        self.session.set_selection(index, BTreeSet::new());
         self.state.frame = 0;
         self.state.playing = false;
         self.prepared = None;
@@ -501,6 +545,17 @@ impl InbetweenApp {
 
     /// The current value of an on/off sequence option (`None` for any other command).
     pub fn toggle_state(&self, id: &str) -> Option<bool> {
+        let prefs = self.session.prefs();
+        match id {
+            "view.toggle.dots" => return Some(prefs.show_dots),
+            "view.toggle.lines" => return Some(prefs.show_lines),
+            "view.toggle.triangles" => return Some(prefs.show_triangles),
+            "view.toggle.track" => return Some(prefs.show_track),
+            "view.toggle.grid" => return Some(prefs.show_grid),
+            "dots.option.autoPartner" => return Some(prefs.auto_partner),
+            "dots.option.autoJump" => return Some(prefs.auto_jump),
+            _ => {}
+        }
         let seq = self.session.sequence(self.state.sequence).ok()?;
         match id {
             "morph.option.retriangulate" => Some(seq.mesh == inbetween_doc::MeshPolicy::PerFrame),
@@ -670,11 +725,13 @@ impl InbetweenApp {
                             )
                         })
                         .unwrap_or_default();
+                    let tracks = dot_tracks(&planner);
                     MeshCache {
                         revision,
                         planner: Some(planner),
                         on_image1: a,
                         on_image2: b,
+                        tracks,
                     }
                 }
                 Err(_) => MeshCache {
@@ -682,6 +739,7 @@ impl InbetweenApp {
                     planner: None,
                     on_image1: vec![],
                     on_image2: vec![],
+                    tracks: vec![],
                 },
             },
             None => MeshCache {
@@ -689,6 +747,7 @@ impl InbetweenApp {
                 planner: None,
                 on_image1: vec![],
                 on_image2: vec![],
+                tracks: vec![],
             },
         };
         self.mesh = Some(mesh);
@@ -740,13 +799,7 @@ impl InbetweenApp {
                 self.close_caption();
             }
         }
-        let (dots, frames) = match self.prepared() {
-            Some(p) => (p.sequence.dots.len(), p.sequence.total_frames()),
-            None => (0, 1),
-        };
-        if self.state.selected.is_some_and(|i| i >= dots) {
-            self.state.selected = None;
-        }
+        let frames = self.prepared().map_or(1, |p| p.sequence.total_frames());
         self.state.frame = self.state.frame.min(frames.saturating_sub(1));
     }
 
@@ -754,45 +807,13 @@ impl InbetweenApp {
 
     fn apply(&mut self, action: Action) {
         match action {
-            Action::Select(s) => self.state.selected = s,
-            Action::Add { x, y } => {
-                if self.prepared().is_none() {
-                    self.status = Some(Status {
-                        text: "Load both images before placing dots.".to_string(),
-                        is_error: true,
-                    });
-                    return;
-                }
-                if let Ok(r) = self.run_command("dots.add", &json!({ "x": x, "y": y })) {
-                    self.state.selected = r["index"].as_u64().map(|i| i as usize);
-                }
-            }
-            Action::BeginDrag { .. } => {
-                if self.run_command("edit.beginGroup", &json!({})).is_ok() {
-                    self.group_open = true;
-                }
-            }
-            Action::Drag { index, image, x, y } => {
-                let _ = self.run_command(
-                    "dots.move",
-                    &json!({ "index": index, "image": image, "x": x, "y": y }),
-                );
-            }
-            Action::EndDrag => self.end_group(),
-            Action::Delete(i) => {
-                if self
-                    .run_command("dots.delete", &json!({ "index": i }))
-                    .is_ok()
-                {
-                    self.state.selected = None;
-                }
-            }
             Action::CropBegin { handle, at } => self.crop_begin(handle, at),
             Action::CropMove { to } => self.crop_move(to),
             Action::CropEnd => self.crop_drag = None,
             Action::CaptionBegin => self.caption_begin(),
             Action::CaptionMove { dx, dy } => self.caption_move(dx, dy),
             Action::CaptionEnd => self.caption_origin = None,
+            other => self.apply_dots(other),
         }
     }
 
@@ -833,10 +854,6 @@ impl InbetweenApp {
             .map(|s: &CommandSpec| (s.id, s.shortcut.and_then(shortcuts::parse)))
             .collect();
         for (id, shortcut) in specs {
-            // Delete needs an index, so the shell handles it below.
-            if id == "dots.delete" {
-                continue;
-            }
             if let Some(sc) = shortcut {
                 if ctx.input_mut(|i| i.consume_shortcut(&sc)) {
                     self.invoke(id);
@@ -847,23 +864,20 @@ impl InbetweenApp {
         if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
             self.state.show_sequence_list = !self.state.show_sequence_list;
         }
-        let (delete, escape, space, fit, left, right) = ctx.input(|i| {
+        if self.dot_keys(ctx) {
+            return;
+        }
+        let (delete, space, fit, left, right) = ctx.input(|i| {
             (
-                i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace),
-                i.key_pressed(egui::Key::Escape),
+                i.key_pressed(egui::Key::Backspace),
                 i.key_pressed(egui::Key::Space),
-                i.key_pressed(egui::Key::F),
+                i.key_pressed(egui::Key::F) && !i.modifiers.command && !i.modifiers.alt,
                 i.key_pressed(egui::Key::ArrowLeft),
                 i.key_pressed(egui::Key::ArrowRight),
             )
         });
-        if delete {
-            if let Some(i) = self.state.selected {
-                self.apply(Action::Delete(i));
-            }
-        }
-        if escape {
-            self.state.selected = None;
+        if delete && !self.session.selection().is_empty() {
+            self.invoke("edit.delete");
         }
         if space {
             self.state.playing = !self.state.playing;
@@ -937,6 +951,10 @@ impl InbetweenApp {
         self.update_title(ctx);
 
         self.menu_bar(ctx);
+        self.tool_strip(ctx);
+        if let Some(p) = self.jump.take() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CursorPosition(p));
+        }
         self.status_bar(ctx);
         self.transport_bar(ctx);
         self.sequence_panel(ctx);
@@ -1118,11 +1136,7 @@ impl InbetweenApp {
 
     fn menu_bar(&mut self, ctx: &Context) {
         let mut clicked: Option<&'static str> = None;
-        let mut view = (
-            self.state.show_mesh,
-            self.state.show_numbers,
-            self.state.link_sources,
-        );
+        let mut view = (false, self.state.show_numbers, self.state.link_sources);
         let mut view_action: Option<&'static str> = None;
         let toggles: Vec<(&'static str, bool)> = TOGGLES
             .iter()
@@ -1141,6 +1155,9 @@ impl InbetweenApp {
             egui::menu::bar(ui, |ui| {
                 for node in &self.menus {
                     if let MenuNode::Menu { name, children } = node {
+                        if name == "View" {
+                            continue;
+                        }
                         ui.menu_button(name, |ui| {
                             menu_items(
                                 ui,
@@ -1179,7 +1196,20 @@ impl InbetweenApp {
                         ui.close_menu();
                     }
                     ui.separator();
-                    ui.checkbox(&mut view.0, "Show mesh");
+                    for node in &self.menus {
+                        if let MenuNode::Menu { name, children } = node {
+                            if name == "View" {
+                                menu_items(
+                                    ui,
+                                    children,
+                                    &self.registry,
+                                    &self.session,
+                                    &toggles,
+                                    &mut clicked,
+                                );
+                            }
+                        }
+                    }
                     ui.checkbox(&mut view.1, "Show dot numbers");
                     ui.checkbox(&mut view.2, "Link the two image views");
                     ui.checkbox(&mut self.state.show_sequence_list, "Sequence list (F2)");
@@ -1191,11 +1221,7 @@ impl InbetweenApp {
                 });
             });
         });
-        (
-            self.state.show_mesh,
-            self.state.show_numbers,
-            self.state.link_sources,
-        ) = view;
+        (_, self.state.show_numbers, self.state.link_sources) = view;
         match view_action {
             Some("fit") => self.state.refit_all(),
             Some("actual") => self.actual_size(),
@@ -1340,11 +1366,11 @@ impl InbetweenApp {
         let mut drag = self.drag;
         let mut grabs = self.grabs;
         let mut actions: Vec<Action> = Vec::new();
-        let (show_mesh, show_numbers, selected) = (
-            self.state.show_mesh,
-            self.state.show_numbers,
-            self.state.selected,
-        );
+        let show_numbers = self.state.show_numbers;
+        let prefs = *self.session.prefs();
+        let tool = self.state.tool;
+        let selected = self.session.selection().clone();
+        let mut hover = [Hover::default(); 2];
         let top_fraction = self.state.top_fraction;
         let mut layout = self.layout;
 
@@ -1369,10 +1395,16 @@ impl InbetweenApp {
                     frame,
                     shown: snapshot.shown[index],
                     dots: &snapshot.dots[index],
+                    lines: &snapshot.lines[index],
                     mesh: &snapshot.mesh[index],
-                    selected,
-                    show_mesh,
+                    selected: &selected,
+                    prefs,
+                    tool,
                     show_numbers,
+                    partner_hover: snapshot.partner_hover[index],
+                    hot_group: &snapshot.hot_group,
+                    ghost: snapshot.ghost[index],
+                    chain_from: snapshot.chain_from[index],
                     message: Some(snapshot.message.clone()),
                     crop: crops[index].take(),
                     caption: snapshot.caption[index],
@@ -1383,6 +1415,7 @@ impl InbetweenApp {
                     })
                     .inner;
                 actions.extend(out.actions);
+                hover[index] = out.hover;
                 if index == 0 {
                     layout.source1 = out.rect;
                 } else {
@@ -1394,7 +1427,8 @@ impl InbetweenApp {
                 frame,
                 shown: snapshot.shown[2],
                 mesh: &snapshot.mesh[2],
-                show_mesh,
+                prefs,
+                tracks: &snapshot.tracks,
                 message: snapshot.preview_message.clone(),
                 caption: snapshot.caption[2],
             };
@@ -1418,6 +1452,7 @@ impl InbetweenApp {
         }
         self.state.views = views;
         self.drag = drag;
+        self.hover = hover;
         self.grabs = grabs;
         self.layout = layout;
         self.track_focus(ctx);
@@ -1481,14 +1516,75 @@ impl InbetweenApp {
             } else {
                 format!("Image {}: not used by this morph type", i + 1)
             };
+            let img = i as u8 + 1;
             snap.dots[i] = seq
                 .dots
                 .pairs
                 .iter()
-                .map(|d| pos(if i == 0 { d.first } else { d.second }))
+                .enumerate()
+                .filter(|(_, d)| d.has_end(img))
+                .map(|(k, d)| PanelDot {
+                    pos: pos(d.end(img)),
+                    index: k,
+                    paired: d.is_paired(),
+                })
                 .collect();
+            snap.lines[i] = seq
+                .dots
+                .lines
+                .iter()
+                .enumerate()
+                .filter_map(|(n, l)| {
+                    let a = seq
+                        .dots
+                        .pairs
+                        .get(l.a as usize)
+                        .filter(|d| d.has_end(img))?;
+                    let b = seq
+                        .dots
+                        .pairs
+                        .get(l.b as usize)
+                        .filter(|d| d.has_end(img))?;
+                    Some(PanelLine {
+                        a: pos(a.end(img)),
+                        b: pos(b.end(img)),
+                        index: n,
+                        a_dot: l.a as usize,
+                        b_dot: l.b as usize,
+                    })
+                })
+                .collect();
+            let other = 1 - i;
+            if let Some(h) = self.hover[other].dot {
+                match seq.dots.pairs.get(h) {
+                    Some(d) if d.is_paired() => snap.partner_hover[i] = Some(h),
+                    Some(d) if !d.has_end(img) => {
+                        let from = other as u8 + 1;
+                        let to = inbetween_morph::automatch::transfer_point(
+                            seq,
+                            d.end(from),
+                            from,
+                            p.output.0,
+                            p.output.1,
+                        );
+                        snap.ghost[i] = Some(pos(to));
+                    }
+                    _ => {}
+                }
+            }
+            snap.chain_from[i] = self
+                .chain
+                .and_then(|c| seq.dots.pairs.get(c))
+                .filter(|d| d.has_end(img))
+                .map(|d| pos(d.end(img)));
+        }
+        if let Some(l) = self.hover[0].line.or(self.hover[1].line) {
+            if let Some(line) = seq.dots.lines.get(l) {
+                snap.hot_group = seq.dots.connected(line.a as usize);
+            }
         }
         if let Some(m) = &self.mesh {
+            snap.tracks.clone_from(&m.tracks);
             snap.mesh[0].clone_from(&m.on_image1);
             snap.mesh[1].clone_from(&m.on_image2);
             if let Some(planner) = &m.planner {
@@ -1583,6 +1679,7 @@ impl eframe::App for InbetweenApp {
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         self.state.playing = false;
+        self.state.prefs = *self.session.prefs();
         eframe::set_value(storage, STATE_KEY, &self.state);
     }
 }
@@ -1594,7 +1691,13 @@ struct Snapshot {
     frame: Vec2,
     titles: [String; 3],
     shown: [Option<Shown>; 3],
-    dots: [Vec<Pos2>; 2],
+    dots: [Vec<PanelDot>; 2],
+    lines: [Vec<PanelLine>; 2],
+    partner_hover: [Option<usize>; 2],
+    ghost: [Option<Pos2>; 2],
+    chain_from: [Option<Pos2>; 2],
+    hot_group: Vec<usize>,
+    tracks: Vec<Vec<Pos2>>,
     mesh: [Vec<[Pos2; 3]>; 3],
     message: String,
     preview_message: Option<String>,
@@ -1611,6 +1714,12 @@ impl Snapshot {
             titles: ["Image 1".into(), "Image 2".into(), "Preview".into()],
             shown: [None; 3],
             dots: [Vec::new(), Vec::new()],
+            lines: [Vec::new(), Vec::new()],
+            partner_hover: [None; 2],
+            ghost: [None; 2],
+            chain_from: [None; 2],
+            hot_group: Vec::new(),
+            tracks: Vec::new(),
             mesh: [Vec::new(), Vec::new(), Vec::new()],
             message: "Open a project, or start one from two images (File menu).".into(),
             preview_message: None,
@@ -1635,7 +1744,17 @@ pub const QUICK_IMAGE: &[(&str, &str, &str, &str)] = &[
 
 /// Commands that switch a sequence option on or off. The menu shows a check box and a click
 /// flips the option; the engine command takes `on` and reports the state when it is left out.
-const TOGGLES: &[&str] = &["morph.option.retriangulate", "morph.option.dropCornerTris"];
+const TOGGLES: &[&str] = &[
+    "morph.option.retriangulate",
+    "morph.option.dropCornerTris",
+    "view.toggle.dots",
+    "view.toggle.lines",
+    "view.toggle.triangles",
+    "view.toggle.track",
+    "view.toggle.grid",
+    "dots.option.autoPartner",
+    "dots.option.autoJump",
+];
 
 fn menu_items(
     ui: &mut egui::Ui,

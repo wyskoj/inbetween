@@ -6,6 +6,7 @@
 use crate::crop::CropTool;
 use crate::curves::CurveKind;
 use crate::view::View;
+use inbetween_engine::DisplayPrefs;
 use serde::{Deserialize, Serialize};
 
 /// Which of the three canvases a view belongs to.
@@ -22,6 +23,34 @@ impl Panel {
             Self::Source1 => 0,
             Self::Source2 => 1,
             Self::Preview => 2,
+        }
+    }
+}
+
+/// What a click on a source panel does.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Tool {
+    /// Select, marquee-select and drag dots and lines.
+    Edit,
+    /// Click to add a dot (Alt+click puts the partner at the same position).
+    #[default]
+    Add,
+    /// Click a dot to delete it.
+    Delete,
+    /// Each click drops a dot and joins it to the last one.
+    Line,
+}
+
+impl Tool {
+    pub const ALL: [Self; 4] = [Self::Edit, Self::Add, Self::Delete, Self::Line];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Edit => "Edit (E)",
+            Self::Add => "Add (A)",
+            Self::Delete => "Delete (D)",
+            Self::Line => "Line (L)",
         }
     }
 }
@@ -75,10 +104,11 @@ pub struct ViewState {
     /// Keep the two source panels' zoom and pan identical, so a dot sits at the same screen
     /// position on both.
     pub link_sources: bool,
-    pub show_mesh: bool,
     pub show_numbers: bool,
-    /// The selected dot pair, if any.
-    pub selected: Option<usize>,
+    /// The active tool on the source panels.
+    pub tool: Tool,
+    /// Display and dot-tool preferences; the session holds the live copy, this one is saved.
+    pub prefs: DisplayPrefs,
     /// The frame the preview shows.
     pub frame: u32,
     pub playing: bool,
@@ -116,9 +146,9 @@ impl Default for ViewState {
         Self {
             views: [View::default(); 3],
             link_sources: true,
-            show_mesh: true,
             show_numbers: true,
-            selected: None,
+            tool: Tool::Add,
+            prefs: DisplayPrefs::default(),
             frame: 0,
             playing: false,
             looping: true,
@@ -150,6 +180,7 @@ impl ViewState {
             self.top_fraction = 0.5;
         }
         self.top_fraction = self.top_fraction.clamp(0.2, 0.8);
+        self.prefs = self.prefs.sanitized();
         let mut seen: Vec<String> = Vec::new();
         for p in std::mem::take(&mut self.recent) {
             if !p.is_empty() && p.len() <= 4096 && !seen.contains(&p) && seen.len() < MAX_RECENT {
@@ -217,10 +248,10 @@ mod tests {
     #[test]
     fn round_trips_through_json() {
         let mut s = ViewState {
-            selected: Some(3),
+            tool: Tool::Line,
             frame: 7,
             fps: 30.0,
-            show_mesh: false,
+            show_numbers: false,
             ..ViewState::default()
         };
         s.views[1].zoom = 2.5;

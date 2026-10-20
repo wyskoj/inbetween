@@ -2000,6 +2000,9 @@ version = "0.0.0"
 dependencies = [
  "inbetween-doc",
  "inbetween-geom",
+ "inbetween-raster",
+ "inbetween-testkit",
+ "rayon",
 ]
 
 [[package]]

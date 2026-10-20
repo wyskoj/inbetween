@@ -28,7 +28,7 @@ pub use camera::{
 };
 pub use caption::{Align, Caption, Shadow, MAX_CAPTION_ANCHOR, MAX_CAPTION_SIZE, MAX_CAPTION_TEXT};
 pub use curve::{Curve, CurvePoint, MAX_CURVE_POINTS};
-pub use dots::{DotPair, DotSet};
+pub use dots::{DotPair, DotSet, Line, Side};
 pub use edit::{
     affine_apply, affine_inv, affine_mul, AdjustSettings, Affine, Crop, Filter, Geometry,
     ImageEdit, IDENTITY, MAX_CROP_OFFSET, MAX_EDIT_PIXELS, MAX_EDIT_SIDE, MAX_FILTERS,
