@@ -40,6 +40,7 @@ mod match_cmds;
 #[cfg(not(target_arch = "wasm32"))]
 mod movie;
 mod movie_cmds;
+mod movie_finish;
 mod params;
 mod project_cmds;
 mod registry;
@@ -53,5 +54,6 @@ mod view_cmds;
 pub use error::CommandError;
 pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_LIST_ENTRIES, MAX_STRING_BYTES};
 pub use registry::{CommandInfo, CommandSpec, Registry};
+pub use movie_finish::MovieFinish;
 pub use session::{Prepared, Session};
 pub use state::{DisplayPrefs, DotClip, DotColorMode, DotStyle};

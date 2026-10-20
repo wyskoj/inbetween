@@ -120,7 +120,7 @@ impl Preview {
         let gpu = handle.filter(|_| {
             !self.gpu_failed
                 && !prepared.sequence.needs_post_pass()
-                && prepared.movie_caption.is_none()
+                && prepared.movie.is_identity()
         });
         let outcome = match gpu {
             Some(h) => self.refresh_gpu(h, prepared, revision, frame),
@@ -225,10 +225,8 @@ impl Preview {
         frame: u32,
     ) -> Result<(), String> {
         let renderer = prepared.renderer().map_err(|e| e.to_string())?;
-        let mut image = renderer.render_frame(frame).map_err(|e| e.to_string())?;
-        if let Some(layer) = &prepared.movie_caption {
-            inbetween_render_cpu::caption::composite(&mut image, layer);
-        }
+        let image = renderer.render_frame(frame).map_err(|e| e.to_string())?;
+        let image = prepared.finish(image, frame).map_err(|e| e.to_string())?;
         let color = to_color_image(&image, ctx.input(|i| i.max_texture_side));
         match &mut self.cpu {
             Some(handle) => handle.set(color, TextureOptions::LINEAR),

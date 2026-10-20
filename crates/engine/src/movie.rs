@@ -1,8 +1,11 @@
 //! Rendering the whole movie frame by frame, for exports.
 
+use crate::movie_finish::movie_progress;
 use crate::{CommandError, Session};
 use inbetween_doc::ProjectType;
 use inbetween_raster::{over, Image};
+use inbetween_render_cpu::trail;
+use std::collections::VecDeque;
 
 /// Most frames one movie export writes.
 pub(crate) const MAX_MOVIE_FRAMES: u64 = 10_000_000;
@@ -49,21 +52,51 @@ pub(crate) fn range_from(
     })
 }
 
-/// Render the frames in `range` and hand each to `each` with its movie frame number, with the
-/// movie caption (if any) drawn over it. Returns how many frames were handed over.
+/// Render the frames in `range` and hand each to `each` with its movie frame number, finished
+/// by the movie: trail, effects, adjustment, filters and caption. Returns how many frames were
+/// handed over.
+///
+/// A movie trail looks at the frames played just before the current one. The range is
+/// widened by that many frames (the extra ones are drawn but not handed over), so a single
+/// frame comes out the same as it does inside a whole export.
 pub(crate) fn render_movie(
     session: &mut Session,
     range: MovieRange,
     each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
 ) -> Result<u64, CommandError> {
-    match session.movie_caption()? {
-        None => render_frames(session, range, each),
-        Some(layer) => render_frames(session, range, &mut |n, image| {
-            let mut captioned = image.clone();
-            inbetween_render_cpu::caption::composite(&mut captioned, &layer);
-            each(n, &captioned)
-        }),
+    let finish = session.movie_finish()?;
+    let total = session.project().total_frames();
+    let progress = |n: u64| movie_progress(n.saturating_sub(1), total);
+    let Some(trail) = finish.trail() else {
+        if finish.is_identity() {
+            return render_frames(session, range, each);
+        }
+        return render_frames(session, range, &mut |n, image| {
+            each(n, &finish.apply(image.clone(), progress(n))?)
+        });
+    };
+    let past = trail::past_frames(trail.intensity) as usize;
+    let mut wide = range;
+    if range.reverse {
+        wide.last = range.last.saturating_add(past as u64).min(total);
+    } else {
+        wide.first = range.first.saturating_sub(past as u64).max(1);
     }
+    let mut ring: VecDeque<Image> = VecDeque::with_capacity(past + 1);
+    let mut sent = 0u64;
+    render_frames(session, wide, &mut |n, image| {
+        if (range.first..=range.last).contains(&n) {
+            let combined = trail::combine(&trail, image.clone(), ring.make_contiguous())?;
+            each(n, &finish.apply(combined, progress(n))?)?;
+            sent += 1;
+        }
+        ring.push_back(image.clone());
+        if ring.len() > past {
+            ring.pop_front();
+        }
+        Ok(())
+    })?;
+    Ok(sent)
 }
 
 fn render_frames(

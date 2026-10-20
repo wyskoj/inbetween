@@ -3,6 +3,7 @@ use crate::{CommandError, Params};
 #[cfg(not(target_arch = "wasm32"))]
 use inbetween_doc::Caption;
 use inbetween_doc::{Project, Sequence};
+use crate::movie_finish::{movie_progress, MovieFinish};
 use inbetween_raster::Image;
 use inbetween_render_cpu::caption::Font;
 use inbetween_render_cpu::{EffectImages, RenderError, Renderer};
@@ -109,12 +110,24 @@ pub struct Prepared {
     pub light: Option<Arc<Image>>,
     /// The sequence's caption, already drawn at the output size.
     pub caption: Option<Arc<Image>>,
-    /// The movie-wide caption, drawn at the output size. Exports lay it over every frame; the
-    /// renderer does not, so a shell previewing the movie adds it itself.
-    pub movie_caption: Option<Arc<Image>>,
+    /// What the movie does to every finished frame (effects, adjustment, filters, caption).
+    /// Exports apply it; the renderer does not, so a shell previewing the movie calls
+    /// [`Prepared::finish`].
+    pub movie: MovieFinish,
+    /// The movie frame (counting from 0) this sequence starts at, and the movie's length.
+    pub movie_start: u64,
+    pub movie_total: u64,
 }
 
 impl Prepared {
+    /// Apply the movie's own effects, adjustment, filters and caption to frame `frame` of this
+    /// sequence (counting from 0). The movie trail needs earlier movie frames, so it is left
+    /// out here; exports and `render_movie_frame` include it.
+    pub fn finish(&self, image: Image, frame: u32) -> Result<Image, CommandError> {
+        let n = self.movie_start.saturating_add(u64::from(frame));
+        self.movie.apply(image, movie_progress(n, self.movie_total))
+    }
+
     /// A CPU renderer for this sequence, effects included.
     pub fn renderer(&self) -> Result<inbetween_render_cpu::Renderer<'_>, RenderError> {
         Ok(Renderer::new(
@@ -433,7 +446,20 @@ impl Session {
             Some(c) => self.caption_layer(c, output)?,
             None => None,
         };
-        let movie_caption = self.movie_caption()?;
+        let movie = self.movie_finish()?;
+        let project = &self.project;
+        let movie_start = if project.kind == inbetween_doc::ProjectType::Sequence {
+            project
+                .sequences
+                .iter()
+                .take(index)
+                .filter(|s| s.visible)
+                .map(|s| u64::from(s.total_frames()))
+                .sum()
+        } else {
+            0
+        };
+        let movie_total = project.total_frames();
         Ok(Prepared {
             sequence,
             output,
@@ -445,7 +471,9 @@ impl Session {
             transition,
             light,
             caption,
-            movie_caption,
+            movie,
+            movie_start,
+            movie_total,
         })
     }
 
@@ -638,6 +666,39 @@ impl Session {
         self.caption_layer(&caption, output)
     }
 
+    /// The movie's effect images, adjustment, filters and caption, loaded for rendering.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn movie_finish(&mut self) -> Result<MovieFinish, CommandError> {
+        let fx = self.project.effects.clone();
+        let load = |session: &mut Self, on: bool, image: &inbetween_doc::ImageRef, name: &str| {
+            if !on {
+                return Ok(None);
+            }
+            if image.0.is_empty() {
+                return Err(CommandError::Image(format!(
+                    "the movie {name} effect is on but has no image; set one with effect.{name} scope=movie"
+                )));
+            }
+            session
+                .load_path(&image.0, &format!("The movie {name} effect image"))
+                .map(Some)
+        };
+        let background = load(self, fx.background.enabled, &fx.background.image, "background")?;
+        let mask = load(self, fx.mask.enabled, &fx.mask.image, "mask")?;
+        let foreground = load(self, fx.foreground.enabled, &fx.foreground.image, "foreground")?;
+        let light = load(self, fx.light.enabled, &fx.light.image, "light")?;
+        Ok(MovieFinish {
+            effects: fx,
+            adjust: self.project.adjust,
+            filters: self.project.filters.clone(),
+            background,
+            mask,
+            foreground,
+            light,
+            caption: self.movie_caption()?,
+        })
+    }
+
     /// How many edited sources are cached (for tests and diagnostics).
     pub fn cached_sources(&self) -> usize {
         self.processed.len()
@@ -657,6 +718,12 @@ impl Session {
             )));
         }
         self.load_path(reference, &format!("Image {which}"))
+    }
+
+    /// Load a movie effect image (or any file by its path) through the cache.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn load_effect_path(&mut self, reference: &str) -> Result<Arc<Image>, CommandError> {
+        self.load_path(reference, "The movie effect image")
     }
 
     #[cfg(not(target_arch = "wasm32"))]

@@ -4,8 +4,8 @@
 //! they report; giving an `image` loads it and switches the effect on; `clear` resets it.
 
 use crate::effect_cmds::{
-    effects_of, hex, need_image, parse_color, take_image, CLEAR, ENABLED, IMAGE_EXTENSIONS,
-    SEQUENCE,
+    hex, need_image, parse_color, take_image, target, target_effects, Target, CLEAR, ENABLED,
+    IMAGE_EXTENSIONS, SCOPE, SEQUENCE,
 };
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
 use inbetween_doc::{Light, Radial, Trail, Transition};
@@ -13,6 +13,7 @@ use serde_json::{json, Value};
 
 const TRANSITION_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "image",
         ParamKind::Path,
@@ -40,6 +41,7 @@ const TRANSITION_PARAMS: &[ParamSpec] = &[
 
 const LIGHT_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "image",
         ParamKind::Path,
@@ -69,6 +71,7 @@ const LIGHT_PARAMS: &[ParamSpec] = &[
 
 const TRAIL_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "overlay",
         ParamKind::Bool,
@@ -95,6 +98,7 @@ const TRAIL_PARAMS: &[ParamSpec] = &[
 
 const RADIAL_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "overlay",
         ParamKind::Bool,
@@ -120,9 +124,14 @@ const RADIAL_PARAMS: &[ParamSpec] = &[
 ];
 
 fn transition(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
-    let image = take_image(session, params, index, "transition")?;
-    let t = &mut effects_of(session, index)?.transition;
+    let target = target(session, params)?;
+    if target == Target::Movie {
+        return Err(CommandError::BadParams(
+            "a transition needs two images, so it works on a sequence; use `scope=sequence`".into(),
+        ));
+    }
+    let image = take_image(session, params, &target, "transition")?;
+    let t = &mut target_effects(session, &target)?.transition;
     if params.boolean("clear") == Some(true) {
         *t = Transition::default();
     }
@@ -141,7 +150,8 @@ fn transition(session: &mut Session, params: &Params) -> Result<Value, CommandEr
     }
     need_image(t.enabled, &t.image, "transition")?;
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": t.enabled,
         "image": t.image.0,
         "softness": t.softness,
@@ -150,9 +160,9 @@ fn transition(session: &mut Session, params: &Params) -> Result<Value, CommandEr
 }
 
 fn light(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
-    let image = take_image(session, params, index, "light")?;
-    let l = &mut effects_of(session, index)?.light;
+    let target = target(session, params)?;
+    let image = take_image(session, params, &target, "light")?;
+    let l = &mut target_effects(session, &target)?.light;
     if params.boolean("clear") == Some(true) {
         *l = Light::default();
     }
@@ -171,7 +181,8 @@ fn light(session: &mut Session, params: &Params) -> Result<Value, CommandError> 
     }
     need_image(l.enabled, &l.image, "light")?;
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": l.enabled,
         "image": l.image.0,
         "bright": l.bright,
@@ -180,9 +191,9 @@ fn light(session: &mut Session, params: &Params) -> Result<Value, CommandError> 
 }
 
 fn trail(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
+    let target = target(session, params)?;
     let color = params.string("color").map(parse_color).transpose()?;
-    let t = &mut effects_of(session, index)?.trail;
+    let t = &mut target_effects(session, &target)?.trail;
     if params.boolean("clear") == Some(true) {
         *t = Trail::default();
     }
@@ -201,7 +212,8 @@ fn trail(session: &mut Session, params: &Params) -> Result<Value, CommandError> 
         t.enabled = on;
     }
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": t.enabled,
         "overlay": t.overlay,
         "color": hex(t.rgba),
@@ -210,9 +222,9 @@ fn trail(session: &mut Session, params: &Params) -> Result<Value, CommandError> 
 }
 
 fn radial(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
+    let target = target(session, params)?;
     let color = params.string("color").map(parse_color).transpose()?;
-    let r = &mut effects_of(session, index)?.radial;
+    let r = &mut target_effects(session, &target)?.radial;
     if params.boolean("clear") == Some(true) {
         *r = Radial::default();
     }
@@ -230,7 +242,8 @@ fn radial(session: &mut Session, params: &Params) -> Result<Value, CommandError>
         r.enabled = on;
     }
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": r.enabled,
         "overlay": r.overlay,
         "color": hex(r.rgba),

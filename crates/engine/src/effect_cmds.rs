@@ -17,6 +17,15 @@ pub(crate) const SEQUENCE: ParamSpec = ParamSpec::new(
 .range(0.0, 1_000_000.0)
 .default_is("0");
 
+pub(crate) const SCOPE: ParamSpec = ParamSpec::new(
+    "scope",
+    ParamKind::String,
+    false,
+    "`sequence` for one sequence's effect (see `sequence`), `movie` for an effect over the whole movie",
+)
+.one_of(&["sequence", "movie"])
+.default_is("sequence");
+
 pub(crate) const ENABLED: ParamSpec = ParamSpec::new(
     "enabled",
     ParamKind::Bool,
@@ -35,6 +44,7 @@ pub(crate) use inbetween_codecs::IMAGE_EXTENSIONS;
 
 const BACK_COLOR_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "color",
         ParamKind::String,
@@ -47,6 +57,7 @@ const BACK_COLOR_PARAMS: &[ParamSpec] = &[
 
 const BACKGROUND_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "image",
         ParamKind::Path,
@@ -63,6 +74,7 @@ const BACKGROUND_PARAMS: &[ParamSpec] = &[
 
 const FOREGROUND_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "image",
         ParamKind::Path,
@@ -79,6 +91,7 @@ const FOREGROUND_PARAMS: &[ParamSpec] = &[
 
 const MASK_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
+    SCOPE,
     ParamSpec::new(
         "image",
         ParamKind::Path,
@@ -129,11 +142,45 @@ pub(crate) fn hex(c: [u8; 4]) -> String {
     format!("#{:02x}{:02x}{:02x}{:02x}", c[0], c[1], c[2], c[3])
 }
 
+/// What an effect command changes: one sequence's effects or the movie's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Target {
+    Sequence(usize),
+    Movie,
+}
+
+impl Target {
+    /// The sequence number, or `None` for the movie.
+    pub(crate) fn index(self) -> Option<usize> {
+        match self {
+            Self::Sequence(i) => Some(i),
+            Self::Movie => None,
+        }
+    }
+
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Sequence(_) => "sequence",
+            Self::Movie => "movie",
+        }
+    }
+}
+
+/// Read `scope` (and `sequence` for the sequence scope). With `scope=movie` the `sequence`
+/// parameter is ignored, so a shell may always send it.
+pub(crate) fn target(session: &Session, params: &Params) -> Result<Target, CommandError> {
+    if params.string("scope") == Some("movie") {
+        Ok(Target::Movie)
+    } else {
+        session.sequence_index(params).map(Target::Sequence)
+    }
+}
+
 /// Load the `image` parameter (so a bad file is refused now) and return its absolute path.
 pub(crate) fn take_image(
     session: &mut Session,
     params: &Params,
-    index: usize,
+    target: &Target,
     name: &str,
 ) -> Result<Option<ImageRef>, CommandError> {
     let Some(raw) = params.string("image") else {
@@ -144,12 +191,18 @@ pub(crate) fn take_image(
         .display()
         .to_string();
     #[cfg(not(target_arch = "wasm32"))]
-    session.load_image(&path, 0, index).map_err(|e| match e {
-        CommandError::Image(m) => CommandError::Image(format!("{name} effect: {m}")),
-        other => other,
-    })?;
+    {
+        let loaded = match target {
+            Target::Sequence(index) => session.load_image(&path, 0, *index),
+            Target::Movie => session.load_effect_path(&path),
+        };
+        loaded.map_err(|e| match e {
+            CommandError::Image(m) => CommandError::Image(format!("{name} effect: {m}")),
+            other => other,
+        })?;
+    }
     #[cfg(target_arch = "wasm32")]
-    let _ = (session, index, name);
+    let _ = (session, target, name);
     Ok(Some(ImageRef(path)))
 }
 
@@ -163,16 +216,19 @@ pub(crate) fn need_image(on: bool, image: &ImageRef, name: &str) -> Result<(), C
     Ok(())
 }
 
-pub(crate) fn effects_of(
-    session: &mut Session,
-    index: usize,
-) -> Result<&mut Effects, CommandError> {
-    Ok(&mut session.sequence_mut(index)?.effects)
+pub(crate) fn target_effects<'a>(
+    session: &'a mut Session,
+    target: &Target,
+) -> Result<&'a mut Effects, CommandError> {
+    match target {
+        Target::Sequence(index) => Ok(&mut session.sequence_mut(*index)?.effects),
+        Target::Movie => Ok(&mut session.project_mut().effects),
+    }
 }
 
 fn back_color(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
-    let fx = effects_of(session, index)?;
+    let target = target(session, params)?;
+    let fx = target_effects(session, &target)?;
     if params.boolean("clear") == Some(true) {
         fx.back_color = BackColor::default();
     }
@@ -184,7 +240,8 @@ fn back_color(session: &mut Session, params: &Params) -> Result<Value, CommandEr
         fx.back_color.enabled = on;
     }
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": fx.back_color.enabled,
         "color": hex(fx.back_color.rgba),
     }))
@@ -196,9 +253,9 @@ fn image_layer(
     name: &'static str,
     pick: fn(&mut Effects) -> &mut ImageLayer,
 ) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
-    let image = take_image(session, params, index, name)?;
-    let layer = pick(effects_of(session, index)?);
+    let target = target(session, params)?;
+    let image = take_image(session, params, &target, name)?;
+    let layer = pick(target_effects(session, &target)?);
     if params.boolean("clear") == Some(true) {
         *layer = ImageLayer::default();
     }
@@ -214,7 +271,8 @@ fn image_layer(
     }
     need_image(layer.enabled, &layer.image, name)?;
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": layer.enabled,
         "image": layer.image.0,
         "opacity": layer.opacity,
@@ -230,9 +288,9 @@ fn foreground(session: &mut Session, params: &Params) -> Result<Value, CommandEr
 }
 
 fn mask(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    let index = session.sequence_index(params)?;
-    let image = take_image(session, params, index, "mask")?;
-    let m = &mut effects_of(session, index)?.mask;
+    let target = target(session, params)?;
+    let image = take_image(session, params, &target, "mask")?;
+    let m = &mut target_effects(session, &target)?.mask;
     if params.boolean("clear") == Some(true) {
         *m = Mask::default();
     }
@@ -251,7 +309,8 @@ fn mask(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     }
     need_image(m.enabled, &m.image, "mask")?;
     Ok(json!({
-        "sequence": index,
+        "sequence": target.index(),
+        "scope": target.name(),
         "enabled": m.enabled,
         "image": m.image.0,
         "intensity": m.intensity,

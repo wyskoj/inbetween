@@ -160,10 +160,8 @@ mod files {
             (None, None) => (renderer.render_frame(0)?, prepared.sequence.frame_time(0)),
         };
         drop(renderer);
-        let mut image = image;
-        if let Some(layer) = session.movie_caption()? {
-            inbetween_render_cpu::caption::composite(&mut image, &layer);
-        }
+        let local = params.integer("frame").map_or(0, |n| n as u32);
+        let image = prepared.finish(image, local)?;
         Ok((index, image, t, prepared))
     }
 

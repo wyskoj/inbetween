@@ -102,14 +102,12 @@ impl InbetweenApp {
                                         self.session.movie_thumbnail(u64::from(frame) + 1, px).ok()
                                     } else {
                                         renderer.as_ref().and_then(|p| {
-                                            let mut image =
+                                            let image =
                                                 p.renderer().ok()?.render_frame(frame).ok()?;
-                                            if let Some(layer) = &p.movie_caption {
-                                                inbetween_render_cpu::caption::composite(
-                                                    &mut image, layer,
-                                                );
-                                            }
-                                            image.downscale_to_fit(px).ok()
+                                            p.finish(image, frame)
+                                                .ok()?
+                                                .downscale_to_fit(px)
+                                                .ok()
                                         })
                                     };
                                     if let Some(image) = image {

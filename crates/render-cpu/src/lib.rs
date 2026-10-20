@@ -19,7 +19,7 @@ pub mod caption;
 mod effects;
 pub mod movie_pass;
 pub mod source;
-mod trail;
+pub mod trail;
 
 pub use effects::{light_pixel, mask_factor, ray_strength, transition_amount, EffectImages};
 
