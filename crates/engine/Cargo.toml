@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+inbetween-audio = { path = "../audio" }
 inbetween-codecs = { path = "../codecs" }
 inbetween-doc = { path = "../doc" }
 inbetween-export = { path = "../export" }

@@ -587,6 +587,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bitstream-io"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "614aa3f2bac03707e62a84d18a48dd3d9ea6171313fd5e6a53b5054d8ae74601"
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1839,6 +1845,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
 name = "icu_collections"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1988,6 +2000,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "inbetween-audio"
+version = "0.0.0"
+dependencies = [
+ "hound",
+ "puremp3",
+]
+
+[[package]]
 name = "inbetween-cli"
 version = "0.0.0"
 dependencies = [
@@ -2038,6 +2058,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "image",
+ "inbetween-audio",
  "inbetween-codecs",
  "inbetween-detect",
  "inbetween-doc",
@@ -3290,6 +3311,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "puremp3"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2b7efbb39e373af70c139e0611375fa6cad751fb93d528a610b55302710d883"
+dependencies = [
+ "bitstream-io",
+ "byteorder",
 ]
 
 [[package]]

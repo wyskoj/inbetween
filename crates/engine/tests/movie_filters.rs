@@ -114,7 +114,12 @@ fn neutral_adjust_and_cleared_filters_leave_the_frame_alone() {
     let base = frame(&mut s);
     run(&mut s, "movie.adjust", json!({})).unwrap();
     assert_eq!(frame(&mut s), base);
-    run(&mut s, "movie.adjust", json!({"brightness": 40, "grayscale": true})).unwrap();
+    run(
+        &mut s,
+        "movie.adjust",
+        json!({"brightness": 40, "grayscale": true}),
+    )
+    .unwrap();
     assert_ne!(frame(&mut s), base);
     run(&mut s, "movie.adjust", json!({"reset": true})).unwrap();
     assert_eq!(frame(&mut s), base);
@@ -134,7 +139,12 @@ fn the_order_of_the_list_is_respected() {
     run(&mut s, "movie.filter.remove", json!({"index": 0})).unwrap();
     assert_eq!(s.project().filters.len(), 1);
     // Replacing in place.
-    run(&mut s, "movie.filter.blur", json!({"index": 0, "radius": 2})).unwrap();
+    run(
+        &mut s,
+        "movie.filter.blur",
+        json!({"index": 0, "radius": 2}),
+    )
+    .unwrap();
     assert_eq!(s.project().filters[0].name(), "blur");
 }
 
@@ -144,7 +154,12 @@ fn filters_and_adjust_undo_and_redo() {
     let base = frame(&mut s);
     run(&mut s, "movie.filter.blur", json!({"radius": 3})).unwrap();
     run(&mut s, "movie.adjust", json!({"negative": true})).unwrap();
-    run(&mut s, "movie.filter.blur", json!({"scope": "sequence", "radius": 2})).unwrap();
+    run(
+        &mut s,
+        "movie.filter.blur",
+        json!({"scope": "sequence", "radius": 2}),
+    )
+    .unwrap();
     run(&mut s, "edit.undo", json!({})).unwrap();
     assert!(s.project().sequences[0].filters.is_empty());
     run(&mut s, "edit.undo", json!({})).unwrap();
@@ -166,7 +181,10 @@ fn bad_parameters_are_errors_and_change_nothing() {
         ("movie.filter.move", json!({"index": 0, "to": 1})),
         ("movie.filter.blur", json!({"index": 3})),
         ("movie.filter.blur", json!({"scope": "image"})),
-        ("movie.filter.blur", json!({"scope": "sequence", "sequence": 9})),
+        (
+            "movie.filter.blur",
+            json!({"scope": "sequence", "sequence": 9}),
+        ),
         ("movie.adjust", json!({"hue": 500})),
     ] {
         assert!(run(&mut s, id, params.clone()).is_err(), "{id} {params}");

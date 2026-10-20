@@ -48,6 +48,7 @@ mod registry;
 mod select_cmds;
 mod sequence_cmds;
 mod session;
+mod sound_cmds;
 mod state;
 mod track_cmds;
 mod view_cmds;

@@ -11,6 +11,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("inbetween-geom", 0),
     ("inbetween-raster", 0),
     ("inbetween-codecs", 0),
+    ("inbetween-audio", 0),
     ("inbetween-doc", 1),
     ("inbetween-morph", 2),
     ("inbetween-detect", 2),

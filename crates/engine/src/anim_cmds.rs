@@ -135,6 +135,13 @@ mod files {
             false,
             "Path to the ffmpeg program; by default it is found on PATH",
         ),
+        ParamSpec::new(
+            "audio",
+            ParamKind::Bool,
+            false,
+            "Mux the project's sound (see effect.sound) into the video; false leaves it out",
+        )
+        .default_is("true"),
         REVERSE,
         DROP_DUPLICATES,
         FIRST,
@@ -254,6 +261,7 @@ mod files {
             "width": width,
             "height": height,
             "bytes": encoded.len(),
+            "audio": if session.project().sound.as_ref().is_some_and(|s| s.is_active()) { json!("skipped (format has no sound)") } else { json!("none") },
         }))
     }
 
@@ -278,8 +286,30 @@ mod files {
             fps: fps(params, session),
             matte: matte(params)?,
             ffmpeg: params.string("ffmpeg").map(Into::into),
+            audio: None,
         };
         let range = movie::range_from(session, params)?;
+        let mut opts = opts;
+        let mut audio_report = json!("none");
+        if let Some(sound) = session
+            .project()
+            .sound
+            .clone()
+            .filter(|s| s.is_active() && params.boolean("audio") != Some(false))
+        {
+            let probe = crate::sound_cmds::probe(session, &sound.path.0)?;
+            let frames = range.last - range.first + 1;
+            opts.audio = Some(inbetween_export::video::AudioMux {
+                path: session.resolve_image_path(&sound.path.0),
+                looped: sound.looped,
+                cut_at_end: sound.cut_at_end,
+                fade_in: sound.fade_in,
+                fade_out: sound.fade_out,
+                audio_seconds: probe.duration,
+                movie_seconds: frames as f64 / opts.fps,
+            });
+            audio_report = json!(sound.path.0);
+        }
         let (width, height) = (
             session.project().output.width,
             session.project().output.height,
@@ -295,6 +325,7 @@ mod files {
             "out": out,
             "format": format.id(),
             "frames": frames,
+            "audio": audio_report,
             "fps": opts.fps,
             "width": width,
             "height": height,
