@@ -222,7 +222,7 @@ impl InbetweenApp {
                                         }
                                         let mut star = d.important;
                                         if ui
-                                            .toggle_value(&mut star, "\u{2605}")
+                                            .toggle_value(&mut star, "!")
                                             .on_hover_text("Important: highlighted, held stiffer by smart drag")
                                             .changed()
                                         {
