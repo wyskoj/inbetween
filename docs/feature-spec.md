@@ -123,11 +123,11 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 | [x] | `sequence.addBlank` | Add an empty sequence | P1 |
 | [x] | `sequence.delete/duplicate/rename` | | P1 |
 | [x] | `sequence.visibility` | Hide/show; modifier-click toggles solo | P1 |
-| [~] | `sequence.reorder` | Up, down, to top, to bottom, drag in list | P1 |
+| [x] | `sequence.reorder` | Up, down, to top, to bottom, drag in list (drag a title onto another row) | P1 |
 | [x] | `sequence.link` | Make Image 1 equal the previous sequence's Image 2 (seamless join) | P1 |
-| [~] | `sequence.copyFrame` | Copy a source image with its dots into another sequence (drag between image icons) | P1 |
-| [~] | `project.type.sequence` | Sequences play one after another; movie length is the sum | P1 |
-| [~] | `project.type.layer` | All sequences play at once as stacked layers (first = top); all share one length; switchable at any time | P2 |
+| [x] | `sequence.copyFrame` | Copy a source image with its dots into another sequence (drag one thumbnail onto another in the list) | P1 |
+| [x] | `project.type.sequence` | Sequences play one after another; movie length is the sum | P1 |
+| [x] | `project.type.layer` | All sequences play at once as stacked layers (first = top); the movie has one length (the longest layer; shorter ones hold their last frame, or give them one length with `sequence.length` apply-to-all); switchable at any time from the list or `project.type` | P2 |
 | [x] | `view.sequenceList` | Panel listing sequences with both thumbnails, name, visibility (F2) | P1 |
 
 ---

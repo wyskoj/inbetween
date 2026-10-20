@@ -1087,12 +1087,13 @@ impl InbetweenApp {
                 .collect()
         });
         let movie = self.session.project().total_frames();
+        let layers = self.session.project().kind == inbetween_doc::ProjectType::Layer;
         let mut actions = Vec::new();
         egui::SidePanel::left("sequences")
             .default_width(220.0)
             .width_range(160.0..=420.0)
             .show(ctx, |ui| {
-                actions = seqlist::sequence_list(ui, &rows, movie);
+                actions = seqlist::sequence_list(ui, &rows, movie, layers);
             });
         for action in actions {
             self.apply_list(action);
@@ -1115,6 +1116,26 @@ impl InbetweenApp {
             }
             ListAction::Move(i, how) => {
                 self.run_command("sequence.reorder", &json!({ "sequence": i, "move": how }))
+            }
+            ListAction::MoveTo { from, to } => {
+                self.run_command("sequence.reorder", &json!({ "sequence": from, "to": to }))
+            }
+            ListAction::CopyFrame {
+                from,
+                from_image,
+                to,
+                to_image,
+            } => self.run_command(
+                "sequence.copyFrame",
+                &json!({
+                    "from_sequence": from,
+                    "from_image": from_image,
+                    "to_sequence": to,
+                    "to_image": to_image,
+                }),
+            ),
+            ListAction::ProjectType(kind) => {
+                self.run_command("project.type", &json!({ "kind": kind }))
             }
             ListAction::Duplicate(i) => {
                 self.run_command("sequence.duplicate", &json!({ "sequence": i }))

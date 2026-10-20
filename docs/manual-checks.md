@@ -50,3 +50,9 @@ How to read the result: a check passes when the behaviour matches and nothing in
 
 - [ ] `claude mcp add inbetween -- <path>/ib mcp --project demo/demo.inbetween`, then in Claude Code: the `inbetween` tools are listed, `frame_preview` shows a picture of the demo morph, `dots_add` then `frame_preview` shows the change, `edit_undo` takes it back, and `export_animation` writes a GIF.
 - [ ] Closing the client ends the `ib mcp` process (no orphan left in the task list).
+
+## §4: sequence list
+
+- [ ] Drag a row by its title onto another row: it takes that position and stays selected; Ctrl+Z puts it back in one step.
+- [ ] Drag a thumbnail onto another row's thumbnail: the image and its dots arrive there; dropping on a title does nothing; the pointer feels right while dragging (highlight on the targets).
+- [ ] Switch the list's type box to Layers: rows say layer 1 (top), layer 2 (below); the preview stacks them; switch back and the movie plays in order.

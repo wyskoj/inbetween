@@ -3,6 +3,7 @@
 //! Set `INBETWEEN_UI_SHOTS=some/folder` to also save screenshots there.
 
 use egui::{Event, Modifiers, PointerButton, Pos2, Vec2};
+use egui_kittest::kittest::Queryable;
 use egui_kittest::Harness;
 use inbetween_ui_egui::curves::CurveAction;
 use inbetween_ui_egui::seqlist::ListAction;
@@ -312,4 +313,118 @@ fn screenshots_for_a_human_to_look_at() {
     app_mut(&mut h).invoke("curve.shape");
     h.run();
     shot(&mut h, "sequences-and-curve");
+}
+
+fn drag(h: &mut H, from: Pos2, to: Pos2) {
+    let button = |pos, pressed| Event::PointerButton {
+        pos,
+        button: PointerButton::Primary,
+        pressed,
+        modifiers: Modifiers::NONE,
+    };
+    let frame = |h: &mut H, event| {
+        h.input_mut().events.push(event);
+        h.step();
+    };
+    frame(h, Event::PointerMoved(from));
+    frame(h, button(from, true));
+    for i in 1..=6 {
+        frame(
+            h,
+            Event::PointerMoved(from + (to - from) * (i as f32 / 6.0)),
+        );
+    }
+    frame(h, button(to, false));
+    h.run();
+}
+
+/// Name three sequences a, b, c and return the on-screen top-left of each row's title.
+fn three_rows(h: &mut H) -> Vec<Pos2> {
+    add_continued(h, "b");
+    add_continued(h, "c");
+    app_mut(h)
+        .run_command("sequence.rename", &json!({"sequence": 0, "name": "a"}))
+        .unwrap();
+    h.run();
+    ["a", "b", "c"]
+        .iter()
+        .map(|n| {
+            let r = h.get_by_label(n).raw_bounds().unwrap();
+            Pos2::new(r.x0 as f32, r.y0 as f32)
+        })
+        .collect()
+}
+
+#[test]
+fn list_actions_move_to_copy_frame_and_switch_the_project_type() {
+    let mut h = demo_harness();
+    three_rows(&mut h);
+    app_mut(&mut h).apply_list(ListAction::MoveTo { from: 0, to: 2 });
+    h.run();
+    assert_eq!(names(&h), ["b", "c", "a"]);
+
+    let first = app(&h).session().project().sequences[2].image1.clone();
+    app_mut(&mut h).apply_list(ListAction::CopyFrame {
+        from: 2,
+        from_image: 1,
+        to: 0,
+        to_image: 2,
+    });
+    h.run();
+    assert_eq!(app(&h).session().project().sequences[0].image2, first);
+
+    app_mut(&mut h).apply_list(ListAction::ProjectType("layer"));
+    h.run();
+    assert_eq!(
+        app(&h).session().project().kind,
+        inbetween_doc::ProjectType::Layer
+    );
+    let _ = h.get_by_label("b  (layer 1, top)");
+    let _ = h.get_by_label("a  (layer 3, below)");
+    shot(&mut h, "sequence_list_layers");
+    app_mut(&mut h).apply_list(ListAction::ProjectType("sequence"));
+    h.run();
+    assert_eq!(
+        app(&h).session().project().kind,
+        inbetween_doc::ProjectType::Sequence
+    );
+}
+
+#[test]
+fn dragging_a_row_onto_another_row_moves_it() {
+    let mut h = demo_harness();
+    let rows = three_rows(&mut h);
+    // Grab the title text of row "a" and drop it on the title of row "c".
+    drag(
+        &mut h,
+        rows[0] + Vec2::new(4.0, 6.0),
+        rows[2] + Vec2::new(4.0, 6.0),
+    );
+    assert_eq!(names(&h), ["b", "c", "a"]);
+    // One undo step.
+    app_mut(&mut h)
+        .run_command("edit.undo", &json!({}))
+        .unwrap();
+    assert_eq!(names(&h), ["a", "b", "c"]);
+}
+
+#[test]
+fn dragging_a_thumbnail_onto_another_thumbnail_copies_the_image_and_its_dots() {
+    let mut h = demo_harness();
+    let rows = three_rows(&mut h);
+    let thumb = |row: Pos2, image: u8| {
+        // The thumbnails sit left of the title: image 2 is 8 px away, image 1 a thumbnail
+        // further.
+        let x = row.x - 8.0 - 22.0 - if image == 1 { 52.0 } else { 0.0 };
+        Pos2::new(x, row.y + 14.0)
+    };
+    let source = app(&h).session().project().sequences[0].image1.clone();
+    drag(&mut h, thumb(rows[0], 1), thumb(rows[2], 2));
+    let seqs = &app(&h).session().project().sequences;
+    assert_eq!(seqs[2].image2, source);
+    assert_eq!(seqs[0].image1, source, "the source keeps its image");
+    // Dropping a thumbnail on a bare title does nothing.
+    let before = app(&h).session().project().clone();
+    drag(&mut h, thumb(rows[0], 1), rows[1] + Vec2::new(4.0, 6.0));
+    assert_eq!(app(&h).session().project().sequences, before.sequences);
 }
