@@ -85,6 +85,8 @@ pub enum Action {
         image: u8,
         x: f64,
         y: f64,
+        /// Alt was held: the other kind of drag (smart or plain) for this gesture.
+        alt: bool,
     },
     /// The drag ended.
     EndDrag,
@@ -518,6 +520,7 @@ pub fn source_panel(
                     image: d.image,
                     x: f64::from(f.x),
                     y: f64::from(f.y),
+                    alt: ui.input(|i| i.modifiers.alt),
                 });
             }
             (None, Some(line), Some(p)) => {

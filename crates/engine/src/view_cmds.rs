@@ -78,6 +78,9 @@ fn auto_partner(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
 fn auto_jump(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
     set_or_report(s, p, |x| &mut x.auto_jump)
 }
+fn smart_drag(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
+    set_or_report(s, p, |x| &mut x.smart_drag)
+}
 
 const MAGNIFIER_PARAMS: &[ParamSpec] = &[
     ParamSpec::new(
@@ -290,6 +293,15 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             "When on, the cursor jumps to the partner position after a dot is added.",
             OPTION_PARAMS,
             auto_jump,
+        ),
+        spec(
+            "face.option.smartDrag",
+            "Smart Drag Face Dots",
+            "Face/Smart Drag",
+            None,
+            "When on, dragging a dot on a placed face pulls the nearby face dots along (face.locate.smartDrag); hold Alt while dragging for a plain move. When off, Alt does the opposite.",
+            OPTION_PARAMS,
+            smart_drag,
         ),
     ]
 }

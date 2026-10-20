@@ -229,6 +229,10 @@ pub struct ViewState {
     pub caption_window: Option<CaptionScope>,
     /// The Camera window, when open.
     pub camera_window: Option<CameraTarget>,
+    /// The Face Model, Mix Faces and Face Library windows.
+    pub face_model_window: bool,
+    pub face_mix_window: bool,
+    pub face_library_window: bool,
     /// The crop being drawn, when the crop tool is active.
     pub crop: Option<CropTool>,
 }
@@ -269,6 +273,9 @@ impl Default for ViewState {
             effects_window: None,
             caption_window: None,
             camera_window: None,
+            face_model_window: false,
+            face_mix_window: false,
+            face_library_window: false,
             crop: None,
         }
     }

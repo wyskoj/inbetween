@@ -56,6 +56,9 @@ pub struct DisplayPrefs {
     pub auto_partner: bool,
     /// After placing a dot, jump the cursor to the other image.
     pub auto_jump: bool,
+    /// Dragging a face dot pulls the nearby face dots along (`face.locate.smartDrag`); a
+    /// modifier key flips this for one drag.
+    pub smart_drag: bool,
 }
 
 impl Default for DisplayPrefs {
@@ -74,6 +77,7 @@ impl Default for DisplayPrefs {
             magnifier_power: 2,
             auto_partner: true,
             auto_jump: false,
+            smart_drag: false,
         }
     }
 }

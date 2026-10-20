@@ -65,3 +65,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Image > Adjust... > Movie: the sliders change every frame; Sequence filters changes only the selected sequence.
 
 - Camera tool (spec section 6): open Sequence > Camera, drag the outline, the squares and the circle on the preview in a real window; check the handles stay grabbable at 25% and 800% zoom, and that the cursor changes while dragging.
+
+- Face tools (spec section 10): in a real window, fit a located face with Face > Smart Drag on (and Alt held for plain drags); drag a landmark in the Face Model window; drag a library tile onto Image 2 with the mouse (the test sends the drop as synthetic events); Save recipe and Load recipe in the Mix window with the real file dialogs.

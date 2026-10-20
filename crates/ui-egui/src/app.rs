@@ -39,6 +39,10 @@ mod crop_ui;
 mod curve_ui;
 mod drops_ui;
 mod effects_ui;
+mod face_library_ui;
+pub use face_library_ui::LibraryDrag;
+mod face_mix_ui;
+mod face_model_ui;
 mod form_ui;
 mod frames_ui;
 mod layout_ui;
@@ -236,6 +240,8 @@ pub struct InbetweenApp {
     camera_group_open: bool,
     /// The camera handle being dragged, with the pose it started from.
     camera_drag: Option<camera_ui::CameraDrag>,
+    /// What the face windows remember between frames.
+    face: face_model_ui::FaceUi,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -300,6 +306,7 @@ impl InbetweenApp {
             caption_origin: None,
             camera_group_open: false,
             camera_drag: None,
+            face: Default::default(),
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -408,6 +415,9 @@ impl InbetweenApp {
                 let live_window = self.state.adjust_window.is_some()
                     || self.state.caption_window.is_some()
                     || self.state.camera_window.is_some()
+                    || self.state.face_model_window
+                    || self.state.face_mix_window
+                    || self.state.face_library_window
                     || self.state.effects_window.is_some();
                 if !curve_drag
                     && !live_window
@@ -552,6 +562,18 @@ impl InbetweenApp {
                 self.open_caption(CaptionScope::Sequence);
                 return;
             }
+            "face.model" => {
+                self.open_face_model();
+                return;
+            }
+            "face.mix" => {
+                self.open_face_mix();
+                return;
+            }
+            "face.library" => {
+                self.open_face_library();
+                return;
+            }
             "camera.keyframes" => {
                 self.open_camera(CameraTarget::default());
                 return;
@@ -633,6 +655,7 @@ impl InbetweenApp {
             "view.toggle.grid" => return Some(prefs.show_grid),
             "dots.option.autoPartner" => return Some(prefs.auto_partner),
             "dots.option.autoJump" => return Some(prefs.auto_jump),
+            "face.option.smartDrag" => return Some(prefs.smart_drag),
             _ => {}
         }
         let seq = self.session.sequence(self.state.sequence).ok()?;
@@ -1056,6 +1079,9 @@ impl InbetweenApp {
         self.effects_window(ctx);
         self.caption_window(ctx);
         self.camera_window(ctx);
+        self.face_model_window(ctx);
+        self.face_mix_window(ctx);
+        self.face_library_window(ctx);
         self.form_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);
@@ -1712,6 +1738,7 @@ const TOGGLES: &[&str] = &[
     "view.toggle.grid",
     "dots.option.autoPartner",
     "dots.option.autoJump",
+    "face.option.smartDrag",
 ];
 
 fn menu_items(

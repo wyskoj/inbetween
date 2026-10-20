@@ -212,16 +212,16 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 |---|---|---|---|
 | [x] | `face.extract` | Auto-detect the face in every source, crop to a shared template for consistent framing; adjustable template box; manual fallback; apply to all or one | P2 |
 | [x] | `face.locate` | Auto-place Inbetween's standard face dot set; apply/append to all or one; multiple faces per image by appending | P2 |
-| [~] | `face.locate.smartDrag` | "Intelligent" drag: moving one landmark re-fits the rest; modifier toggles plain drag | P2 |
+| [x] | `face.locate.smartDrag` | "Intelligent" drag: moving one landmark re-fits the rest; modifier toggles plain drag | P2 |
 | [x] | `face.detect` | Report the faces found in each source (score, box, standard-model landmarks; optional full mesh); read-only | P2 |
 | [x] | `face.locateAll` | Place the model on every face found in both images, left to right (`face.locate` with `all_faces`) | P2 |
-| [~] | `face.model` | Edit which landmark dots are used, highlight important ones, edit guide lines; presets; save/load | P2 |
-| [~] | `face.mix` | Blend N faces into one still; per-image feature % and shape % with locks, shape-follows-feature lock, average, random, candidate gallery, save/load | P2 |
-| [~] | `face.library` | Folder-organized store of images with dots; drag into a project to reuse | P2 |
+| [x] | `face.model` | Edit which landmark dots are used, highlight important ones, edit guide lines; presets; save/load | P2 |
+| [x] | `face.mix` | Blend N faces into one still; per-image feature % and shape % with locks, shape-follows-feature lock, average, random, candidate gallery, save/load | P2 |
+| [x] | `face.library` | Folder-organized store of images with dots; drag into a project to reuse | P2 |
 
 Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbetween's face dot model is its own design.
 
-*Status (M13, M19): all six tools are commands (`face.model`, `face.locate`, `face.locate.smartDrag`, `face.extract`, `face.mix`, `face.library`, plus `image.saveToLibrary`), saved in the project (the model) or in `.inbetweenface`, `.inbetweenlandmarks` and `.inbetweenmix` files. M19 added the bundled detector (D52): `face.detect`, `face.locateAll`, `face.locate` with `source` detect (the default), `face` and `all_faces`, a `mesh478` landmarks layout for other tools, and detection inside `face.extract`. Open: a smart-drag gesture on the canvas (modifier toggles plain drag), a face-model editor window, mix sliders and a candidate gallery view, a library browser with drag into a project, library drag-and-drop, `dots.autoLandmarks`. Hairline landmarks are approximate (the mesh stops at the forehead).*
+*Status (M13, M19): all six tools are commands (`face.model`, `face.locate`, `face.locate.smartDrag`, `face.extract`, `face.mix`, `face.library`, plus `image.saveToLibrary`), saved in the project (the model) or in `.inbetweenface`, `.inbetweenlandmarks` and `.inbetweenmix` files. M19 added the bundled detector (D52): `face.detect`, `face.locateAll`, `face.locate` with `source` detect (the default), `face` and `all_faces`, a `mesh478` landmarks layout for other tools, and detection inside `face.extract`. The shell has all of it (D62): smart drag on the source panels (`face.option.smartDrag`, Alt flips it for one drag), the Face Model window (landmark canvas, important highlights, guide lines, presets, save and load), the Mix Faces window (per-face sliders, average and random modes, a candidate gallery, recipes) and the Face Library browser (thumbnails, drag a picture onto Image 1 or 2). Hairline landmarks are approximate (the mesh stops at the forehead).*
 
 ---
 

@@ -53,7 +53,13 @@ impl InbetweenApp {
                     self.group_open = true;
                 }
             }
-            Action::Drag { index, image, x, y } => self.drag_selection(index, image, x, y),
+            Action::Drag {
+                index,
+                image,
+                x,
+                y,
+                alt,
+            } => self.drag_selection(index, image, x, y, alt),
             Action::EndDrag => self.end_group(),
             Action::Delete(i) => {
                 self.chain = None;
@@ -98,6 +104,32 @@ impl InbetweenApp {
         }
     }
 
+    /// A smart drag of face dot `index` to (x, y): the face it belongs to (the project's face
+    /// model gives how many dots a face has) follows. `false` when the dot is not on a face the
+    /// model could have placed, so the caller drags plainly.
+    fn smart_drag(&mut self, index: usize, image: u8, x: f64, y: f64) -> bool {
+        let count = self.session.project().face.active_count();
+        let dots = self
+            .session
+            .project()
+            .sequences
+            .get(self.state.sequence)
+            .map_or(0, |s| s.dots.pairs.len());
+        if count == 0 || dots < count {
+            return false;
+        }
+        // Faces sit one after another, each as many dots as the model has landmarks.
+        let first = index / count * count;
+        if first + count > dots {
+            return false;
+        }
+        self.run_command(
+            "face.locate.smartDrag",
+            &json!({ "index": index, "image": image, "x": x, "y": y, "first": first }),
+        )
+        .is_ok()
+    }
+
     /// Where dot `index` is on `image`, from the project.
     fn dot_end(&self, index: usize, image: u8) -> Option<inbetween_geom::Point> {
         let seq = self.session.project().sequences.get(self.state.sequence)?;
@@ -106,7 +138,10 @@ impl InbetweenApp {
     }
 
     /// Move the whole selection so the grabbed dot follows the pointer to (x, y).
-    fn drag_selection(&mut self, index: usize, image: u8, x: f64, y: f64) {
+    fn drag_selection(&mut self, index: usize, image: u8, x: f64, y: f64, alt: bool) {
+        if self.session.prefs().smart_drag != alt && self.smart_drag(index, image, x, y) {
+            return;
+        }
         let Some(now) = self.dot_end(index, image) else {
             return;
         };
