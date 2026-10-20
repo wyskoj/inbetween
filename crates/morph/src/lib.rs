@@ -15,6 +15,7 @@ pub mod automatch;
 mod error;
 pub mod face;
 mod fit;
+pub mod landmarks;
 mod plan;
 
 pub use error::MorphError;

@@ -69,6 +69,7 @@ impl Registry {
         specs.extend(crate::layer_cmds::specs());
         specs.extend(crate::export_cmds::specs());
         specs.extend(crate::anim_cmds::specs());
+        specs.extend(crate::pdf_cmds::specs());
         specs.extend(crate::face_cmds::specs());
         #[cfg(not(target_arch = "wasm32"))]
         specs.extend(crate::file_cmds::specs());

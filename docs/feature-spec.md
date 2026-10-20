@@ -255,7 +255,7 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 | [x] | `view.syncSources` / `view.syncPreview` | Zoom/pan both sources together, and the preview with them | P1 |
 | [x] | `view.frameStrip` | Frame Sequence mode: thumbnail grid of every frame; thumb size adjustable | P1 |
 | [x] | `edit.undo/redo` | Unlimited (a byte budget, at least 200 steps), covering images, dots, sequences, curves | P0 |
-| [ ] | `export.pdf` | Contact sheet of sources, preview or all frames, with captions | P2 |
+| [x] | `export.pdf` | Contact sheet of sources, preview or all frames, with captions | P2 |
 | [x] | `tools.benchmark` | Measure preview and export throughput | P2 |
 | [x] | `tools.sequencePacker` | Pack an arbitrary image list into a movie | P2 |
 
@@ -285,4 +285,4 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 | [x] | `cli.*` / `mcp.*` | Every command drivable headlessly from the CLI (`ib run`) and over MCP (`ib mcp`, one tool per command, `frame.preview` returns a picture) | P1 |
 | [x] |  | Deterministic rendering: same project and frame always give the same bytes | P0 |
 | [x] |  | GPU and CPU renderers cross-checked on every test scene | P1 |
-| [ ] | `dots.autoLandmarks` | Landmark-based auto-dots for non-face subjects | P2 |
+| [x] | `dots.autoLandmarks` | Landmark-based auto-dots for non-face subjects | P2 |

@@ -16,6 +16,7 @@
 mod apng;
 mod error;
 mod gif;
+pub mod pdf;
 mod webp;
 
 #[cfg(not(target_arch = "wasm32"))]

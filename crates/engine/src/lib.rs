@@ -46,6 +46,7 @@ mod movie_cmds;
 mod movie_finish;
 mod movie_fx_cmds;
 mod params;
+mod pdf_cmds;
 mod project_cmds;
 mod registry;
 mod select_cmds;

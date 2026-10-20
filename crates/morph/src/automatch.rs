@@ -138,11 +138,17 @@ fn round(v: f64) -> i64 {
 
 /// Refine `guess` (a position on `other`) for the dot at `at` on `from`.
 fn refine(from: &Image, other: &Image, at: Point, guess: Point) -> Point {
+    refine_scored(from, other, at, guess).0
+}
+
+/// Like [`refine`], and the correlation of the match when the patches really matched (`None`
+/// when the guess was kept because the patch was flat or nothing correlated well enough).
+fn refine_scored(from: &Image, other: &Image, at: Point, guess: Point) -> (Point, Option<f64>) {
     let (ax, ay) = (round(at.x), round(at.y));
     let (gx, gy) = (round(guess.x), round(guess.y));
     let (tpl, te) = centred(&patch(from, ax, ay));
     if te < MIN_ENERGY {
-        return guess;
+        return (guess, None);
     }
     let mut best = (f64::MIN, gx, gy);
     for dy in -SEARCH..=SEARCH {
@@ -161,9 +167,9 @@ fn refine(from: &Image, other: &Image, at: Point, guess: Point) -> Point {
         }
     }
     if best.0 >= MIN_SCORE {
-        Point::new(best.1 as f64, best.2 as f64)
+        (Point::new(best.1 as f64, best.2 as f64), Some(best.0))
     } else {
-        guess
+        (guess, None)
     }
 }
 
@@ -180,6 +186,28 @@ pub fn auto_match(seq: &Sequence, img1: &Image, img2: &Image, dots: &[(Point, u8
                 refine(img1, img2, at, to2.apply(at))
             } else {
                 refine(img2, img1, at, to1.apply(at))
+            }
+        })
+        .collect()
+}
+
+/// Like [`auto_match`], with each position's correlation: `Some` when the patches matched,
+/// `None` when the position is only the first guess.
+pub fn auto_match_scored(
+    seq: &Sequence,
+    img1: &Image,
+    img2: &Image,
+    dots: &[(Point, u8)],
+) -> Vec<(Point, Option<f64>)> {
+    let (w, h) = img1.size();
+    let to2 = Transfer::new(seq, 1, w, h);
+    let to1 = Transfer::new(seq, 2, w, h);
+    dots.par_iter()
+        .map(|&(at, from)| {
+            if from == 1 {
+                refine_scored(img1, img2, at, to2.apply(at))
+            } else {
+                refine_scored(img2, img1, at, to1.apply(at))
             }
         })
         .collect()
