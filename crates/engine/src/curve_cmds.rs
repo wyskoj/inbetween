@@ -59,14 +59,14 @@ const PARAMS: &[ParamSpec] = &[
 ];
 
 #[derive(Clone, Copy, PartialEq)]
-enum Which {
+pub(crate) enum Which {
     Feature,
     Shape,
     Master,
     Easing,
 }
 
-fn curve_mut(seq: &mut inbetween_doc::Sequence, which: Which) -> &mut Curve {
+pub(crate) fn curve_mut(seq: &mut inbetween_doc::Sequence, which: Which) -> &mut Curve {
     match which {
         Which::Feature => &mut seq.feature_curve,
         Which::Shape => &mut seq.shape_curve,
@@ -75,7 +75,7 @@ fn curve_mut(seq: &mut inbetween_doc::Sequence, which: Which) -> &mut Curve {
     }
 }
 
-fn fresh(which: Which) -> Curve {
+pub(crate) fn fresh(which: Which) -> Curve {
     match which {
         Which::Master => Curve::opaque(),
         _ => Curve::default(),

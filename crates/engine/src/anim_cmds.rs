@@ -13,6 +13,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 #[cfg(not(target_arch = "wasm32"))]
 mod files {
     use super::*;
+    use crate::export_options::{self, OPEN_AFTER, SAVE_FIRST};
     use crate::movie::{self, MovieRange, MAX_MOVIE_FRAMES};
     use crate::{CommandError, ParamKind, ParamSpec, Params, Session};
     use inbetween_export::video::{VideoFormat, VideoOptions, VideoWriter};
@@ -118,6 +119,8 @@ mod files {
         ONLY_SEQUENCE,
         FIRST,
         LAST,
+        SAVE_FIRST,
+        OPEN_AFTER,
     ];
 
     const VIDEO_PARAMS: &[ParamSpec] = &[
@@ -157,6 +160,8 @@ mod files {
         ONLY_SEQUENCE,
         FIRST,
         LAST,
+        SAVE_FIRST,
+        OPEN_AFTER,
     ];
 
     fn has_sequence(session: &Session) -> bool {
@@ -204,6 +209,7 @@ mod files {
     }
 
     fn animation(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let saved = export_options::before(session, params)?;
         let out = params.string("out").unwrap_or_default();
         let format = match params.string("format") {
             Some(f) => f.to_string(),
@@ -264,7 +270,7 @@ mod files {
         let path = Path::new(out);
         make_parent(path)?;
         write_file(path, &encoded)?;
-        Ok(json!({
+        let report = json!({
             "out": out,
             "format": format,
             "frames": frames.len(),
@@ -273,10 +279,12 @@ mod files {
             "height": height,
             "bytes": encoded.len(),
             "audio": if session.project().sound.as_ref().is_some_and(|s| s.is_active()) { json!("skipped (format has no sound)") } else { json!("none") },
-        }))
+        });
+        Ok(export_options::after(session, params, saved, path, report))
     }
 
     fn video(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let saved = export_options::before(session, params)?;
         let out = params.string("out").unwrap_or_default();
         let format = match params.string("format") {
             Some(id) => VideoFormat::from_id(id),
@@ -332,7 +340,7 @@ mod files {
             writer.push(&image.to_rgba8()).map_err(Into::into)
         })?;
         writer.finish()?;
-        Ok(json!({
+        let report = json!({
             "out": out,
             "format": format.id(),
             "frames": frames,
@@ -340,7 +348,8 @@ mod files {
             "fps": opts.fps,
             "width": width,
             "height": height,
-        }))
+        });
+        Ok(export_options::after(session, params, saved, path, report))
     }
 
     pub(super) fn specs() -> Vec<CommandSpec> {

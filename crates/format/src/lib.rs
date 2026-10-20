@@ -24,6 +24,7 @@
 )]
 
 mod camera;
+mod curve;
 mod dots;
 mod error;
 mod face;
@@ -31,6 +32,7 @@ mod paths;
 mod project;
 
 pub use camera::{camera_from_bytes, camera_to_string, CAMERA_FORMAT, CAMERA_VERSION};
+pub use curve::{curve_from_bytes, curve_to_string, CURVE_FORMAT, CURVE_VERSION};
 pub use dots::{dots_from_bytes, dots_from_str, dots_to_string, DOTS_FORMAT, DOTS_VERSION};
 pub use error::FormatError;
 pub use face::{
@@ -49,9 +51,9 @@ pub use project::{
 mod files;
 #[cfg(not(target_arch = "wasm32"))]
 pub use files::{
-    read_camera, read_dots, read_face_model, read_landmarks, read_mix_recipe, read_project,
-    read_thumbnail, write_camera, write_dots, write_face_model, write_landmarks, write_mix_recipe,
-    write_project, write_project_with_thumbnail,
+    read_camera, read_curve, read_dots, read_face_model, read_landmarks, read_mix_recipe,
+    read_project, read_thumbnail, write_camera, write_curve, write_dots, write_face_model,
+    write_landmarks, write_mix_recipe, write_project, write_project_with_thumbnail,
 };
 
 /// Strip a UTF-8 byte-order mark and decode, so files saved by editors that add one load.

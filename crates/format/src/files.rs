@@ -88,6 +88,16 @@ pub fn write_camera(path: &Path, camera: &inbetween_doc::Camera) -> Result<(), F
     write_atomic(path, &crate::camera_to_string(camera)?)
 }
 
+/// Load a `.inbetweencurve` file.
+pub fn read_curve(path: &Path) -> Result<inbetween_doc::Curve, FormatError> {
+    crate::curve_from_bytes(&read_limited(path)?)
+}
+
+/// Save a curve atomically.
+pub fn write_curve(path: &Path, curve: &inbetween_doc::Curve) -> Result<(), FormatError> {
+    write_atomic(path, &crate::curve_to_string(curve)?)
+}
+
 /// Load a `.inbetweenface` face model.
 pub fn read_face_model(path: &Path) -> Result<inbetween_doc::FaceModel, FormatError> {
     crate::face_model_from_bytes(&read_limited(path)?)

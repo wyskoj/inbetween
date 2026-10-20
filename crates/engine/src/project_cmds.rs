@@ -67,7 +67,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-mod files {
+pub(crate) mod files {
     use super::*;
     use crate::{ParamKind, ParamSpec};
     use inbetween_doc::{ImageRef, OutputSettings, Project, ProjectType, Sequence, MAX_SIDE};
@@ -339,6 +339,20 @@ mod files {
     fn save_as(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
         let path = PathBuf::from(params.string("path").unwrap_or_default());
         save_to(session, path, params)
+    }
+
+    /// Save the project to its own file when it has one and has unsaved changes. Returns the
+    /// path written, or `None` when there was nothing to do.
+    pub(crate) fn save_if_dirty(session: &mut Session) -> Result<Option<String>, CommandError> {
+        let Some(path) = session.path().map(PathBuf::from) else {
+            return Ok(None);
+        };
+        if !session.is_dirty() {
+            return Ok(None);
+        }
+        let shown = path.display().to_string();
+        save_to(session, path, &Params::default())?;
+        Ok(Some(shown))
     }
 
     pub(super) fn specs() -> Vec<CommandSpec> {

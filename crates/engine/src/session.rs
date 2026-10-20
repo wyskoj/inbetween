@@ -67,6 +67,9 @@ pub struct Session {
     cancel: Arc<std::sync::atomic::AtomicBool>,
     /// The camera `camera.keyframes op=copy` took, for `op=paste`. Not part of undo.
     camera_clip: Option<inbetween_doc::Camera>,
+    /// What `open_after` exports open their result with; `None` is the system's default.
+    #[cfg(not(target_arch = "wasm32"))]
+    opener: Option<crate::export_options::Opener>,
 }
 
 // Only read by the file-backed image loader, which does not exist on wasm.
@@ -160,6 +163,19 @@ impl Session {
     /// then fails with [`CommandError::Cancelled`]; the flag clears when the next one starts.
     pub fn cancel_handle(&self) -> Arc<std::sync::atomic::AtomicBool> {
         Arc::clone(&self.cancel)
+    }
+
+    /// Replace what opens an export's result (the default hands it to the system).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_opener(&mut self, opener: crate::export_options::Opener) {
+        self.opener = Some(opener);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn opener(&self) -> crate::export_options::Opener {
+        self.opener
+            .clone()
+            .unwrap_or_else(|| std::sync::Arc::new(crate::export_options::system_opener))
     }
 
     pub(crate) fn camera_clip(&self) -> Option<&inbetween_doc::Camera> {

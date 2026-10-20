@@ -143,7 +143,7 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 | [x] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
 | [~] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
 | [x] | `curve.edit` | Click to add point, drag to move, right-click to delete, linear toggle, reset | P1 |
-| [ ] | `curve.library` | Save, load, delete library curves | P2 |
+| [x] | `curve.library` | Save, load, delete library curves | P2 |
 
 ---
 
@@ -238,7 +238,7 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 | [x] | `export.gif` | Animated GIF, loop or once, opaque or transparent (also APNG/animated WebP) | P1 |
 | [x] | `export.options` | fps 1–60 (plus 29.97), JPEG quality, DPI, reverse frames, drop duplicate frames at sequence joins, cancellable | P1 |
 | [ ] | `export.videoSource` | When a source is a video, include its clip before/after the morph | P2 |
-| [ ] | `export.afterSave/afterOpen` | Auto-save project before export; open the result afterwards | P2 |
+| [x] | `export.afterSave/afterOpen` | Auto-save project before export; open the result afterwards | P2 |
 | [x] |  | Output size not capped by the GPU (tile or fall back to CPU) | P1 |
 
 **Video sources (P2):** import a video as Image 1 or 2; morph from the last frame of clip 1 to the first frame of clip 2.
@@ -256,8 +256,8 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 | [x] | `view.frameStrip` | Frame Sequence mode: thumbnail grid of every frame; thumb size adjustable | P1 |
 | [x] | `edit.undo/redo` | Unlimited (a byte budget, at least 200 steps), covering images, dots, sequences, curves | P0 |
 | [ ] | `export.pdf` | Contact sheet of sources, preview or all frames, with captions | P2 |
-| [ ] | `tools.benchmark` | Measure preview and export throughput | P2 |
-| [ ] | `tools.sequencePacker` | Pack an arbitrary image list into a movie | P2 |
+| [x] | `tools.benchmark` | Measure preview and export throughput | P2 |
+| [x] | `tools.sequencePacker` | Pack an arbitrary image list into a movie | P2 |
 
 ### Default keymap
 

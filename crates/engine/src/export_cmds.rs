@@ -12,6 +12,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 #[cfg(not(target_arch = "wasm32"))]
 mod files {
     use super::*;
+    use crate::export_options::{self, OPEN_AFTER, SAVE_FIRST};
     use crate::movie::{self, MAX_MOVIE_FRAMES};
     use crate::Prepared;
     use crate::{CommandError, ParamKind, ParamSpec, Params, Session};
@@ -63,6 +64,8 @@ mod files {
         .range(1.0, MAX_FRAMES as f64),
         QUALITY,
         DPI,
+        SAVE_FIRST,
+        OPEN_AFTER,
     ];
 
     const QUALITY: ParamSpec = ParamSpec::new(
@@ -156,6 +159,8 @@ mod files {
         .default_is("the last frame"),
         SEQUENCE,
         DPI,
+        SAVE_FIRST,
+        OPEN_AFTER,
     ];
 
     fn has_sequence(session: &Session) -> bool {
@@ -205,6 +210,7 @@ mod files {
     }
 
     fn frame(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let saved = export_options::before(session, params)?;
         let image = match params.integer("movie_frame") {
             Some(n) => {
                 if params.has("t") || params.has("frame") || params.has("sequence") {
@@ -219,11 +225,18 @@ mod files {
         };
         let out = params.string("out").unwrap_or_default();
         write_image_with(Path::new(out), &image, write_options(params))?;
-        Ok(json!({
+        let report = json!({
             "out": out,
             "width": image.width(),
             "height": image.height(),
-        }))
+        });
+        Ok(export_options::after(
+            session,
+            params,
+            saved,
+            Path::new(out),
+            report,
+        ))
     }
 
     /// A frame as an image plus its dots, ready to be edited as a new starting point: the
@@ -290,6 +303,7 @@ mod files {
     }
 
     fn sequence(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let saved = export_options::before(session, params)?;
         let index = session.sequence_index(params)?;
         let prefix = params.string("prefix").unwrap_or("frame");
         if prefix.contains(['/', '\\', ':']) {
@@ -323,14 +337,15 @@ mod files {
                 write_options(params),
             )?;
         }
-        Ok(json!({
+        let report = json!({
             "dir": dir.display().to_string(),
             "frames": last - first + 1,
             "first": first,
             "last": last,
             "width": prepared.output.0,
             "height": prepared.output.1,
-        }))
+        });
+        Ok(export_options::after(session, params, saved, dir, report))
     }
 
     const MOVIE_PARAMS: &[ParamSpec] = &[
@@ -385,10 +400,13 @@ mod files {
         .range(0.0, 1_000_000.0)
         .default_is("the whole movie"),
         DPI,
+        SAVE_FIRST,
+        OPEN_AFTER,
     ];
 
     /// Every visible sequence, one after another, as one continuously numbered frame series.
     fn movie(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let saved = export_options::before(session, params)?;
         let prefix = params.string("prefix").unwrap_or("frame");
         if prefix.contains(['/', '\\', ':']) {
             return Err(CommandError::BadParams(
@@ -411,7 +429,7 @@ mod files {
             session.project().output.width,
             session.project().output.height,
         );
-        Ok(json!({
+        let report = json!({
             "dir": dir.display().to_string(),
             "frames": written,
             "first": range.first,
@@ -419,7 +437,8 @@ mod files {
             "total_frames": total,
             "width": w,
             "height": h,
-        }))
+        });
+        Ok(export_options::after(session, params, saved, dir, report))
     }
 
     pub(super) fn specs() -> Vec<CommandSpec> {

@@ -17,11 +17,14 @@ mod anim_cmds;
 mod camera_cmds;
 mod caption_cmds;
 mod curve_cmds;
+mod curve_library_cmds;
 mod dots_cmds;
 mod edit_cmds;
 mod effect_cmds;
 mod error;
 mod export_cmds;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod export_options;
 mod face_cmds;
 #[cfg(not(target_arch = "wasm32"))]
 mod face_detect;
@@ -50,6 +53,7 @@ mod sequence_cmds;
 mod session;
 mod sound_cmds;
 mod state;
+mod tools_cmds;
 mod track_cmds;
 mod view_cmds;
 
