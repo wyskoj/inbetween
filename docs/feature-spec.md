@@ -227,7 +227,7 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 
 ## 11. Export
 
-*Status: `export.animation` (GIF, APNG, animated WebP) and `export.video` (MP4, WebM, ProRes through an installed ffmpeg) take `fps`, `first`/`last`, `reverse` and `drop_duplicates`. `sequence` picks one sequence, `export.frame` takes `quality` and `dpi` (PNG and sequences take `dpi`), and `Session::cancel_handle` stops a running export (`Cancelled`). Video encoding stays with ffmpeg (D59).*
+*Status: `export.animation` (GIF, APNG, animated WebP) and `export.video` (MP4, WebM, ProRes through an installed ffmpeg) take `fps`, `first`/`last`, `reverse` and `drop_duplicates`. `sequence` picks one sequence, `export.frame` takes `quality` and `dpi` (PNG and sequences take `dpi`), and `Session::cancel_handle` stops a running export (`Cancelled`). Video encoding stays with ffmpeg (D59). Cancel is a flag any thread can set (CLI, MCP, tests); the desktop shell runs exports on its UI thread and has no cancel or progress button yet.*
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
