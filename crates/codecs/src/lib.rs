@@ -244,6 +244,82 @@ pub fn encode_jpeg(
     Ok(out)
 }
 
+/// How [`write_file_with`] encodes: JPEG quality (1 to 100) and the dots per inch to record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WriteOptions {
+    pub quality: u8,
+    pub dpi: Option<u32>,
+}
+
+impl Default for WriteOptions {
+    fn default() -> Self {
+        Self {
+            quality: 92,
+            dpi: None,
+        }
+    }
+}
+
+/// Most dots per inch a file can record (JPEG stores 16 bits).
+pub const MAX_DPI: u32 = 65_535;
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in bytes {
+        crc ^= u32::from(b);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xEDB8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// Record `dpi` dots per inch in encoded PNG bytes (a `pHYs` chunk after the header). Bytes
+/// that are not a PNG with a header chunk come back unchanged.
+pub fn set_png_dpi(png: Vec<u8>, dpi: u32) -> Vec<u8> {
+    const SIGNATURE: usize = 8;
+    const IHDR_END: usize = SIGNATURE + 4 + 4 + 13 + 4;
+    if png.len() < IHDR_END || png.get(12..16) != Some(b"IHDR") {
+        return png;
+    }
+    // Pixels per metre, rounded.
+    let ppm = (f64::from(dpi.min(MAX_DPI)) / 0.0254).round() as u32;
+    let mut chunk = Vec::with_capacity(21);
+    chunk.extend_from_slice(&9u32.to_be_bytes());
+    chunk.extend_from_slice(b"pHYs");
+    chunk.extend_from_slice(&ppm.to_be_bytes());
+    chunk.extend_from_slice(&ppm.to_be_bytes());
+    chunk.push(1);
+    let crc = crc32(&chunk[4..]);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let mut out = Vec::with_capacity(png.len() + chunk.len());
+    out.extend_from_slice(&png[..IHDR_END]);
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&png[IHDR_END..]);
+    out
+}
+
+/// Record `dpi` dots per inch in the JFIF header of encoded JPEG bytes. Bytes without a JFIF
+/// header come back unchanged.
+pub fn set_jpeg_dpi(mut jpeg: Vec<u8>, dpi: u32) -> Vec<u8> {
+    // SOI, APP0 marker and length, "JFIF ", version (2), units (1), x density, y density.
+    if jpeg.len() < 20
+        || jpeg.get(..4) != Some(&[0xFF, 0xD8, 0xFF, 0xE0])
+        || jpeg.get(6..11) != Some(b"JFIF ")
+    {
+        return jpeg;
+    }
+    let d = (dpi.min(MAX_DPI) as u16).to_be_bytes();
+    jpeg[13] = 1; // dots per inch
+    jpeg[14..16].copy_from_slice(&d);
+    jpeg[16..18].copy_from_slice(&d);
+    jpeg
+}
+
 impl Rgba8Image {
     pub fn new(width: u32, height: u32, data: Vec<u8>) -> Result<Self, CodecError> {
         check_buffer(width, height, &data)?;
@@ -278,13 +354,34 @@ mod files {
     /// Encode and write an image, choosing PNG or JPEG from the extension. JPEG uses
     /// quality 92.
     pub fn write_file(path: &Path, img: &Rgba8Image) -> Result<(), CodecError> {
+        write_file_with(path, img, WriteOptions::default())
+    }
+
+    /// Like [`write_file`], with the JPEG quality and the resolution to record.
+    pub fn write_file_with(
+        path: &Path,
+        img: &Rgba8Image,
+        options: WriteOptions,
+    ) -> Result<(), CodecError> {
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
             .map(str::to_ascii_lowercase);
         let bytes = match ext.as_deref() {
-            Some("png") => encode_png(img.width, img.height, &img.data)?,
-            Some("jpg" | "jpeg") => encode_jpeg(img.width, img.height, &img.data, 92)?,
+            Some("png") => {
+                let png = encode_png(img.width, img.height, &img.data)?;
+                match options.dpi {
+                    Some(dpi) => set_png_dpi(png, dpi),
+                    None => png,
+                }
+            }
+            Some("jpg" | "jpeg") => {
+                let jpeg = encode_jpeg(img.width, img.height, &img.data, options.quality)?;
+                match options.dpi {
+                    Some(dpi) => set_jpeg_dpi(jpeg, dpi),
+                    None => jpeg,
+                }
+            }
             _ => {
                 return Err(CodecError::Unsupported(format!(
                     "{}: use a .png, .jpg or .jpeg extension",
@@ -297,11 +394,35 @@ mod files {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub use files::{read_file, write_file};
+pub use files::{read_file, write_file, write_file_with};
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dpi_is_recorded_in_png_and_jpeg() {
+        let px = sample(8, 8);
+        let png = set_png_dpi(encode_png(8, 8, &px).unwrap(), 300);
+        assert_eq!(png.get(33..37), Some(&b"   	"[..]));
+        assert_eq!(png.get(37..41), Some(&b"pHYs"[..]));
+        // 300 dpi is 11811 pixels per metre.
+        assert_eq!(png.get(41..45), Some(&11811u32.to_be_bytes()[..]));
+        let back = decode(&png).unwrap();
+        assert_eq!((back.width, back.height), (8, 8));
+        assert_eq!(back.data, px);
+
+        let jpeg = set_jpeg_dpi(encode_jpeg(8, 8, &px, 90).unwrap(), 150);
+        assert_eq!(jpeg.get(13), Some(&1));
+        assert_eq!(jpeg.get(14..16), Some(&150u16.to_be_bytes()[..]));
+        assert!(decode(&jpeg).is_ok());
+    }
+
+    #[test]
+    fn dpi_leaves_junk_alone() {
+        assert_eq!(set_png_dpi(vec![1, 2, 3], 300), vec![1, 2, 3]);
+        assert_eq!(set_jpeg_dpi(vec![1, 2, 3], 300), vec![1, 2, 3]);
+    }
 
     fn sample(w: u32, h: u32) -> Vec<u8> {
         let mut v = Vec::new();

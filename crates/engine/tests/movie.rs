@@ -380,3 +380,137 @@ fn undo_keeps_more_than_two_hundred_steps_and_a_byte_budget_for_big_projects() {
     }
     assert!(run(&mut s, "edit.undo", json!({})).is_err());
 }
+
+/// No GPU texture can be this wide (limits are 8192 to 16384); exports must not depend on one.
+#[test]
+fn export_is_not_capped_by_the_gpu() {
+    let d = Dir::new("wide");
+    let mut s = session(&d, 1);
+    run(&mut s, "movie.size", json!({"width": 20000, "height": 16})).unwrap();
+    let out = d.s("wide.png");
+    run(&mut s, "export.frame", json!({"out": out, "t": 0.5})).unwrap();
+    let bytes = std::fs::read(&out).unwrap();
+    let img = inbetween_codecs::decode(&bytes).unwrap();
+    assert_eq!((img.width, img.height), (20000, 16));
+}
+
+fn files_in(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn export_can_pick_one_sequence() {
+    let d = Dir::new("range");
+    let mut s = session(&d, 3); // 5, 6 and 7 frames
+    let out = d.s("only");
+    let r = run(
+        &mut s,
+        "export.movie",
+        json!({"out_dir": out, "sequence": 1}),
+    )
+    .unwrap();
+    assert_eq!(r["frames"], 6);
+    assert_eq!(
+        files_in(Path::new(&out)),
+        (6..=11)
+            .map(|n| format!("frame_{n:04}.png"))
+            .collect::<Vec<_>>()
+    );
+    // first and last count inside the sequence.
+    let out = d.s("inner");
+    let r = run(
+        &mut s,
+        "export.movie",
+        json!({"out_dir": out, "sequence": 2, "first": 2, "last": 3}),
+    )
+    .unwrap();
+    assert_eq!(r["frames"], 2);
+    assert_eq!(
+        files_in(Path::new(&out)),
+        ["frame_0013.png", "frame_0014.png"]
+    );
+    // Bad picks are errors.
+    let bad = |s: &mut Session, p: Value| run(s, "export.movie", p).unwrap_err();
+    assert!(matches!(
+        bad(&mut s, json!({"out_dir": d.s("x"), "sequence": 9})),
+        CommandError::NoSuchSequence { .. }
+    ));
+    assert!(matches!(
+        bad(
+            &mut s,
+            json!({"out_dir": d.s("x"), "sequence": 0, "first": 3, "last": 2})
+        ),
+        CommandError::BadParams(_)
+    ));
+}
+
+#[test]
+fn jpeg_quality_and_dpi_are_honoured() {
+    let d = Dir::new("opts");
+    let mut s = session(&d, 1);
+    let (lo, hi) = (d.s("lo.jpg"), d.s("hi.jpg"));
+    run(
+        &mut s,
+        "export.frame",
+        json!({"out": lo, "t": 0.5, "quality": 5}),
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "export.frame",
+        json!({"out": hi, "t": 0.5, "quality": 98, "dpi": 300}),
+    )
+    .unwrap();
+    let (lo_b, hi_b) = (std::fs::read(&lo).unwrap(), std::fs::read(&hi).unwrap());
+    assert!(lo_b.len() < hi_b.len(), "{} vs {}", lo_b.len(), hi_b.len());
+    assert_eq!(hi_b[14..16], 300u16.to_be_bytes());
+    let png = d.s("a.png");
+    run(
+        &mut s,
+        "export.frame",
+        json!({"out": png, "t": 0.5, "dpi": 72}),
+    )
+    .unwrap();
+    let bytes = std::fs::read(&png).unwrap();
+    assert_eq!(&bytes[37..41], b"pHYs");
+    assert!(inbetween_codecs::decode(&bytes).is_ok());
+    let bad = run(&mut s, "export.frame", json!({"out": png, "dpi": 0}));
+    assert!(bad.is_err());
+}
+
+#[test]
+fn a_running_export_can_be_cancelled() {
+    let d = Dir::new("cancel");
+    let mut s = session(&d, 1);
+    run(&mut s, "movie.size", json!({"width": 512, "height": 512})).unwrap();
+    run(&mut s, "sequence.length", json!({"frames": 999})).unwrap();
+    let out = d.s("cancelled");
+    let flag = s.cancel_handle();
+    let watch = PathBuf::from(&out);
+    let stopper = std::thread::spawn(move || {
+        for _ in 0..20_000 {
+            if std::fs::read_dir(&watch).is_ok_and(|r| r.count() >= 3) {
+                flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    });
+    let err = run(&mut s, "export.movie", json!({"out_dir": out})).unwrap_err();
+    stopper.join().unwrap();
+    assert_eq!(err, CommandError::Cancelled);
+    assert!(files_in(Path::new(&out)).len() < 999);
+    // The next export starts clean.
+    let r = run(
+        &mut s,
+        "export.movie",
+        json!({"out_dir": d.s("again"), "last": 3}),
+    )
+    .unwrap();
+    assert_eq!(r["frames"], 3);
+}

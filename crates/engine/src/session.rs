@@ -63,6 +63,8 @@ pub struct Session {
     selection_pinned: bool,
     clipboard: Option<DotClip>,
     prefs: DisplayPrefs,
+    /// Set from another thread to stop the export in progress; cleared when one starts.
+    cancel: Arc<std::sync::atomic::AtomicBool>,
 }
 
 // Only read by the file-backed image loader, which does not exist on wasm.
@@ -150,6 +152,25 @@ impl Prepared {
 impl Session {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A flag another thread can set to stop the running export at the next frame. The export
+    /// then fails with [`CommandError::Cancelled`]; the flag clears when the next one starts.
+    pub fn cancel_handle(&self) -> Arc<std::sync::atomic::AtomicBool> {
+        Arc::clone(&self.cancel)
+    }
+
+    pub(crate) fn begin_cancellable(&self) {
+        self.cancel
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub(crate) fn check_cancel(&self) -> Result<(), CommandError> {
+        if self.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            Err(CommandError::Cancelled)
+        } else {
+            Ok(())
+        }
     }
 
     pub fn project(&self) -> &Project {

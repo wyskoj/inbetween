@@ -23,6 +23,34 @@ pub(crate) struct MovieRange {
     pub drop_join_duplicates: bool,
 }
 
+/// Where sequence `index` sits in the movie: the movie frames before it, and its length.
+fn sequence_span(session: &Session, index: usize) -> Result<(u64, u64), CommandError> {
+    let project = session.project();
+    let Some(seq) = project.sequences.get(index) else {
+        return Err(CommandError::NoSuchSequence {
+            index,
+            count: project.sequences.len(),
+        });
+    };
+    if project.kind == ProjectType::Layer {
+        return Err(CommandError::BadParams(
+            "`sequence` cannot pick one layer: a layer project's frames are all its layers stacked"
+                .into(),
+        ));
+    }
+    if !seq.visible {
+        return Err(CommandError::BadParams(format!(
+            "sequence {index} is hidden and is not part of the movie; show it first"
+        )));
+    }
+    let before: u64 = project.sequences[..index]
+        .iter()
+        .filter(|s| s.visible)
+        .map(|s| u64::from(s.total_frames()))
+        .sum();
+    Ok((before, u64::from(seq.total_frames())))
+}
+
 /// Parse and check the shared `first`, `last`, `reverse` and `drop_duplicates` parameters.
 pub(crate) fn range_from(
     session: &Session,
@@ -34,6 +62,11 @@ pub(crate) fn range_from(
             "no visible sequence has any frames; show a sequence first".into(),
         ));
     }
+    // `sequence` narrows the export to one sequence; `first` and `last` then count inside it.
+    let (base, total) = match params.integer("sequence") {
+        None => (0, total),
+        Some(n) => sequence_span(session, usize::try_from(n).unwrap_or(usize::MAX))?,
+    };
     let first = params.integer("first").map_or(1, |n| n as u64);
     let last = params
         .integer("last")
@@ -41,9 +74,10 @@ pub(crate) fn range_from(
         .min(total);
     if first > last {
         return Err(CommandError::BadParams(format!(
-            "`first` ({first}) is after the last frame to write ({last}); the movie has {total} frames"
+            "`first` ({first}) is after the last frame to write ({last}); there are {total} frames to choose from"
         )));
     }
+    let (first, last) = (first + base, last + base);
     Ok(MovieRange {
         first,
         last,
@@ -64,6 +98,7 @@ pub(crate) fn render_movie(
     range: MovieRange,
     each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
 ) -> Result<u64, CommandError> {
+    session.begin_cancellable();
     let finish = session.movie_finish()?;
     let total = session.project().total_frames();
     let progress = |n: u64| movie_progress(n.saturating_sub(1), total);
@@ -145,6 +180,7 @@ fn render_frames(
                 }
                 previous = Some(image.clone());
             }
+            session.check_cancel()?;
             each(n, &image)?;
             sent += 1;
         }
@@ -206,6 +242,7 @@ fn render_layers(
             });
         }
         let Some(image) = stack else { continue };
+        session.check_cancel()?;
         each(n, &image)?;
         sent += 1;
     }

@@ -227,19 +227,19 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 
 ## 11. Export
 
-*Status: `export.animation` (GIF, APNG, animated WebP) and `export.video` (MP4, WebM, ProRes through an installed ffmpeg) take `fps`, `first`/`last`, `reverse` and `drop_duplicates`. Open: JPEG quality, DPI, cancel, progress, a bundled encoder.*
+*Status: `export.animation` (GIF, APNG, animated WebP) and `export.video` (MP4, WebM, ProRes through an installed ffmpeg) take `fps`, `first`/`last`, `reverse` and `drop_duplicates`. `sequence` picks one sequence, `export.frame` takes `quality` and `dpi` (PNG and sequences take `dpi`), and `Session::cancel_handle` stops a running export (`Cancelled`). Video encoding stays with ffmpeg (D59).*
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [x] | `export.frame` | Current frame to an image file | P0 |
 | [x] | `export.sequence` | Image sequence (PNG with alpha first) | P0 |
-| [~] | `export.range` | All sequences, current one, or a range | P1 |
-| [~] | `export.video` | Modern targets: MP4/H.264, WebM (with alpha), ProRes 4444 optional | P1 |
+| [x] | `export.range` | All sequences, current one, or a range | P1 |
+| [x] | `export.video` | Modern targets: MP4/H.264, WebM (with alpha), ProRes 4444 optional | P1 |
 | [x] | `export.gif` | Animated GIF, loop or once, opaque or transparent (also APNG/animated WebP) | P1 |
-| [~] | `export.options` | fps 1–60 (plus 29.97), JPEG quality, DPI, reverse frames, drop duplicate frames at sequence joins, cancellable | P1 |
+| [x] | `export.options` | fps 1–60 (plus 29.97), JPEG quality, DPI, reverse frames, drop duplicate frames at sequence joins, cancellable | P1 |
 | [ ] | `export.videoSource` | When a source is a video, include its clip before/after the morph | P2 |
 | [ ] | `export.afterSave/afterOpen` | Auto-save project before export; open the result afterwards | P2 |
-| [ ] |  | Output size not capped by the GPU (tile or fall back to CPU) | P1 |
+| [x] |  | Output size not capped by the GPU (tile or fall back to CPU) | P1 |
 
 **Video sources (P2):** import a video as Image 1 or 2; morph from the last frame of clip 1 to the first frame of clip 2.
 

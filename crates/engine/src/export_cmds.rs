@@ -15,7 +15,7 @@ mod files {
     use crate::movie::{self, MAX_MOVIE_FRAMES};
     use crate::Prepared;
     use crate::{CommandError, ParamKind, ParamSpec, Params, Session};
-    use inbetween_codecs::Rgba8Image;
+    use inbetween_codecs::{Rgba8Image, WriteOptions};
     use inbetween_doc::{DotPair, DotSet, MAX_FRAMES};
     use inbetween_morph::Planner;
     use inbetween_raster::Image;
@@ -61,7 +61,37 @@ mod files {
             "Movie frame number, starting at 1 across all visible sequences (layer projects: the stacked layers); instead of t, frame and sequence",
         )
         .range(1.0, MAX_FRAMES as f64),
+        QUALITY,
+        DPI,
     ];
+
+    const QUALITY: ParamSpec = ParamSpec::new(
+        "quality",
+        ParamKind::Integer,
+        false,
+        "JPEG quality, 1 to 100 (PNG ignores it)",
+    )
+    .range(1.0, 100.0)
+    .default_is("92");
+
+    const DPI: ParamSpec = ParamSpec::new(
+        "dpi",
+        ParamKind::Integer,
+        false,
+        "Resolution to record in the file, in dots per inch (the pixels are unchanged)",
+    )
+    .range(1.0, inbetween_codecs::MAX_DPI as f64);
+
+    fn write_options(params: &Params) -> WriteOptions {
+        WriteOptions {
+            quality: params
+                .integer("quality")
+                .map_or(92, |q| q.clamp(1, 100) as u8),
+            dpi: params
+                .integer("dpi")
+                .map(|d| d.clamp(1, i64::from(inbetween_codecs::MAX_DPI)) as u32),
+        }
+    }
 
     const EDIT_PARAMS: &[ParamSpec] = &[
         FRAME_PARAMS[0],
@@ -125,6 +155,7 @@ mod files {
         .range(1.0, MAX_FRAMES as f64)
         .default_is("the last frame"),
         SEQUENCE,
+        DPI,
     ];
 
     fn has_sequence(session: &Session) -> bool {
@@ -132,8 +163,16 @@ mod files {
     }
 
     fn write_image(path: &Path, image: &Image) -> Result<(), CommandError> {
+        write_image_with(path, image, WriteOptions::default())
+    }
+
+    fn write_image_with(
+        path: &Path,
+        image: &Image,
+        options: WriteOptions,
+    ) -> Result<(), CommandError> {
         let rgba = Rgba8Image::new(image.width(), image.height(), image.to_rgba8())?;
-        inbetween_codecs::write_file(path, &rgba)?;
+        inbetween_codecs::write_file_with(path, &rgba, options)?;
         Ok(())
     }
 
@@ -179,7 +218,7 @@ mod files {
             None => render_one(session, params)?.1,
         };
         let out = params.string("out").unwrap_or_default();
-        write_image(Path::new(out), &image)?;
+        write_image_with(Path::new(out), &image, write_options(params))?;
         Ok(json!({
             "out": out,
             "width": image.width(),
@@ -274,9 +313,15 @@ mod files {
         std::fs::create_dir_all(dir)
             .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
         let renderer = prepared.renderer()?;
+        session.begin_cancellable();
         for n in first..=last {
+            session.check_cancel()?;
             let image = renderer.render_frame(n - 1)?;
-            write_image(&dir.join(format!("{prefix}_{n:04}.png")), &image)?;
+            write_image_with(
+                &dir.join(format!("{prefix}_{n:04}.png")),
+                &image,
+                write_options(params),
+            )?;
         }
         Ok(json!({
             "dir": dir.display().to_string(),
@@ -331,6 +376,15 @@ mod files {
             false,
             "Skip a sequence's first or last frame when it repeats the frame before it (the join of continued sequences)",
         ),
+        ParamSpec::new(
+            "sequence",
+            ParamKind::Integer,
+            false,
+            "Export only this sequence (numbered from 0); `first` and `last` then count inside it",
+        )
+        .range(0.0, 1_000_000.0)
+        .default_is("the whole movie"),
+        DPI,
     ];
 
     /// Every visible sequence, one after another, as one continuously numbered frame series.
@@ -347,7 +401,11 @@ mod files {
         std::fs::create_dir_all(dir)
             .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
         let written = movie::render_movie(session, range, &mut |n, image| {
-            write_image(&dir.join(format!("{prefix}_{n:04}.png")), image)
+            write_image_with(
+                &dir.join(format!("{prefix}_{n:04}.png")),
+                image,
+                write_options(params),
+            )
         })?;
         let (w, h) = (
             session.project().output.width,

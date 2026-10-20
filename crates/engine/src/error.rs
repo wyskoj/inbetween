@@ -34,6 +34,8 @@ pub enum CommandError {
     Render(RenderError),
     Export(ExportError),
     Io(String),
+    /// The person stopped a long command (see `Session::cancel_handle`).
+    Cancelled,
     /// A command panicked. Never expected; reported instead of crashing the shell.
     Internal(String),
 }
@@ -54,6 +56,7 @@ impl CommandError {
             Self::Render(_) => "render",
             Self::Export(_) => "export",
             Self::Io(_) => "io",
+            Self::Cancelled => "cancelled",
             Self::Internal(_) => "internal",
         }
     }
@@ -84,6 +87,7 @@ impl fmt::Display for CommandError {
             Self::Render(e) => write!(f, "{e}"),
             Self::Export(e) => write!(f, "{e}"),
             Self::Io(m) => write!(f, "file error: {m}"),
+            Self::Cancelled => write!(f, "cancelled before it finished"),
             Self::Internal(m) => write!(f, "internal error: {m}"),
         }
     }

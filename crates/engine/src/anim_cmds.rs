@@ -41,6 +41,15 @@ mod files {
     .range(1.0, MAX_MOVIE_FRAMES as f64)
     .default_is("the last frame");
 
+    const ONLY_SEQUENCE: ParamSpec = ParamSpec::new(
+        "sequence",
+        ParamKind::Integer,
+        false,
+        "Export only this sequence (numbered from 0); `first` and `last` then count inside it",
+    )
+    .range(0.0, 1_000_000.0)
+    .default_is("the whole movie");
+
     const REVERSE: ParamSpec = ParamSpec::new(
         "reverse",
         ParamKind::Bool,
@@ -106,6 +115,7 @@ mod files {
         MATTE,
         REVERSE,
         DROP_DUPLICATES,
+        ONLY_SEQUENCE,
         FIRST,
         LAST,
     ];
@@ -144,6 +154,7 @@ mod files {
         .default_is("true"),
         REVERSE,
         DROP_DUPLICATES,
+        ONLY_SEQUENCE,
         FIRST,
         LAST,
     ];
