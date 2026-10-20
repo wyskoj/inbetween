@@ -118,9 +118,7 @@ impl Preview {
         // so a sequence with any of them on previews on the CPU even when a GPU is available.
         // A caption (sequence or movie) is drawn on the CPU as well.
         let gpu = handle.filter(|_| {
-            !self.gpu_failed
-                && !prepared.sequence.needs_post_pass()
-                && prepared.movie.is_identity()
+            !self.gpu_failed && !prepared.sequence.needs_post_pass() && prepared.movie.is_identity()
         });
         let outcome = match gpu {
             Some(h) => self.refresh_gpu(h, prepared, revision, frame),

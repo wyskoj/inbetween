@@ -16,6 +16,19 @@ impl InbetweenApp {
         .map(|(panel, _)| panel)
     }
 
+    /// What the pointer is over: an effect slot, an image panel, or neither.
+    pub(super) fn zone_at(&self, pos: Option<Pos2>) -> DropZone {
+        if let Some(p) = pos {
+            if let Some(slot) = self.fx_slots.iter().find(|s| s.rect.contains(p)) {
+                return DropZone::EffectSlot {
+                    effect: slot.effect,
+                    scope: slot.scope,
+                };
+            }
+        }
+        self.panel_at(pos).into()
+    }
+
     pub(super) fn image1_is_empty(&self) -> bool {
         self.session
             .sequence(self.state.sequence)
@@ -42,7 +55,7 @@ impl InbetweenApp {
         if files.is_empty() {
             return;
         }
-        let over = self.panel_at(ctx.input(|i| i.pointer.latest_pos()));
+        let over = self.zone_at(ctx.input(|i| i.pointer.latest_pos()));
         let actions = dragdrop::route_drop(&Self::to_dropped(&files), over, self.image1_is_empty());
         self.apply_drops(actions);
     }
@@ -70,6 +83,21 @@ impl InbetweenApp {
                     let _ = self
                         .run_command("sequence.image", &json!({ "image": image, "path": path }));
                 }
+                DropAction::SetEffectImage {
+                    effect,
+                    scope,
+                    path,
+                } => {
+                    let params = json!({
+                        "scope": scope.id(),
+                        "sequence": self.state.sequence,
+                        "image": path,
+                    });
+                    let _ = self.run_command(effect, &params);
+                }
+                DropAction::SetSound(path) => {
+                    let _ = self.run_command("effect.sound", &json!({ "path": path }));
+                }
                 DropAction::Wizard(paths) => {
                     if let Some(spec) = self.registry.get("file.wizard").copied() {
                         let mut form = Form::for_spec(&spec);
@@ -94,14 +122,30 @@ impl InbetweenApp {
                 name: "dropped file".to_string(),
             })
             .collect();
-        let over = self.panel_at(ctx.input(|i| i.pointer.latest_pos()));
-        let hint = dragdrop::hover_hint(&files, over, self.image1_is_empty());
+        let zone = self.zone_at(ctx.input(|i| i.pointer.latest_pos()));
+        let over = match zone {
+            DropZone::Panel(p) => Some(p),
+            _ => None,
+        };
+        let slot_rect = self
+            .fx_slots
+            .iter()
+            .find(|s| {
+                zone == DropZone::EffectSlot {
+                    effect: s.effect,
+                    scope: s.scope,
+                }
+            })
+            .map(|s| s.rect);
+        let hint = dragdrop::hover_hint(&files, zone, self.image1_is_empty());
+        let routed = dragdrop::route_drop(&files, zone, self.image1_is_empty());
         let single_image = matches!(
-            dragdrop::route_drop(&files, over, self.image1_is_empty()).first(),
-            Some(DropAction::SetImage { .. })
+            routed.first(),
+            Some(DropAction::SetImage { .. } | DropAction::SetEffectImage { .. })
         );
-        // A single image lands on one panel; anything else acts on the whole window.
+        // A single image lands on one panel or slot; anything else acts on the whole window.
         let target = match (single_image, over) {
+            (true, _) if slot_rect.is_some() => slot_rect.unwrap_or(self.layout.source1),
             (true, Some(Panel::Source1)) => self.layout.source1,
             (true, Some(Panel::Source2)) => self.layout.source2,
             (true, _) => {

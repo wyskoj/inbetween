@@ -107,6 +107,59 @@ pub(super) fn filter_label(filter: &Filter) -> String {
     format!("{name}  ({})", settings.join(", "))
 }
 
+/// What the Adjust window edits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum AdjustScope {
+    /// One image of the sequence: colour and filters.
+    #[default]
+    Image,
+    /// Filters over every finished frame of the sequence.
+    Sequence,
+    /// Colour and filters over every finished frame of the movie.
+    Movie,
+}
+
+impl AdjustScope {
+    fn id(self) -> &'static str {
+        match self {
+            Self::Sequence => "sequence",
+            _ => "movie",
+        }
+    }
+
+    /// The command that does what the image command `id` does at this scope.
+    fn command(self, id: &'static str) -> &'static str {
+        if self == Self::Image {
+            return id;
+        }
+        FILTER_COMMANDS
+            .iter()
+            .find(|(image, _)| *image == id)
+            .map_or(id, |(_, movie)| movie)
+    }
+}
+
+/// Each image filter command with its movie-scope twin.
+const FILTER_COMMANDS: &[(&str, &str)] = &[
+    ("image.filter.smooth", "movie.filter.smooth"),
+    ("image.filter.blur", "movie.filter.blur"),
+    ("image.filter.gaussian", "movie.filter.gaussian"),
+    ("image.filter.zoomBlur", "movie.filter.zoomBlur"),
+    ("image.filter.radialBlur", "movie.filter.radialBlur"),
+    ("image.filter.sharpen", "movie.filter.sharpen"),
+    ("image.filter.emboss", "movie.filter.emboss"),
+    ("image.filter.mosaic", "movie.filter.mosaic"),
+    ("image.filter.oilPaint", "movie.filter.oilPaint"),
+    ("image.filter.splash", "movie.filter.splash"),
+    ("image.filter.cylinder", "movie.filter.cylinder"),
+    ("image.filter.whirl", "movie.filter.whirl"),
+    ("image.filter.pinch", "movie.filter.pinch"),
+    ("image.filter.remove", "movie.filter.remove"),
+    ("image.filter.move", "movie.filter.move"),
+    ("image.filter.clear", "movie.filter.clear"),
+    ("image.adjust", "movie.adjust"),
+];
+
 impl InbetweenApp {
     /// Open the Adjust window on `image` and start the undo group it lives in.
     pub fn open_adjust(&mut self, image: u8) {
@@ -114,6 +167,7 @@ impl InbetweenApp {
             self.close_adjust(true);
         }
         self.state.adjust_window = Some(image);
+        self.adjust_scope = AdjustScope::Image;
         self.state.focus_image = image;
         self.adjust_changed = false;
         self.adjust_group_open = self.run_command("edit.beginGroup", &json!({})).is_ok();
@@ -134,13 +188,20 @@ impl InbetweenApp {
 
     /// Open the form that edits filter `index` of `image`, filled with its settings.
     pub fn edit_filter(&mut self, image: u8, index: usize) {
+        let scope = self.adjust_scope;
         let Ok(seq) = self.session.sequence(self.state.sequence) else {
             return;
         };
-        let Some(filter) = seq.edit(image).filters.get(index).copied() else {
+        let list = match scope {
+            AdjustScope::Image => &seq.edit(image).filters,
+            AdjustScope::Sequence => &seq.filters,
+            AdjustScope::Movie => &self.session.project().filters,
+        };
+        let Some(filter) = list.get(index).copied() else {
             return;
         };
         let (id, fields) = filter_fields(&filter);
+        let id = scope.command(id);
         let Some(spec) = self.registry.get(id).copied() else {
             return;
         };
@@ -155,7 +216,13 @@ impl InbetweenApp {
             }
         }
         form.set("index", index.to_string());
-        form.set("image", image.to_string());
+        match scope {
+            AdjustScope::Image => form.set("image", image.to_string()),
+            _ => {
+                form.set("scope", scope.id().to_string());
+                form.set("sequence", self.state.sequence.to_string());
+            }
+        }
         self.form = Some(form);
     }
 
@@ -168,7 +235,17 @@ impl InbetweenApp {
             return;
         };
         let edit = seq.edit(image).clone();
-        let mut a = edit.adjust;
+        let scope = self.adjust_scope;
+        let mut scope_now = scope;
+        let filters = match scope {
+            AdjustScope::Image => edit.filters.clone(),
+            AdjustScope::Sequence => seq.filters.clone(),
+            AdjustScope::Movie => self.session.project().filters.clone(),
+        };
+        let mut a = match scope {
+            AdjustScope::Movie => self.session.project().adjust,
+            _ => edit.adjust,
+        };
         let mut changes: Vec<(&'static str, Value)> = Vec::new();
         let (mut ok, mut cancel, mut reset) = (false, false, false);
         let mut list_action: Option<(usize, &'static str)> = None;
@@ -180,7 +257,16 @@ impl InbetweenApp {
             .resizable(false)
             .anchor(egui::Align2::RIGHT_TOP, [-12.0, 64.0])
             .show(ctx, |ui| {
-                ui.label(format!("Image {image}"));
+                ui.horizontal(|ui| {
+                    ui.selectable_value(
+                        &mut scope_now,
+                        AdjustScope::Image,
+                        format!("Image {image}"),
+                    );
+                    ui.selectable_value(&mut scope_now, AdjustScope::Sequence, "Sequence filters");
+                    ui.selectable_value(&mut scope_now, AdjustScope::Movie, "Movie");
+                });
+                ui.separator();
                 let mut slider =
                     |ui: &mut egui::Ui,
                      value: &mut f64,
@@ -194,36 +280,40 @@ impl InbetweenApp {
                             changes.push((key, json!(*value)));
                         }
                     };
-                slider(
-                    ui,
-                    &mut a.brightness,
-                    "brightness",
-                    "Brightness",
-                    -100.0..=100.0,
-                );
-                slider(ui, &mut a.contrast, "contrast", "Contrast", -100.0..=100.0);
-                slider(ui, &mut a.red, "red", "Red", -100.0..=100.0);
-                slider(ui, &mut a.green, "green", "Green", -100.0..=100.0);
-                slider(ui, &mut a.blue, "blue", "Blue", -100.0..=100.0);
-                slider(ui, &mut a.hue, "hue", "Hue", -180.0..=180.0);
-                slider(
-                    ui,
-                    &mut a.saturation,
-                    "saturation",
-                    "Saturation",
-                    -100.0..=100.0,
-                );
-                ui.horizontal(|ui| {
-                    if ui.checkbox(&mut a.negative, "Negative").changed() {
-                        changes.push(("negative", json!(a.negative)));
-                    }
-                    if ui.checkbox(&mut a.grayscale, "Grayscale").changed() {
-                        changes.push(("grayscale", json!(a.grayscale)));
-                    }
-                    if ui.button("Reset").clicked() {
-                        reset = true;
-                    }
-                });
+                if scope == AdjustScope::Sequence {
+                    ui.weak("A sequence has filters but no colour settings of its own.");
+                } else {
+                    slider(
+                        ui,
+                        &mut a.brightness,
+                        "brightness",
+                        "Brightness",
+                        -100.0..=100.0,
+                    );
+                    slider(ui, &mut a.contrast, "contrast", "Contrast", -100.0..=100.0);
+                    slider(ui, &mut a.red, "red", "Red", -100.0..=100.0);
+                    slider(ui, &mut a.green, "green", "Green", -100.0..=100.0);
+                    slider(ui, &mut a.blue, "blue", "Blue", -100.0..=100.0);
+                    slider(ui, &mut a.hue, "hue", "Hue", -180.0..=180.0);
+                    slider(
+                        ui,
+                        &mut a.saturation,
+                        "saturation",
+                        "Saturation",
+                        -100.0..=100.0,
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.checkbox(&mut a.negative, "Negative").changed() {
+                            changes.push(("negative", json!(a.negative)));
+                        }
+                        if ui.checkbox(&mut a.grayscale, "Grayscale").changed() {
+                            changes.push(("grayscale", json!(a.grayscale)));
+                        }
+                        if ui.button("Reset").clicked() {
+                            reset = true;
+                        }
+                    });
+                }
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.strong("Filters");
@@ -236,10 +326,10 @@ impl InbetweenApp {
                         }
                     });
                 });
-                if edit.filters.is_empty() {
+                if filters.is_empty() {
                     ui.weak("None. Filters apply in this order, after the colour settings.");
                 }
-                for (i, f) in edit.filters.iter().enumerate() {
+                for (i, f) in filters.iter().enumerate() {
                     ui.horizontal(|ui| {
                         ui.label(format!("{}. {}", i + 1, filter_label(f)));
                         if ui.small_button("Edit").clicked() {
@@ -262,23 +352,46 @@ impl InbetweenApp {
                     cancel = ui.button("Cancel").clicked();
                 });
             });
+        self.adjust_scope = scope_now;
+        // The settings every command at this scope needs to find its target.
+        let sequence = self.state.sequence;
+        let target = |extra: Value| {
+            let mut p = match scope {
+                AdjustScope::Image => json!({ "image": image }),
+                _ => json!({ "scope": scope.id(), "sequence": sequence }),
+            };
+            if let (Some(o), Some(e)) = (p.as_object_mut(), extra.as_object()) {
+                o.extend(e.clone());
+            }
+            p
+        };
+        let adjust_id = scope.command("image.adjust");
+        let adjust_target = |extra: Value| {
+            let mut p = match scope {
+                AdjustScope::Movie => json!({}),
+                _ => json!({ "image": image }),
+            };
+            if let (Some(o), Some(e)) = (p.as_object_mut(), extra.as_object()) {
+                o.extend(e.clone());
+            }
+            p
+        };
         for (key, value) in changes {
-            let mut params = json!({ "image": image });
-            params[key] = value;
-            if self.run_command("image.adjust", &params).is_ok() {
+            let params = adjust_target(json!({ key: value }));
+            if self.run_command(adjust_id, &params).is_ok() {
                 self.adjust_changed = true;
             }
         }
         if reset
             && self
-                .run_command("image.adjust", &json!({ "image": image, "reset": true }))
+                .run_command(adjust_id, &adjust_target(json!({ "reset": true })))
                 .is_ok()
         {
             self.adjust_changed = true;
         }
         if let Some((index, what)) = list_action {
             let params = |extra: Value| {
-                let mut p = json!({ "image": image, "index": index });
+                let mut p = target(json!({ "index": index }));
                 if let (Some(o), Some(e)) = (p.as_object_mut(), extra.as_object()) {
                     o.extend(e.clone());
                 }
@@ -289,13 +402,17 @@ impl InbetweenApp {
                     self.edit_filter(image, index);
                     Ok(Value::Null)
                 }
-                "up" if index > 0 => {
-                    self.run_command("image.filter.move", &params(json!({ "to": index - 1 })))
+                "up" if index > 0 => self.run_command(
+                    scope.command("image.filter.move"),
+                    &params(json!({ "to": index - 1 })),
+                ),
+                "down" if index + 1 < filters.len() => self.run_command(
+                    scope.command("image.filter.move"),
+                    &params(json!({ "to": index + 1 })),
+                ),
+                "remove" => {
+                    self.run_command(scope.command("image.filter.remove"), &params(json!({})))
                 }
-                "down" if index + 1 < edit.filters.len() => {
-                    self.run_command("image.filter.move", &params(json!({ "to": index + 1 })))
-                }
-                "remove" => self.run_command("image.filter.remove", &params(json!({}))),
                 _ => Ok(Value::Null),
             };
             if result.is_ok() && what != "edit" {
@@ -303,7 +420,14 @@ impl InbetweenApp {
             }
         }
         if let Some(id) = add {
-            self.invoke(id);
+            if scope == AdjustScope::Image {
+                self.invoke(id);
+            } else if let Some(spec) = self.registry.get(scope.command(id)).copied() {
+                let mut form = Form::for_spec(&spec);
+                form.set("scope", scope.id().to_string());
+                form.set("sequence", self.state.sequence.to_string());
+                self.form = Some(form);
+            }
         }
         if cancel {
             self.close_adjust(false);

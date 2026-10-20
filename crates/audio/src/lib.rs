@@ -181,7 +181,11 @@ fn decode_mp3(bytes: &[u8]) -> Result<Pcm, AudioError> {
 /// Samples must be finite and within -1 to 1.
 fn clean(samples: &mut [f32]) {
     for s in samples {
-        *s = if s.is_finite() { s.clamp(-1.0, 1.0) } else { 0.0 };
+        *s = if s.is_finite() {
+            s.clamp(-1.0, 1.0)
+        } else {
+            0.0
+        };
     }
 }
 

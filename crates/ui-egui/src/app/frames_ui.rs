@@ -104,10 +104,7 @@ impl InbetweenApp {
                                         renderer.as_ref().and_then(|p| {
                                             let image =
                                                 p.renderer().ok()?.render_frame(frame).ok()?;
-                                            p.finish(image, frame)
-                                                .ok()?
-                                                .downscale_to_fit(px)
-                                                .ok()
+                                            p.finish(image, frame).ok()?.downscale_to_fit(px).ok()
                                         })
                                     };
                                     if let Some(image) = image {

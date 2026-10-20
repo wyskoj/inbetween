@@ -112,6 +112,7 @@ impl InbetweenApp {
             }
             "view.toggle.checkerboard" => self.state.checkerboard = !self.state.checkerboard,
             "view.toggle.numbers" => self.state.show_numbers = !self.state.show_numbers,
+            "view.toggle.mute" => self.state.muted = !self.state.muted,
             "view.help" => self.state.show_help = !self.state.show_help,
             _ => return false,
         }
@@ -133,6 +134,7 @@ impl InbetweenApp {
             "view.previewScope" => self.state.preview_scope == PreviewScope::Movie,
             "view.toggle.checkerboard" => self.state.checkerboard,
             "view.toggle.numbers" => self.state.show_numbers,
+            "view.toggle.mute" => self.state.muted,
             "view.help" => self.state.show_help,
             _ => return None,
         })

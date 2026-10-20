@@ -4,7 +4,7 @@
 
 use crate::crop::{CropTool, Handle};
 use crate::curves::{self, CurveAction, CurveKind, CurveView};
-use crate::dragdrop::{self, DropAction, Dropped};
+use crate::dragdrop::{self, DropAction, DropZone, Dropped};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
@@ -17,7 +17,7 @@ use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
 use crate::seqlist::{self, ListAction, Row};
 use crate::shortcuts;
-use crate::state::{CaptionScope, Panel, ViewState};
+use crate::state::{CaptionScope, EffectScope, Panel, ViewState};
 use crate::view::View;
 use egui::{Context, Pos2, Rect, TextureHandle, TextureOptions, Vec2};
 use inbetween_engine::{
@@ -32,10 +32,12 @@ use std::sync::Arc;
 
 mod actions_ui;
 mod adjust_ui;
+mod audio_ui;
 mod caption_ui;
 mod crop_ui;
 mod curve_ui;
 mod drops_ui;
+mod effects_ui;
 mod form_ui;
 mod frames_ui;
 mod layout_ui;
@@ -213,7 +215,17 @@ pub struct InbetweenApp {
     crop_texture: Option<crop_ui::CropTexture>,
     /// The Adjust window keeps one undo group open while it is up.
     adjust_group_open: bool,
+    /// The movie's sound player, and the sound file it was last given.
+    audio: crate::audio::Player,
+    audio_key: Option<String>,
+    audio_pcm: Option<Arc<inbetween_audio::Pcm>>,
+    /// So does the Effects window.
+    effects_group_open: bool,
+    /// Its thumbnail slots as drawn last frame (the drop targets), and the ones being drawn.
+    fx_slots: Vec<effects_ui::FxSlot>,
+    fx_slots_next: Vec<effects_ui::FxSlot>,
     adjust_changed: bool,
+    adjust_scope: adjust_ui::AdjustScope,
     /// The Caption window keeps one undo group open while it is up.
     caption_group_open: bool,
     caption_changed: bool,
@@ -270,7 +282,14 @@ impl InbetweenApp {
             crop_drag: None,
             crop_texture: None,
             adjust_group_open: false,
+            audio: crate::audio::Player::default(),
+            audio_key: None,
+            audio_pcm: None,
+            effects_group_open: false,
+            fx_slots: Vec::new(),
+            fx_slots_next: Vec::new(),
             adjust_changed: false,
+            adjust_scope: Default::default(),
             caption_group_open: false,
             caption_changed: false,
             caption_origin: None,
@@ -348,7 +367,11 @@ impl InbetweenApp {
                 if matches!(id, "edit.undo" | "edit.redo") {
                     // Undo ends any open group; a window that is still up keeps its edits
                     // together by opening a fresh one.
-                    for open in [self.adjust_group_open, self.caption_group_open] {
+                    for open in [
+                        self.adjust_group_open,
+                        self.caption_group_open,
+                        self.effects_group_open,
+                    ] {
                         if open {
                             let _ = self.registry.run_caught(
                                 &mut self.session,
@@ -358,7 +381,9 @@ impl InbetweenApp {
                         }
                     }
                 }
-                if self.state.adjust_window.is_some() && id.starts_with("image.") {
+                if self.state.adjust_window.is_some()
+                    && (id.starts_with("image.") || id.starts_with("movie."))
+                {
                     self.adjust_changed = true;
                 }
                 if matches!(id, "image.saveToLibrary" | "face.library") {
@@ -373,8 +398,9 @@ impl InbetweenApp {
                 }
                 // Drags and playback would flood the status bar.
                 let curve_drag = params["op"] == "move";
-                let live_window =
-                    self.state.adjust_window.is_some() || self.state.caption_window.is_some();
+                let live_window = self.state.adjust_window.is_some()
+                    || self.state.caption_window.is_some()
+                    || self.state.effects_window.is_some();
                 if !curve_drag
                     && !live_window
                     && !matches!(
@@ -518,6 +544,15 @@ impl InbetweenApp {
             }
             "caption.movie" => {
                 self.open_caption(CaptionScope::Movie);
+                return;
+            }
+            "effect.sound" => {
+                self.open_effects(EffectScope::Movie);
+                return;
+            }
+            "effect.backColor" | "effect.background" | "effect.mask" | "effect.foreground"
+            | "effect.transition" | "effect.light" | "effect.trail" | "effect.radial" => {
+                self.open_effects(EffectScope::Sequence);
                 return;
             }
             _ => {}
@@ -978,6 +1013,7 @@ impl InbetweenApp {
         self.refresh_mesh();
         self.refresh_list(ctx);
         self.advance_playback(ctx);
+        self.sync_audio();
         self.refresh_preview(ctx);
         self.update_title(ctx);
 
@@ -993,6 +1029,7 @@ impl InbetweenApp {
         self.curve_window(ctx);
         self.crop_window(ctx);
         self.adjust_window(ctx);
+        self.effects_window(ctx);
         self.caption_window(ctx);
         self.form_window(ctx);
         self.visual_window(ctx);
@@ -1061,7 +1098,8 @@ impl InbetweenApp {
                 ],
             });
         }
-        self.thumbs.retain(|k, _| used.contains(k));
+        self.thumbs
+            .retain(|k, _| k.starts_with("fx:") || used.contains(k));
         self.list = Some(ListCache { revision, rows });
     }
 

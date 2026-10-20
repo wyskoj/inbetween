@@ -130,8 +130,6 @@ fn sound(session: &mut Session, params: &Params) -> Result<Value, CommandError> 
     } else {
         probe(session, &s.path.0).ok()
     };
-    #[cfg(target_arch = "wasm32")]
-    let probed: Option<()> = None;
     #[cfg(not(target_arch = "wasm32"))]
     let (duration, rate, channels) = probed.map_or((json!(null), json!(null), json!(null)), |p| {
         (json!(p.duration), json!(p.rate), json!(p.channels))

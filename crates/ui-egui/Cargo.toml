@@ -8,6 +8,8 @@ publish = false
 
 [dependencies]
 base64 = "0.22"
+cpal = "0.15"
+inbetween-audio = { path = "../audio" }
 eframe = { version = "0.31", default-features = false, features = ["wgpu", "persistence", "x11", "wayland"] }
 egui = { version = "0.31", default-features = false }
 inbetween-codecs = { path = "../codecs" }

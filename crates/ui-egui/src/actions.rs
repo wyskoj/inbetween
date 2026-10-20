@@ -56,6 +56,7 @@ pub const ACTIONS: &[ShellAction] = &[
         false,
     ),
     action("view.toggle.numbers", "Dot Numbers", None, false),
+    action("view.toggle.mute", "Mute Sound", None, false),
     action("view.help", "Help", None, true),
 ];
 

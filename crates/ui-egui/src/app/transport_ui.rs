@@ -61,7 +61,7 @@ impl InbetweenApp {
 
     /// Movie frame (counting from 0) at which the selected sequence starts in a sequence
     /// project; hidden sequences have no place in the movie and start at 0.
-    fn sequence_start(&self) -> u32 {
+    pub(super) fn sequence_start(&self) -> u32 {
         let project = self.session.project();
         let Some(selected) = project.sequences.get(self.state.sequence) else {
             return 0;

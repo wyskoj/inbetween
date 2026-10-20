@@ -1,4 +1,6 @@
-use crate::{Camera, Caption, Curve, DocError, DotSet, Effects, Filter, ImageEdit, Track, MAX_FILTERS};
+use crate::{
+    Camera, Caption, Curve, DocError, DotSet, Effects, Filter, ImageEdit, Track, MAX_FILTERS,
+};
 use inbetween_geom::MAX_DOTS;
 use serde::{Deserialize, Serialize};
 

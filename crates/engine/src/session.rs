@@ -732,7 +732,7 @@ impl Session {
 
     /// Load a movie effect image (or any file by its path) through the cache.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn load_effect_path(&mut self, reference: &str) -> Result<Arc<Image>, CommandError> {
+    pub fn load_effect_path(&mut self, reference: &str) -> Result<Arc<Image>, CommandError> {
         self.load_path(reference, "The movie effect image")
     }
 

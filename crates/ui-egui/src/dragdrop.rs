@@ -2,7 +2,35 @@
 //! ([`route_drop`]) so it can be tested without a window; the app carries the result out
 //! through engine commands.
 
-use crate::state::Panel;
+use crate::state::{EffectScope, Panel};
+
+/// Where on the window a drop landed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DropZone {
+    #[default]
+    Elsewhere,
+    Panel(Panel),
+    /// An effect's thumbnail slot in the Effects window: the effect command and its scope.
+    EffectSlot {
+        effect: &'static str,
+        scope: EffectScope,
+    },
+}
+
+impl From<Option<Panel>> for DropZone {
+    fn from(p: Option<Panel>) -> Self {
+        p.map_or(Self::Elsewhere, Self::Panel)
+    }
+}
+
+impl DropZone {
+    fn panel(self) -> Option<Panel> {
+        match self {
+            Self::Panel(p) => Some(p),
+            _ => None,
+        }
+    }
+}
 
 /// One dropped file. A platform that hands over only the bytes (a browser) gives no path.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,6 +45,14 @@ pub struct Dropped {
 pub enum DropAction {
     /// Put an image into slot 1 or 2 of the current sequence.
     SetImage { image: u8, path: String },
+    /// Put an image into an effect's slot (the effect is switched on).
+    SetEffectImage {
+        effect: &'static str,
+        scope: EffectScope,
+        path: String,
+    },
+    /// Use a WAV or MP3 file as the movie's sound.
+    SetSound(String),
     /// Open a project (asking first about unsaved changes).
     OpenProject(String),
     /// Replace the current sequence's dots.
@@ -32,6 +68,7 @@ enum Kind {
     Project,
     Dots,
     Image,
+    Sound,
     Other,
 }
 
@@ -44,6 +81,7 @@ fn kind_of(path: &str) -> Kind {
     match ext.as_str() {
         "inbetween" => Kind::Project,
         "inbetweendots" => Kind::Dots,
+        "wav" | "mp3" => Kind::Sound,
         e if inbetween_codecs::IMAGE_EXTENSIONS.contains(&e) => Kind::Image,
         _ => Kind::Other,
     }
@@ -63,11 +101,18 @@ fn file_name(path: &str) -> String {
 /// - Two or more images open the wizard, in drop order.
 /// - A dot file replaces the current sequence's dots.
 /// - Anything else, and files with no path, are reported as unsupported.
-pub fn route_drop(files: &[Dropped], over: Option<Panel>, image1_empty: bool) -> Vec<DropAction> {
+pub fn route_drop(
+    files: &[Dropped],
+    over: impl Into<DropZone>,
+    image1_empty: bool,
+) -> Vec<DropAction> {
+    let zone: DropZone = over.into();
+    let over = zone.panel();
     let mut out = Vec::new();
     let mut projects = Vec::new();
     let mut dots = Vec::new();
     let mut images = Vec::new();
+    let mut sounds = Vec::new();
     for f in files {
         let Some(path) = &f.path else {
             out.push(DropAction::Unsupported(format!(
@@ -80,6 +125,7 @@ pub fn route_drop(files: &[Dropped], over: Option<Panel>, image1_empty: bool) ->
             Kind::Project => projects.push(path.clone()),
             Kind::Dots => dots.push(path.clone()),
             Kind::Image => images.push(path.clone()),
+            Kind::Sound => sounds.push(path.clone()),
             Kind::Other => out.push(DropAction::Unsupported(format!(
                 "{}: not an image, project or dot file",
                 file_name(path)
@@ -98,19 +144,40 @@ pub fn route_drop(files: &[Dropped], over: Option<Panel>, image1_empty: bool) ->
     }
     match images.len() {
         0 => {}
-        1 => {
-            let image = match over {
-                Some(Panel::Source1) => 1,
-                Some(Panel::Source2) => 2,
-                _ if image1_empty => 1,
-                _ => 2,
-            };
-            out.push(DropAction::SetImage {
-                image,
+        1 => match zone {
+            DropZone::EffectSlot {
+                effect: "effect.sound",
+                ..
+            } => out.push(DropAction::Unsupported(
+                "The Sound slot takes a WAV or MP3 file".into(),
+            )),
+            DropZone::EffectSlot { effect, scope } => out.push(DropAction::SetEffectImage {
+                effect,
+                scope,
                 path: images.remove(0),
-            });
-        }
+            }),
+            _ => {
+                let image = match over {
+                    Some(Panel::Source1) => 1,
+                    Some(Panel::Source2) => 2,
+                    _ if image1_empty => 1,
+                    _ => 2,
+                };
+                out.push(DropAction::SetImage {
+                    image,
+                    path: images.remove(0),
+                });
+            }
+        },
         _ => out.push(DropAction::Wizard(images)),
+    }
+    if let Some(first) = sounds.first() {
+        out.push(DropAction::SetSound(first.clone()));
+        if sounds.len() > 1 {
+            out.push(DropAction::Unsupported(
+                "Only the first sound file was used".into(),
+            ));
+        }
     }
     if let Some(first) = dots.first() {
         out.push(DropAction::ImportDots(first.clone()));
@@ -124,13 +191,18 @@ pub fn route_drop(files: &[Dropped], over: Option<Panel>, image1_empty: bool) ->
 }
 
 /// Words for the overlay shown while files hover over the window.
-pub fn hover_hint(files: &[Dropped], over: Option<Panel>, image1_empty: bool) -> String {
+pub fn hover_hint(files: &[Dropped], over: impl Into<DropZone>, image1_empty: bool) -> String {
     let actions = route_drop(files, over, image1_empty);
     let Some(first) = actions.first() else {
         return "Drop files here".into();
     };
     match first {
         DropAction::SetImage { image, .. } => format!("Drop to set Image {image}"),
+        DropAction::SetEffectImage { effect, scope, .. } => {
+            let name = effect.strip_prefix("effect.").unwrap_or(effect);
+            format!("Drop to set the {} {name} image", scope.id())
+        }
+        DropAction::SetSound(_) => "Drop to use as the movie's sound".into(),
         DropAction::OpenProject(_) => "Drop to open the project".into(),
         DropAction::ImportDots(_) => "Drop to import the dots".into(),
         DropAction::Wizard(paths) => {

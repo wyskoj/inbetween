@@ -78,6 +78,45 @@ fn open_edit_undo_preview_export() {
     assert!(!text.contains("png_base64") && text.len() < 400, "{text}");
     assert_eq!(preview["structuredContent"]["width"], 48);
 
+    // Movie-level colour, a filter at both scopes, a movie effect and a sound.
+    let plain = ok(&mut s, "frame_preview", json!({"t": 0.5, "max_size": 48}));
+    ok(&mut s, "movie_adjust", json!({"negative": true}));
+    ok(&mut s, "movie_filter_blur", json!({"radius": 2}));
+    ok(
+        &mut s,
+        "movie_filter_blur",
+        json!({"scope": "sequence", "radius": 1}),
+    );
+    ok(
+        &mut s,
+        "effect_backColor",
+        json!({"scope": "movie", "color": "#336699"}),
+    );
+    let changed = ok(&mut s, "frame_preview", json!({"t": 0.5, "max_size": 48}));
+    let data = |r: &Value| {
+        r["content"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["type"] == "image")
+            .unwrap()["data"]
+            .clone()
+    };
+    assert_ne!(data(&plain), data(&changed));
+    let tone = path("tone.wav");
+    let mut wav = Vec::new();
+    wav.extend_from_slice(&tiny_wav_header());
+    wav.extend_from_slice(&[0, 0, 0x10, 0x20, 0, 0, 0xf0, 0xdf]);
+    std::fs::write(&tone, wav).unwrap();
+    let sound = ok(&mut s, "effect_sound", json!({"path": tone, "loop": true}));
+    assert_eq!(sound["structuredContent"]["loop"], true);
+    assert_eq!(sound["structuredContent"]["rate"], 8000);
+    let bad = call(&mut s, "movie_filter_blur", json!({"radius": 0}));
+    assert_eq!(bad["isError"], true);
+    for _ in 0..5 {
+        ok(&mut s, "edit_undo", json!({}));
+    }
+
     let out = path("frame.png");
     ok(&mut s, "export_frame", json!({"out": out, "t": 0.0}));
     assert!(std::fs::metadata(&out).is_ok_and(|m| m.len() > 0));
@@ -86,4 +125,22 @@ fn open_edit_undo_preview_export() {
     ok(&mut s, "project_saveAs", json!({"path": saved}));
     let mut fresh = Server::new();
     ok(&mut fresh, "project_open", json!({"path": saved}));
+}
+
+/// The 44-byte header of a mono 8 kHz 16-bit WAV holding four samples.
+fn tiny_wav_header() -> Vec<u8> {
+    let mut h = Vec::new();
+    h.extend_from_slice(b"RIFF");
+    h.extend_from_slice(&44u32.to_le_bytes());
+    h.extend_from_slice(b"WAVEfmt ");
+    h.extend_from_slice(&16u32.to_le_bytes());
+    h.extend_from_slice(&1u16.to_le_bytes());
+    h.extend_from_slice(&1u16.to_le_bytes());
+    h.extend_from_slice(&8000u32.to_le_bytes());
+    h.extend_from_slice(&16000u32.to_le_bytes());
+    h.extend_from_slice(&2u16.to_le_bytes());
+    h.extend_from_slice(&16u16.to_le_bytes());
+    h.extend_from_slice(b"data");
+    h.extend_from_slice(&8u32.to_le_bytes());
+    h
 }

@@ -13,6 +13,7 @@
 
 pub mod actions;
 pub mod app;
+pub mod audio;
 pub mod crop;
 pub mod curves;
 pub mod dragdrop;

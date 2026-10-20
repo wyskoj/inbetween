@@ -103,6 +103,25 @@ pub enum PreviewScope {
     Movie,
 }
 
+/// What the Effects window edits: one sequence's effects or the whole movie's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectScope {
+    #[default]
+    Sequence,
+    Movie,
+}
+
+impl EffectScope {
+    /// The `scope` parameter of the `effect.*` commands.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Sequence => "sequence",
+            Self::Movie => "movie",
+        }
+    }
+}
+
 /// What the caption window edits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -172,6 +191,8 @@ pub struct ViewState {
     pub preview_scope: PreviewScope,
     /// Draw a checkerboard behind transparent areas.
     pub checkerboard: bool,
+    /// Play the movie's sound with the preview (off: muted).
+    pub muted: bool,
     /// Keep the preview zoomed and panned like the source panels.
     pub sync_preview: bool,
     /// The scrub slider shows percent (in 1% steps) instead of frames.
@@ -192,6 +213,8 @@ pub struct ViewState {
     pub library_dir: String,
     /// The Adjust window, when open: which image it edits.
     pub adjust_window: Option<u8>,
+    /// The Effects window, when open.
+    pub effects_window: Option<EffectScope>,
     /// The Caption window, when open.
     pub caption_window: Option<CaptionScope>,
     /// The crop being drawn, when the crop tool is active.
@@ -219,6 +242,7 @@ impl Default for ViewState {
             mode: ViewMode::Full,
             preview_scope: PreviewScope::Sequence,
             checkerboard: true,
+            muted: false,
             sync_preview: false,
             scrub_percent: false,
             strip_size: 120.0,
@@ -230,6 +254,7 @@ impl Default for ViewState {
             focus_image: 1,
             library_dir: String::new(),
             adjust_window: None,
+            effects_window: None,
             caption_window: None,
             crop: None,
         }
