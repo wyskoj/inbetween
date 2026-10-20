@@ -48,7 +48,7 @@ Every crate has its own error type and returns it with `?`. Non-test code never 
 
 ## Engine and command registry (as built in M5)
 
-`inbetween-engine` holds `Session` (project, its file path, an image cache) and `Registry` (the `CommandSpec` list). Shells never edit a project directly: they call `registry.run(session, "export.frame", params)` with JSON parameters and get JSON back, or a `CommandError` whose message says what to change and whose `code()` is stable for scripts. `Registry::describe()` serialises every command and its parameter schema, which is what `ib commands --json` prints and what MCP will expose.
+`inbetween-engine` holds `Session` (project, its file path, an image cache) and `Registry` (the `CommandSpec` list). Shells never edit a project directly: they call `registry.run(session, "export.frame", params)` with JSON parameters and get JSON back, or a `CommandError` whose message says what to change and whose `code()` is stable for scripts. `Registry::describe()` serialises every command and its parameter schema, which is what `ib commands --json` prints and what the MCP server exposes.
 
 `ib` (`apps/inbetween-cli`) is a thin shell: each subcommand opens a session with `project.open` and runs one or two commands. `ib run <id> --params '{...}'` reaches any command, so every feature is scriptable the day it is added.
 
@@ -90,3 +90,7 @@ Since M19 the bundled detector (`crates/detect`, L2, D52) finds the faces: `dete
 
 ## Movie, preview and workspace (M18)
 Movie settings are engine commands (`movie_cmds.rs`: `movie.size`, `movie.fps`); `Session::render_movie_frame` renders any movie frame. In the shell, `app/transport_ui.rs` owns the playhead (sequence or movie scope), `actions.rs` plus `app/actions_ui.rs` the view actions, `app/layout_ui.rs` the layouts, splitters and dual window, and `app/frames_ui.rs` the frame strip. See D49 to D51.
+
+## MCP server (as built in M14)
+
+`inbetween-mcp` (L6) wraps a `Session` and a `Registry` in a stdio JSON-RPC loop (`Server::handle` for one message, `Server::serve` for the stream). `tools/list` is generated from `Registry::specs()` (`schema.rs` turns a `ParamSpec` list into JSON Schema), and `tools/call` dispatches through `Registry::run_caught`. `ib mcp` is the only entry point; see D53 for the rules.

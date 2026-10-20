@@ -99,11 +99,30 @@ Examples:
         #[arg(long)]
         save: Option<PathBuf>,
     },
+    /// Serve every command as an MCP tool over stdin and stdout, for AI agents
+    #[command(after_help = "Example (Claude Code):
+  claude mcp add inbetween -- ib mcp --project demo.inbetween
+
+stdout carries only protocol messages; problems are printed to stderr.")]
+    Mcp {
+        /// Open this project before serving
+        #[arg(long)]
+        project: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
     // clap exits with status 2 for usage errors and prints --help / --version itself.
     let cli = Cli::parse();
+    if let Cmd::Mcp { project } = cli.command {
+        return match serve_mcp(project.as_deref()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(message) => {
+                eprintln!("error: {message}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     match run(cli.command) {
         Ok(text) => {
             println!("{text}");
@@ -144,6 +163,19 @@ impl Engine {
 fn path_str(path: &Path) -> Result<&str, String> {
     path.to_str()
         .ok_or_else(|| format!("{} is not a valid UTF-8 path", path.display()))
+}
+
+/// Run the MCP server on stdio until the client closes the input.
+fn serve_mcp(project: Option<&Path>) -> Result<(), String> {
+    let mut server = inbetween_mcp::Server::new();
+    if let Some(project) = project {
+        server
+            .run_command("project.open", json!({ "path": path_str(project)? }))
+            .map_err(|e| format!("could not open {}: {e}", project.display()))?;
+    }
+    server
+        .serve(std::io::stdin().lock(), std::io::stdout().lock())
+        .map_err(|e| format!("lost the connection: {e}"))
 }
 
 fn run(command: Cmd) -> Result<String, String> {
@@ -226,6 +258,8 @@ fn run(command: Cmd) -> Result<String, String> {
             }
             pretty(&result)
         }
+        // Served by `serve_mcp` before this function is reached.
+        Cmd::Mcp { .. } => Err("`ib mcp` is handled before commands are run".into()),
     }
 }
 

@@ -45,3 +45,8 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [x] Face > Locate All Faces on a group photo places one run of dots per face, left to right (checked 2026-10-20: the two portraits side by side give 76 dots, 38 on each person, in both panels).
 - [x] A picture with no face leaves the dots alone and shows "no face found in image N" in the Locate Face form and in the status bar (checked 2026-10-20 in an offscreen render of the real shell, `INBETWEEN_UI_SHOTS=folder cargo test -p inbetween-ui-egui --test face_detect`; the demo project's sun and moon images have no face).
 - [x] `inbetween out.inbetween --screenshot shot.png` shows the dot overlay on both panels (checked 2026-10-20 on the two NASA portraits).
+
+## M14: MCP server
+
+- [ ] `claude mcp add inbetween -- <path>/ib mcp --project demo/demo.inbetween`, then in Claude Code: the `inbetween` tools are listed, `frame_preview` shows a picture of the demo morph, `dots_add` then `frame_preview` shows the change, `edit_undo` takes it back, and `export_animation` writes a GIF.
+- [ ] Closing the client ends the `ib mcp` process (no orphan left in the task list).

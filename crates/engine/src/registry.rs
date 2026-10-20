@@ -209,6 +209,7 @@ mod tests {
             "sequence.length",
             "export.frame",
             "export.sequence",
+            "frame.preview",
         ] {
             assert!(r.get(id).is_some(), "missing {id}");
         }

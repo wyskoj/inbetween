@@ -4,7 +4,7 @@
 
 **P0 is complete (tagged v0.1.0): a headless morph engine.** `ib` turns two images and a dot set into a correct, deterministic PNG frame sequence, and the morph invariants (AGENTS.md §3) pass. M0 to M6 are done; the baseline is in `docs/perf.md`.
 
-**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **M8 is done:** the egui shell (two source panels, live GPU preview, add/move/delete dots, zoom and pan, undo, playback). **M9 is done:** all seven morph types, hold frames at each end, and playback controls (first, previous, play, next, last, loop, ping-pong, 1 to 60 fps). **M10 is done:** feature and shape curves (with a curve editor), multi-sequence projects that play back to back, and the sequence list (thumbnails, show/hide/solo, reorder, duplicate, delete, rename, link). **M11 is done:** per-sequence effects (back colour, background image, mask, foreground; `effect.*` commands, saved in the project, previewed on the CPU) and animated export (GIF, APNG, animated WebP in pure Rust; MP4, WebM and ProRes through an installed ffmpeg). **M12 is done:** layer projects (`project.type`), a per-sequence camera (`camera.keyframes`, `camera.curve`), master and track curves, and the transition, light, trail and radial effects, all as commands, saved in the project and rendered by the CPU renderer (D36). **M13 is done:** the face tools as commands (`face.model`, `face.locate`, `face.locate.smartDrag`, `face.extract`, `face.mix`, `face.library`), without a bundled detector (D37). **M15 is done:** projects and files (spec §1): blank New, Save As, recent files, the unsaved-changes prompt, Open Visually, Append Project, the New From Images wizard, Export Frame For Editing, drag and drop, and BMP, TIFF, TGA, GIF and PSD import. **M16 is done:** source image editing (turn, flip, crop with angle, adjust, 13 filters, swap) and captions at image, sequence and movie scope, all non-destructive commands with tools in the shell. **M17 is done:** key dots (spec §3): unpaired dots, lines, selection, transforms, clipboard, auto-match and the display overlays. **M18 is done:** the movie and workspace (spec §9 and §12): `movie.size`, `movie.fps`, seconds and apply-to-all in `sequence.length`, a movie-wide preview and scrub, checkerboard, six layouts, splitters, the frame strip, zoom presets and sync, and memory-based undo. **Next: M14** (MCP server, packaging and signed releases).
+**M7 is done:** the wgpu renderer matches the CPU oracle (D24) and draws a 1080p frame with 1,000 dot pairs in under a millisecond (`docs/perf.md`). **M8 is done:** the egui shell (two source panels, live GPU preview, add/move/delete dots, zoom and pan, undo, playback). **M9 is done:** all seven morph types, hold frames at each end, and playback controls (first, previous, play, next, last, loop, ping-pong, 1 to 60 fps). **M10 is done:** feature and shape curves (with a curve editor), multi-sequence projects that play back to back, and the sequence list (thumbnails, show/hide/solo, reorder, duplicate, delete, rename, link). **M11 is done:** per-sequence effects (back colour, background image, mask, foreground; `effect.*` commands, saved in the project, previewed on the CPU) and animated export (GIF, APNG, animated WebP in pure Rust; MP4, WebM and ProRes through an installed ffmpeg). **M12 is done:** layer projects (`project.type`), a per-sequence camera (`camera.keyframes`, `camera.curve`), master and track curves, and the transition, light, trail and radial effects, all as commands, saved in the project and rendered by the CPU renderer (D36). **M13 is done:** the face tools as commands (`face.model`, `face.locate`, `face.locate.smartDrag`, `face.extract`, `face.mix`, `face.library`), without a bundled detector (D37). **M15 is done:** projects and files (spec §1): blank New, Save As, recent files, the unsaved-changes prompt, Open Visually, Append Project, the New From Images wizard, Export Frame For Editing, drag and drop, and BMP, TIFF, TGA, GIF and PSD import. **M16 is done:** source image editing (turn, flip, crop with angle, adjust, 13 filters, swap) and captions at image, sequence and movie scope, all non-destructive commands with tools in the shell. **M17 is done:** key dots (spec §3): unpaired dots, lines, selection, transforms, clipboard, auto-match and the display overlays. **M18 is done:** the movie and workspace (spec §9 and §12): `movie.size`, `movie.fps`, seconds and apply-to-all in `sequence.length`, a movie-wide preview and scrub, checkerboard, six layouts, splitters, the frame strip, zoom presets and sync, and memory-based undo. **M14 is half done:** the MCP server is built (`ib mcp`, D53). **Next: M14 steps B and C** (packaging and signed releases).
 
 *Original P0 goal, for reference:* a headless morph engine with no UI.
 
@@ -76,12 +76,23 @@
 | M11 | Effects (background, mask, foreground), GIF/APNG/WebP and video export (done) |
 | M12 | P2 block: layer projects, camera, track curves, transition/light/trail/radial (done) |
 | M13 | Face tools on open landmark models (done: commands, no bundled detector) |
-| M14 | MCP server, packaging and signed releases |
+| M14 | MCP server (done), packaging and signed releases |
 | M15 | Projects and files, spec §1 (done) |
 | M16 | Source image editing and captions, spec §2 and §8 (done) |
 | M17 | Key dots, spec §3 (done) |
 | M18 | Movie, preview and workspace, spec §9 and §12 (done) |
 | M19 | Bundled face landmark detector, spec §10 (done) |
+
+### M14: MCP server, packaging and signed releases
+
+**Step A, the MCP server (done):**
+- `crates/mcp` (L6): stdio JSON-RPC, one tool per command with a schema generated from the command's parameters (D53). `ib mcp [--project p]`.
+- `frame.preview` (engine): a frame scaled to `max_size` as a base64 PNG; the server returns it as an image block.
+- Tests: protocol, tool list and schemas, a scripted open-edit-undo-preview-export conversation, hostile input (mutated lines, junk arguments for every tool, an oversized line), and the real binary over pipes.
+
+**Step B, packaging (open):** per-platform installers or archives built in CI. **Step C, signed releases (open):** code signing and notarisation, a release workflow on tags.
+
+**Exit:** `ib mcp` works from a real MCP client (manual check), installers for Windows, macOS and Linux are attached to a tagged release, and the binaries are signed.
 
 ### M15: Projects and files (spec §1) (done)
 - Image import: BMP, TIFF, TGA, GIF (first frame) and a flattened PSD reader, all with alpha where the format has it.

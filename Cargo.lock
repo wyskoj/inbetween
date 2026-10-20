@@ -1998,6 +1998,7 @@ dependencies = [
  "inbetween-engine",
  "inbetween-format",
  "inbetween-geom",
+ "inbetween-mcp",
  "inbetween-raster",
  "inbetween-testkit",
  "serde",
@@ -2080,6 +2081,17 @@ dependencies = [
  "proptest",
  "serde",
  "spade",
+]
+
+[[package]]
+name = "inbetween-mcp"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "inbetween-codecs",
+ "inbetween-engine",
+ "inbetween-testkit",
+ "serde_json",
 ]
 
 [[package]]

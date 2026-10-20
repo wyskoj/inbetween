@@ -1,4 +1,4 @@
-//! Export commands: `export.frame`, `frame.exportEdit`, `export.sequence`, `export.movie`.
+//! Export commands: `export.frame`, `frame.exportEdit`, `export.sequence`, `export.movie`, `frame.preview`.
 
 use crate::CommandSpec;
 
@@ -76,6 +76,21 @@ mod files {
         FRAME_PARAMS[1],
         FRAME_PARAMS[2],
         SEQUENCE,
+    ];
+
+    const PREVIEW_PARAMS: &[ParamSpec] = &[
+        FRAME_PARAMS[1],
+        FRAME_PARAMS[2],
+        SEQUENCE,
+        FRAME_PARAMS[4],
+        ParamSpec::new(
+            "max_size",
+            ParamKind::Integer,
+            false,
+            "Longest side of the returned picture in pixels (smaller frames are not enlarged)",
+        )
+        .range(16.0, 4096.0)
+        .default_is("512"),
     ];
 
     const SEQUENCE_PARAMS: &[ParamSpec] = &[
@@ -208,6 +223,32 @@ mod files {
             "dots": dots.len(),
             "width": image.width(),
             "height": image.height(),
+        }))
+    }
+
+    /// Render a frame and return it as a base64 PNG no larger than `max_size`, for a viewer
+    /// (an agent, a script) that cannot open a file.
+    fn preview(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+        let image = match params.integer("movie_frame") {
+            Some(n) => {
+                if params.has("t") || params.has("frame") || params.has("sequence") {
+                    return Err(CommandError::BadParams(
+                        "`movie_frame` replaces `t`, `frame` and `sequence`; give only one way to pick the frame"
+                            .into(),
+                    ));
+                }
+                session.render_movie_frame(u64::try_from(n).unwrap_or(0))?
+            }
+            None => render_one(session, params)?.1,
+        };
+        let max_size = params.integer("max_size").unwrap_or(512).clamp(16, 4096) as u32;
+        let small = image.downscale_to_fit(max_size)?;
+        let png = inbetween_codecs::encode_png(small.width(), small.height(), &small.to_rgba8())?;
+        use base64::Engine as _;
+        Ok(json!({
+            "width": small.width(),
+            "height": small.height(),
+            "png_base64": base64::engine::general_purpose::STANDARD.encode(png),
         }))
     }
 
@@ -350,6 +391,18 @@ mod files {
                 disabled_reason: "the project has no sequences to render",
                 edits: false,
                 run: frame,
+            },
+            CommandSpec {
+                id: "frame.preview",
+                label: "Preview Frame",
+                menu: "",
+                shortcut: None,
+                description: "Render one frame, scaled down to fit `max_size`, and return it as a base64 PNG (`png_base64`) with its size. Nothing is written to disk.",
+                params: PREVIEW_PARAMS,
+                enabled: has_sequence,
+                disabled_reason: "the project has no sequences to render",
+                edits: false,
+                run: preview,
             },
             CommandSpec {
                 id: "frame.exportEdit",

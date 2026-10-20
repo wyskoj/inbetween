@@ -1,0 +1,20 @@
+[package]
+name = "inbetween-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "MCP server over the Inbetween command registry: one tool per command."
+
+[dependencies]
+inbetween-engine = { path = "../engine" }
+serde_json = "1"
+
+[dev-dependencies]
+base64 = "0.22"
+inbetween-codecs = { path = "../codecs" }
+inbetween-testkit = { path = "../testkit" }
+
+[lints]
+workspace = true

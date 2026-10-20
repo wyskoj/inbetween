@@ -282,7 +282,7 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `cli.*` / `mcp.*` | Every command drivable headlessly from the CLI and over MCP | P1 |
+| [x] | `cli.*` / `mcp.*` | Every command drivable headlessly from the CLI (`ib run`) and over MCP (`ib mcp`, one tool per command, `frame.preview` returns a picture) | P1 |
 | [x] |  | Deterministic rendering: same project and frame always give the same bytes | P0 |
 | [x] |  | GPU and CPU renderers cross-checked on every test scene | P1 |
 | [ ] | `dots.autoLandmarks` | Landmark-based auto-dots for non-face subjects | P2 |
