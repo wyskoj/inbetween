@@ -122,6 +122,16 @@ impl EffectScope {
     }
 }
 
+/// What the Camera window edits: the sequence's camera, or one effect's.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CameraTarget {
+    /// `None` for the sequence camera, otherwise `background`, `mask`, ...
+    pub effect: Option<String>,
+    /// The effect belongs to the whole movie, not the sequence.
+    pub movie: bool,
+}
+
 /// What the caption window edits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -217,6 +227,8 @@ pub struct ViewState {
     pub effects_window: Option<EffectScope>,
     /// The Caption window, when open.
     pub caption_window: Option<CaptionScope>,
+    /// The Camera window, when open.
+    pub camera_window: Option<CameraTarget>,
     /// The crop being drawn, when the crop tool is active.
     pub crop: Option<CropTool>,
 }
@@ -256,6 +268,7 @@ impl Default for ViewState {
             adjust_window: None,
             effects_window: None,
             caption_window: None,
+            camera_window: None,
             crop: None,
         }
     }

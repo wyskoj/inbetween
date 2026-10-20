@@ -7,7 +7,7 @@
 //! morph, rays (when over), foreground.
 
 use crate::RenderError;
-use inbetween_doc::Effects;
+use inbetween_doc::{Camera, Effects};
 use inbetween_raster::{clamp_valid, over, scale, Image, Pixel, TRANSPARENT};
 use rayon::prelude::*;
 
@@ -147,6 +147,61 @@ pub(crate) fn sample(image: &Image, x: u32, y: u32, width: u32, height: u32) -> 
     image.sample_bilinear(u as f32, v as f32)
 }
 
+/// `image` stretched to the frame and moved by its effect `camera` at time `t`, or `None` when
+/// the camera leaves it where it is. The area the moved picture does not cover is transparent,
+/// or `under` (an opaque colour) when the effect reads brightness and needs a neutral value.
+pub(crate) fn through_camera(
+    image: &Image,
+    camera: &Camera,
+    t: f64,
+    size: (u32, u32),
+    under: Option<Pixel>,
+) -> Result<Option<Image>, RenderError> {
+    if !camera.enabled || camera.pose(t).is_identity() {
+        return Ok(None);
+    }
+    let (width, height) = size;
+    let mut flat = Image::new(width, height)?;
+    flat.as_mut_slice()
+        .par_chunks_mut(width as usize * 4)
+        .enumerate()
+        .for_each(|(y, row)| {
+            for (x, px) in row.chunks_exact_mut(4).enumerate() {
+                px.copy_from_slice(&sample(image, x as u32, y as u32, width, height));
+            }
+        });
+    let mut moved = crate::camera::apply(camera, t, flat)?;
+    if let Some(fill) = under {
+        for px in moved.as_mut_slice().chunks_exact_mut(4) {
+            let covered = over([px[0], px[1], px[2], px[3]], fill);
+            px.copy_from_slice(&covered);
+        }
+    }
+    Ok(Some(moved))
+}
+
+/// Brightness-driven effects see this where their picture has been moved away.
+const NEUTRAL_MASK: Pixel = [1.0, 1.0, 1.0, 1.0];
+const NEUTRAL_GRAY: Pixel = [0.5, 0.5, 0.5, 1.0];
+
+pub(crate) fn mask_through_camera(
+    image: &Image,
+    camera: &Camera,
+    t: f64,
+    size: (u32, u32),
+) -> Result<Option<Image>, RenderError> {
+    through_camera(image, camera, t, size, Some(NEUTRAL_MASK))
+}
+
+pub(crate) fn gray_through_camera(
+    image: &Image,
+    camera: &Camera,
+    t: f64,
+    size: (u32, u32),
+) -> Result<Option<Image>, RenderError> {
+    through_camera(image, camera, t, size, Some(NEUTRAL_GRAY))
+}
+
 /// Apply the enabled effects to a rendered morph frame at morph time `t`, in place.
 pub fn apply(
     effects: &Effects,
@@ -171,10 +226,36 @@ pub fn apply(
     });
     let bg_opacity = (effects.background.opacity / 100.0).clamp(0.0, 1.0) as f32;
     let fg_opacity = (effects.foreground.opacity / 100.0).clamp(0.0, 1.0) as f32;
-    let background = images.background.filter(|_| effects.background.enabled);
-    let foreground = images.foreground.filter(|_| effects.foreground.enabled);
-    let mask = images.mask.filter(|_| effects.mask.enabled);
-    let lit = images.light.filter(|_| effects.light.enabled);
+    let size = (width, height);
+    let cams = &effects.cameras;
+    let moved_background = match images.background.filter(|_| effects.background.enabled) {
+        Some(i) => through_camera(i, &cams.background, t, size, None)?,
+        None => None,
+    };
+    let moved_foreground = match images.foreground.filter(|_| effects.foreground.enabled) {
+        Some(i) => through_camera(i, &cams.foreground, t, size, None)?,
+        None => None,
+    };
+    let moved_mask = match images.mask.filter(|_| effects.mask.enabled) {
+        Some(i) => mask_through_camera(i, &cams.mask, t, size)?,
+        None => None,
+    };
+    let moved_light = match images.light.filter(|_| effects.light.enabled) {
+        Some(i) => gray_through_camera(i, &cams.light, t, size)?,
+        None => None,
+    };
+    let background = moved_background
+        .as_ref()
+        .or(images.background.filter(|_| effects.background.enabled));
+    let foreground = moved_foreground
+        .as_ref()
+        .or(images.foreground.filter(|_| effects.foreground.enabled));
+    let mask = moved_mask
+        .as_ref()
+        .or(images.mask.filter(|_| effects.mask.enabled));
+    let lit = moved_light
+        .as_ref()
+        .or(images.light.filter(|_| effects.light.enabled));
     let rays = effects.radial.enabled.then(|| {
         let [r, g, b, a] = effects.radial.rgba.map(|c| f32::from(c) / 255.0);
         let gain = (effects.radial.intensity / 100.0).clamp(0.0, 1.0) as f32 * a;

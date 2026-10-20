@@ -140,7 +140,7 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 |---|---|---|---|
 | [x] | `curve.feature` | Remaps the colour-dissolve amount over time | P1 |
 | [x] | `curve.shape` | Remaps the shape-interpolation amount over time | P1 |
-| [~] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
+| [x] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
 | [~] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
 | [x] | `curve.edit` | Click to add point, drag to move, right-click to delete, linear toggle, reset | P1 |
 | [ ] | `curve.library` | Save, load, delete library curves | P2 |
@@ -149,16 +149,16 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 
 ## 6. Camera (per sequence, and per effect)
 
-*Status: `camera.keyframes` and `camera.curve` are built per sequence (commands, CPU renderer, D36). On-canvas handles, copy/paste, load/save and the per-effect camera are open; aspect lock only keeps the two scales equal.*
+*Status: built. `camera.keyframes` (with `op` copy, paste, save, load, reset, apply_all and the `aspect` locks free, movie, image1, image2) and `effect.camera` are commands; the Camera window and the handles on the preview drive them (D60). The camera curve and master curve are in the Curves window.*
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `camera.keyframes` | Keyframes of offset/scale/rotation along a timeline; frames between are interpolated smoothly | P2 |
-| [ ] | `camera.handles` | On-canvas frame: drag to move, square handles to scale, circle handle to rotate; numeric entry; negative scale flips | P2 |
-| [~] | `camera.aspect` | Lock keyframe proportion to movie, Image 1 or Image 2, or free | P2 |
-| [~] | `camera.curve` | Optional easing curve for the camera path | P2 |
-| [~] | `camera.copyPaste/reset/applyAll/load/save` | | P2 |
-| [ ] | `effect.camera` | Same camera controls drive an individual effect layer (animates a still effect) | P2 |
+| [x] | `camera.keyframes` | Keyframes of offset/scale/rotation along a timeline; frames between are interpolated smoothly | P2 |
+| [x] | `camera.handles` | On-canvas frame: drag to move, square handles to scale, circle handle to rotate; numeric entry; negative scale flips | P2 |
+| [x] | `camera.aspect` | Lock keyframe proportion to movie, Image 1 or Image 2, or free | P2 |
+| [x] | `camera.curve` | Optional easing curve for the camera path | P2 |
+| [x] | `camera.copyPaste/reset/applyAll/load/save` | | P2 |
+| [x] | `effect.camera` | Same camera controls drive an individual effect layer (animates a still effect) | P2 |
 
 ---
 

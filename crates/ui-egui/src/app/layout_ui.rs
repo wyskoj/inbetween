@@ -167,6 +167,7 @@ impl InbetweenApp {
                     tracks: &snapshot.tracks,
                     message: snapshot.preview_message.clone(),
                     caption: snapshot.caption[2],
+                    camera: snapshot.camera,
                     checker,
                 };
                 let out = ui
@@ -227,6 +228,7 @@ impl InbetweenApp {
                 tracks: &snapshot.tracks,
                 message: snapshot.preview_message.clone(),
                 caption: snapshot.caption[2],
+                camera: snapshot.camera,
                 checker,
             };
             ctx.show_viewport_immediate(

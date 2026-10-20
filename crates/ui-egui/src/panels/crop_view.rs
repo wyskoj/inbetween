@@ -212,3 +212,45 @@ pub(super) fn crop_mode(
         hover: super::Hover::default(),
     }
 }
+
+/// The moved picture's outline with its scale and rotate handles.
+pub(super) fn draw_camera_frame(
+    painter: &egui::Painter,
+    view: &View,
+    rect: Rect,
+    camera: &super::CameraOverlay,
+) {
+    use crate::camera_tool as tool;
+    let screen = |p: (f64, f64)| view.to_screen(rect, Pos2::new(p.0 as f32, p.1 as f32));
+    let colour = Color32::from_rgb(0, 200, 255);
+    let corners = tool::outline(&camera.pose, camera.frame).map(screen);
+    painter.add(egui::Shape::closed_line(
+        corners.to_vec(),
+        Stroke::new(1.5_f32, colour),
+    ));
+    for (hx, hy) in tool::SCALE_HANDLES {
+        let at = screen(tool::handle_position(&camera.pose, camera.frame, hx, hy));
+        let square = Rect::from_center_size(at, Vec2::splat(CROP_HANDLE * 2.0));
+        painter.rect_filled(square, 1.0, Color32::WHITE);
+        painter.rect_stroke(
+            square,
+            1.0,
+            Stroke::new(1.0_f32, colour),
+            StrokeKind::Outside,
+        );
+    }
+    let reach = f64::from(super::GRAB_RADIUS / view.zoom().max(1e-6));
+    let top = screen(tool::handle_position(&camera.pose, camera.frame, 0, -1));
+    let knob = screen(tool::rotate_position(
+        &camera.pose,
+        camera.frame,
+        tool::rotate_handle_gap(reach),
+    ));
+    painter.line_segment([top, knob], Stroke::new(1.0_f32, colour));
+    painter.circle(
+        knob,
+        CROP_HANDLE,
+        Color32::WHITE,
+        Stroke::new(1.0_f32, colour),
+    );
+}

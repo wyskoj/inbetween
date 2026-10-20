@@ -3,6 +3,7 @@
 //! Panels only draw and read input. What the person did comes back as [`Action`]s, which the
 //! app turns into engine commands, so nothing here edits the project.
 
+use crate::camera_tool::{self, Grab};
 use crate::crop::{CropTool, Handle};
 use crate::hit;
 use crate::state::Tool;
@@ -11,6 +12,7 @@ use egui::{
     Align2, Color32, CursorIcon, FontId, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind,
     TextureId, Ui, Vec2,
 };
+use inbetween_doc::CameraKey;
 use inbetween_engine::DisplayPrefs;
 use std::collections::BTreeSet;
 
@@ -135,6 +137,16 @@ pub enum Action {
         dy: f64,
     },
     CaptionEnd,
+    /// A drag on the camera frame began: what it grabbed, and where (frame pixels).
+    CameraBegin {
+        grab: Grab,
+        at: (f64, f64),
+    },
+    /// The grabbed camera handle is now here (frame pixels).
+    CameraMove {
+        to: (f64, f64),
+    },
+    CameraEnd,
 }
 
 /// What the pointer has hold of besides a dot, kept between frames.
@@ -144,6 +156,8 @@ pub struct Grabs {
     pub crop: Option<Handle>,
     /// The caption is being dragged.
     pub caption: bool,
+    /// A camera handle (or the moved picture) is being dragged.
+    pub camera: bool,
     /// A line is being dragged.
     pub line: Option<usize>,
 }
@@ -723,7 +737,16 @@ pub struct PreviewPanel<'a> {
     /// While the caption window is open for the sequence or the movie: where the caption sits,
     /// in frame coordinates. A drag that starts on it moves it instead of panning.
     pub caption: Option<Rect>,
+    /// While the Camera window is open: the camera being edited, with handles on the preview.
+    pub camera: Option<CameraOverlay>,
     pub checker: bool,
+}
+
+/// The pose the camera handles are drawn from, and the frame it moves, in output pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraOverlay {
+    pub pose: CameraKey,
+    pub frame: (f64, f64),
 }
 
 /// Draw the preview. It is view-only: any drag pans and the wheel zooms, except a drag that
@@ -740,6 +763,35 @@ pub fn preview_panel(
     }
     let mut actions = Vec::new();
     if resp.drag_started_by(PointerButton::Primary) {
+        let pressed = ui
+            .input(|i| i.pointer.press_origin())
+            .or_else(|| resp.interact_pointer_pos());
+        if let (Some(c), Some(p)) = (panel.camera, pressed) {
+            let at = view.to_frame(rect, p);
+            let reach = f64::from(GRAB_RADIUS / view.zoom().max(1e-6));
+            let at = (f64::from(at.x), f64::from(at.y));
+            if let Some(grab) = camera_tool::pick(&c.pose, c.frame, at, reach) {
+                grabs.camera = true;
+                actions.push(Action::CameraBegin { grab, at });
+            }
+        }
+    }
+    if grabs.camera {
+        if resp.dragged_by(PointerButton::Primary) {
+            if let Some(now) = resp.interact_pointer_pos() {
+                let f = view.to_frame(rect, now);
+                actions.push(Action::CameraMove {
+                    to: (f64::from(f.x), f64::from(f.y)),
+                });
+            }
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+        }
+        if resp.drag_stopped_by(PointerButton::Primary) || !ui.input(|i| i.pointer.primary_down()) {
+            grabs.camera = false;
+            actions.push(Action::CameraEnd);
+        }
+    }
+    if resp.drag_started_by(PointerButton::Primary) && !grabs.camera {
         if let (Some(r), Some(p)) = (panel.caption, resp.interact_pointer_pos()) {
             if r.contains(view.to_frame(rect, p)) {
                 grabs.caption = true;
@@ -750,7 +802,7 @@ pub fn preview_panel(
     if grabs.caption {
         caption_drag(ui, &resp, rect, view, grabs, &mut actions);
     }
-    let pan_buttons: &[PointerButton] = if grabs.caption {
+    let pan_buttons: &[PointerButton] = if grabs.caption || grabs.camera {
         &[PointerButton::Middle, PointerButton::Secondary]
     } else {
         &[
@@ -801,6 +853,9 @@ pub fn preview_panel(
     }
     if let Some(caption) = panel.caption {
         draw_caption_frame(&painter, view, rect, caption);
+    }
+    if let Some(c) = panel.camera {
+        crop_view::draw_camera_frame(&painter, view, rect, &c);
     }
     PanelOutput {
         rect,

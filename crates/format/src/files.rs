@@ -78,6 +78,16 @@ pub fn write_dots(path: &Path, dots: &DotSet) -> Result<(), FormatError> {
     write_atomic(path, &dots_to_string(dots)?)
 }
 
+/// Load a `.inbetweencamera` file.
+pub fn read_camera(path: &Path) -> Result<inbetween_doc::Camera, FormatError> {
+    crate::camera_from_bytes(&read_limited(path)?)
+}
+
+/// Save a camera atomically.
+pub fn write_camera(path: &Path, camera: &inbetween_doc::Camera) -> Result<(), FormatError> {
+    write_atomic(path, &crate::camera_to_string(camera)?)
+}
+
 /// Load a `.inbetweenface` face model.
 pub fn read_face_model(path: &Path) -> Result<inbetween_doc::FaceModel, FormatError> {
     crate::face_model_from_bytes(&read_limited(path)?)

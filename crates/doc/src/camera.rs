@@ -88,21 +88,31 @@ pub enum CameraAspect {
     /// Width and height scale independently.
     #[default]
     Free,
-    /// Width and height always scale together (the keyframe's `scale_y` follows `scale_x`).
+    /// The camera frame keeps the movie's proportions: width and height scale together (the
+    /// keyframe's `scale_y` follows `scale_x`). Also called "movie".
     Locked,
+    /// The camera frame keeps the proportions of Image 1.
+    Image1,
+    /// The camera frame keeps the proportions of Image 2.
+    Image2,
 }
 
 impl CameraAspect {
-    pub const ALL: [Self; 2] = [Self::Free, Self::Locked];
+    pub const ALL: [Self; 4] = [Self::Free, Self::Locked, Self::Image1, Self::Image2];
 
     pub fn id(self) -> &'static str {
         match self {
             Self::Free => "free",
             Self::Locked => "locked",
+            Self::Image1 => "image1",
+            Self::Image2 => "image2",
         }
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
+        if id == "movie" {
+            return Some(Self::Locked);
+        }
         Self::ALL.into_iter().find(|a| a.id() == id)
     }
 }

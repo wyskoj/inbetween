@@ -3,7 +3,7 @@
 //!
 //! Layer order, bottom to top: back colour, background image, the (masked) morph, foreground.
 
-use crate::{DocError, ImageRef};
+use crate::{Camera, DocError, ImageRef};
 use serde::{Deserialize, Serialize};
 
 /// A solid colour behind everything, as straight (non-premultiplied) 8-bit RGBA.
@@ -163,6 +163,59 @@ impl Default for Radial {
     }
 }
 
+/// The image effects that a camera can move, by name.
+pub const CAMERA_EFFECTS: [&str; 5] = ["background", "mask", "foreground", "transition", "light"];
+
+/// A camera for each still-image effect: it moves the effect's picture over time while the
+/// morph stays put. Pose times are the morph time (the movie's progress for movie effects).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EffectCameras {
+    pub background: Camera,
+    pub mask: Camera,
+    pub foreground: Camera,
+    pub transition: Camera,
+    pub light: Camera,
+}
+
+impl EffectCameras {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The camera of effect `name` (one of [`CAMERA_EFFECTS`]).
+    pub fn get(&self, name: &str) -> Option<&Camera> {
+        Some(match name {
+            "background" => &self.background,
+            "mask" => &self.mask,
+            "foreground" => &self.foreground,
+            "transition" => &self.transition,
+            "light" => &self.light,
+            _ => return None,
+        })
+    }
+
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Camera> {
+        Some(match name {
+            "background" => &mut self.background,
+            "mask" => &mut self.mask,
+            "foreground" => &mut self.foreground,
+            "transition" => &mut self.transition,
+            "light" => &mut self.light,
+            _ => return None,
+        })
+    }
+
+    pub fn validate(&self) -> Result<(), DocError> {
+        for name in CAMERA_EFFECTS {
+            if let Some(c) = self.get(name) {
+                c.validate()?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// All effects of one sequence.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -175,6 +228,9 @@ pub struct Effects {
     pub light: Light,
     pub trail: Trail,
     pub radial: Radial,
+    /// Cameras that move the still-image effects (`effect.camera`).
+    #[serde(skip_serializing_if = "EffectCameras::is_default")]
+    pub cameras: EffectCameras,
 }
 
 impl Effects {
@@ -242,6 +298,7 @@ impl Effects {
     }
 
     pub fn validate(&self) -> Result<(), DocError> {
+        self.cameras.validate()?;
         let ok = |v: f64, lo: f64, hi: f64| v.is_finite() && (lo..=hi).contains(&v);
         if !ok(self.background.opacity, 0.0, 100.0) || !ok(self.foreground.opacity, 0.0, 100.0) {
             return Err(DocError::BadEffect("opacity must be between 0 and 100"));

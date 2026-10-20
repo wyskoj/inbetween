@@ -262,11 +262,15 @@ impl<'a> Renderer<'a> {
         trail::combine(&settings, current, &past)
     }
 
-    fn transition(&self, plan: &FramePlan) -> Option<TransitionCtx<'_>> {
+    fn transition<'b>(
+        &'b self,
+        plan: &FramePlan,
+        moved: Option<&'b Image>,
+    ) -> Option<TransitionCtx<'b>> {
         let tr = &self.effects.transition;
         let image = self.effect_images.transition.filter(|_| tr.enabled)?;
         Some(TransitionCtx {
-            image,
+            image: moved.unwrap_or(image),
             softness: tr.softness,
             invert: tr.invert,
             t: self.feature.eval(plan.t),
@@ -284,7 +288,20 @@ impl<'a> Renderer<'a> {
         // Rows are shaded in independent bands. Inside a band, triangles claim pixels in
         // triangle order (the last claim wins), so the result does not depend on how the
         // bands are scheduled across threads.
-        let transition = self.transition(plan);
+        let moved_transition = match self
+            .effect_images
+            .transition
+            .filter(|_| self.effects.transition.enabled)
+        {
+            Some(i) => effects::gray_through_camera(
+                i,
+                &self.effects.cameras.transition,
+                plan.t,
+                (self.width, self.height),
+            )?,
+            None => None,
+        };
+        let transition = self.transition(plan, moved_transition.as_ref());
         let mut out = Image::new(self.width, self.height)?;
         let row_len = self.width as usize * 4;
         out.as_mut_slice()

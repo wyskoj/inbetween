@@ -1256,11 +1256,17 @@ fn the_preview_follows_a_dot_while_it_is_still_being_dragged() {
     frame(&mut h, vec![button(from, PointerButton::Primary, true)]);
     let mut seen = vec![revision];
     for i in 1..=4 {
-        frame(&mut h, vec![mv(from + Vec2::new(8.0 * i as f32, 5.0 * i as f32))]);
+        frame(
+            &mut h,
+            vec![mv(from + Vec2::new(8.0 * i as f32, 5.0 * i as f32))],
+        );
         // Button still down: the project already holds the dot's new place, and the revision
         // the preview is keyed on has moved on.
         let now = app(&h).session().revision();
-        assert!(now > *seen.last().unwrap(), "move {i} did not refresh the preview");
+        assert!(
+            now > *seen.last().unwrap(),
+            "move {i} did not refresh the preview"
+        );
         seen.push(now);
     }
     assert_ne!(dots(&h)[8], original[8]);

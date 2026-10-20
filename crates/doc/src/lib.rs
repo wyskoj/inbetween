@@ -34,7 +34,10 @@ pub use edit::{
     affine_apply, affine_inv, affine_mul, AdjustSettings, Affine, Crop, Filter, Geometry,
     ImageEdit, IDENTITY, MAX_CROP_OFFSET, MAX_EDIT_PIXELS, MAX_EDIT_SIDE, MAX_FILTERS,
 };
-pub use effects::{BackColor, Effects, ImageLayer, Light, Mask, Radial, Trail, Transition};
+pub use effects::{
+    BackColor, EffectCameras, Effects, ImageLayer, Light, Mask, Radial, Trail, Transition,
+    CAMERA_EFFECTS,
+};
 pub use error::DocError;
 pub use face::{FaceDot, FaceModel, FACE_PRESETS, MAX_FACE_DOTS, MAX_FACE_GUIDES, MAX_FACE_NAME};
 pub use project::{OutputSettings, Project, ProjectType, DEFAULT_FPS, MAX_SIDE};

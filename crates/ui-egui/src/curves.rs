@@ -15,14 +15,22 @@ pub enum CurveKind {
     #[default]
     Feature,
     Shape,
+    /// The sequence's opacity over time (`curve.master`).
+    Master,
+    /// The camera's own clock (`camera.curve`).
+    Camera,
 }
 
 impl CurveKind {
+    pub const ALL: [Self; 4] = [Self::Feature, Self::Shape, Self::Master, Self::Camera];
+
     /// The engine command that edits this curve.
     pub const fn command(self) -> &'static str {
         match self {
             Self::Feature => "curve.feature",
             Self::Shape => "curve.shape",
+            Self::Master => "curve.master",
+            Self::Camera => "camera.curve",
         }
     }
 
@@ -30,6 +38,8 @@ impl CurveKind {
         match self {
             Self::Feature => "Feature curve",
             Self::Shape => "Shape curve",
+            Self::Master => "Master curve",
+            Self::Camera => "Camera curve",
         }
     }
 
@@ -37,6 +47,10 @@ impl CurveKind {
         match self {
             Self::Feature => "Remaps the colour dissolve over time.",
             Self::Shape => "Remaps how far the dots have moved over time.",
+            Self::Master => {
+                "The whole sequence's opacity over time: drag the ends down to fade in or out."
+            }
+            Self::Camera => "Eases the camera's clock: how fast it moves through its keyframes.",
         }
     }
 }

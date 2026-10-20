@@ -63,3 +63,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Drag an image file from the desktop over a thumbnail slot: the slot lights up and the hint names it; dropping fills it and switches the effect on. A WAV or MP3 dropped anywhere becomes the movie's sound.
 - [ ] With a sound set, Play plays it from the right spot, a loop jumps back in time with the picture, scrubbing while paused is silent, and View > Mute Sound silences it. With no sound device the status bar says so and nothing crashes.
 - [ ] Image > Adjust... > Movie: the sliders change every frame; Sequence filters changes only the selected sequence.
+
+- Camera tool (spec section 6): open Sequence > Camera, drag the outline, the squares and the circle on the preview in a real window; check the handles stay grabbable at 25% and 800% zoom, and that the cursor changes while dragging.

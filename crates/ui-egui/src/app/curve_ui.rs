@@ -13,6 +13,8 @@ impl InbetweenApp {
         let curve = match kind {
             CurveKind::Feature => seq.feature_curve.clone(),
             CurveKind::Shape => seq.shape_curve.clone(),
+            CurveKind::Master => seq.master_curve.clone(),
+            CurveKind::Camera => seq.camera.easing.clone(),
         };
         let last = f64::from(seq.frames.saturating_sub(1).max(1));
         let ticks: Vec<f64> = (0..seq.frames.min(100_000))
@@ -29,7 +31,7 @@ impl InbetweenApp {
             .default_pos([260.0, 80.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    for k in [CurveKind::Feature, CurveKind::Shape] {
+                    for k in CurveKind::ALL {
                         ui.selectable_value(&mut kind, k, k.label());
                     }
                 });

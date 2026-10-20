@@ -514,3 +514,71 @@ fn a_running_export_can_be_cancelled() {
     .unwrap();
     assert_eq!(r["frames"], 3);
 }
+
+#[test]
+fn camera_aspect_can_follow_an_image_and_effect_cameras_render() {
+    let d = Dir::new("aspect");
+    let mut s = session(&d, 1);
+    run(&mut s, "movie.size", json!({"width": 128, "height": 36})).unwrap();
+    // The images are 64 x 48; the frame is 128 x 36. A frame shaped like Image 1 has
+    // |sx| W : |sy| H = 64 : 48, so |sy| = |sx| * (W / H) * (48 / 64) = 2.667 |sx|.
+    let v = run(
+        &mut s,
+        "camera.keyframes",
+        json!({"op": "set", "t": 1.0, "scale_x": 0.5, "aspect": "image1"}),
+    )
+    .unwrap();
+    assert_eq!(v["aspect"], "image1");
+    let sy = v["keyframes"][0]["scale_y"].as_f64().unwrap();
+    assert!((sy - 0.5 * 128.0 / 36.0 * 48.0 / 64.0).abs() < 1e-9, "{sy}");
+    // Image 2 here is the same shape.
+    let v = run(
+        &mut s,
+        "camera.keyframes",
+        json!({"op": "set", "t": 1.0, "scale_y": 1.0, "aspect": "image2"}),
+    )
+    .unwrap();
+    let sx = v["keyframes"][0]["scale_x"].as_f64().unwrap();
+    assert!(
+        (sx - 1.0 / (128.0 / 36.0 * 48.0 / 64.0)).abs() < 1e-9,
+        "{sx}"
+    );
+    // The movie has no images: image aspects are refused there.
+    assert!(run(
+        &mut s,
+        "effect.camera",
+        json!({"effect": "mask", "scope": "movie", "aspect": "image1", "op": "set", "t": 0.5, "scale_x": 2})
+    )
+    .is_err());
+
+    // A moving foreground: a green picture that slides in from the left.
+    let green = d.0.join("green.png");
+    let rgba: Vec<u8> = (0..4 * 4).flat_map(|_| [0u8, 255, 0, 255]).collect();
+    std::fs::write(&green, inbetween_codecs::encode_png(4, 4, &rgba).unwrap()).unwrap();
+    run(&mut s, "movie.size", json!({"width": 64, "height": 48})).unwrap();
+    run(&mut s, "camera.keyframes", json!({"op": "reset"})).unwrap();
+    run(
+        &mut s,
+        "effect.foreground",
+        json!({"image": green.display().to_string()}),
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "effect.camera",
+        json!({"effect": "foreground", "op": "set", "t": 0.0, "x": -1.0}),
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "effect.camera",
+        json!({"effect": "foreground", "op": "set", "t": 1.0, "x": 0.0}),
+    )
+    .unwrap();
+    let first = s.render_movie_frame(1).unwrap();
+    let last = s.render_movie_frame(5).unwrap();
+    // Frame 1: the green picture is a full frame away to the left, so the morph shows.
+    assert!(first.get(32, 24).unwrap()[1] < 0.9);
+    // Frame 5: it covers the frame.
+    assert_eq!(last.get(32, 24), Some([0.0, 1.0, 0.0, 1.0]));
+}

@@ -253,6 +253,21 @@ mod tests {
                             rgba: [1, 1, 1, 1],
                             intensity: 1.0 / 3.0,
                         },
+                        cameras: inbetween_doc::EffectCameras {
+                            mask: Camera {
+                                enabled: true,
+                                keys: vec![
+                                    CameraKey::identity(0.0),
+                                    CameraKey {
+                                        t: 1.0,
+                                        x: 0.5,
+                                        ..CameraKey::identity(1.0)
+                                    },
+                                ],
+                                ..Camera::default()
+                            },
+                            ..Default::default()
+                        },
                     },
                     camera: Camera {
                         enabled: true,

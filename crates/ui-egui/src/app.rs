@@ -17,7 +17,7 @@ use crate::playback::{self, Cursor, Mode};
 use crate::preview::{GpuHandle, Preview};
 use crate::seqlist::{self, ListAction, Row};
 use crate::shortcuts;
-use crate::state::{CaptionScope, EffectScope, Panel, ViewState};
+use crate::state::{CameraTarget, CaptionScope, EffectScope, Panel, ViewState};
 use crate::view::View;
 use egui::{Context, Pos2, Rect, TextureHandle, TextureOptions, Vec2};
 use inbetween_engine::{
@@ -33,6 +33,7 @@ use std::sync::Arc;
 mod actions_ui;
 mod adjust_ui;
 mod audio_ui;
+mod camera_ui;
 mod caption_ui;
 mod crop_ui;
 mod curve_ui;
@@ -231,6 +232,10 @@ pub struct InbetweenApp {
     caption_changed: bool,
     /// Where the caption's anchor was when a drag on it began.
     caption_origin: Option<(f64, f64)>,
+    /// The Camera window keeps one undo group open while it is up.
+    camera_group_open: bool,
+    /// The camera handle being dragged, with the pose it started from.
+    camera_drag: Option<camera_ui::CameraDrag>,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -293,6 +298,8 @@ impl InbetweenApp {
             caption_group_open: false,
             caption_changed: false,
             caption_origin: None,
+            camera_group_open: false,
+            camera_drag: None,
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -400,6 +407,7 @@ impl InbetweenApp {
                 let curve_drag = params["op"] == "move";
                 let live_window = self.state.adjust_window.is_some()
                     || self.state.caption_window.is_some()
+                    || self.state.camera_window.is_some()
                     || self.state.effects_window.is_some();
                 if !curve_drag
                     && !live_window
@@ -514,6 +522,8 @@ impl InbetweenApp {
         let curve = match id {
             "curve.feature" => Some(CurveKind::Feature),
             "curve.shape" => Some(CurveKind::Shape),
+            "curve.master" => Some(CurveKind::Master),
+            "camera.curve" => Some(CurveKind::Camera),
             _ => None,
         };
         if curve.is_some() {
@@ -540,6 +550,17 @@ impl InbetweenApp {
             }
             "caption.sequence" => {
                 self.open_caption(CaptionScope::Sequence);
+                return;
+            }
+            "camera.keyframes" => {
+                self.open_camera(CameraTarget::default());
+                return;
+            }
+            "effect.camera" => {
+                self.open_camera(CameraTarget {
+                    effect: Some("mask".to_string()),
+                    movie: false,
+                });
                 return;
             }
             "caption.movie" => {
@@ -875,6 +896,9 @@ impl InbetweenApp {
             Action::CaptionBegin => self.caption_begin(),
             Action::CaptionMove { dx, dy } => self.caption_move(dx, dy),
             Action::CaptionEnd => self.caption_origin = None,
+            Action::CameraBegin { grab, at } => self.camera_begin(grab, at),
+            Action::CameraMove { to } => self.camera_move(to),
+            Action::CameraEnd => self.camera_drag = None,
             other => self.apply_dots(other),
         }
     }
@@ -1031,6 +1055,7 @@ impl InbetweenApp {
         self.adjust_window(ctx);
         self.effects_window(ctx);
         self.caption_window(ctx);
+        self.camera_window(ctx);
         self.form_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);
@@ -1546,6 +1571,7 @@ impl InbetweenApp {
             self.crop_snapshot(ctx, i, &mut snap);
         }
         self.caption_snapshot(&mut snap);
+        self.camera_snapshot(&mut snap);
         snap
     }
 
@@ -1634,6 +1660,8 @@ struct Snapshot {
     crop: [Option<CropView>; 2],
     /// Where an editable caption sits on each canvas, in frame coordinates.
     caption: [Option<Rect>; 3],
+    /// The camera being edited, drawn with handles on the preview.
+    camera: Option<panels::CameraOverlay>,
 }
 
 impl Snapshot {
@@ -1654,6 +1682,7 @@ impl Snapshot {
             preview_message: None,
             crop: [None, None],
             caption: [None; 3],
+            camera: None,
         }
     }
 }

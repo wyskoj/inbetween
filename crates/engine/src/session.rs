@@ -65,6 +65,8 @@ pub struct Session {
     prefs: DisplayPrefs,
     /// Set from another thread to stop the export in progress; cleared when one starts.
     cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// The camera `camera.keyframes op=copy` took, for `op=paste`. Not part of undo.
+    camera_clip: Option<inbetween_doc::Camera>,
 }
 
 // Only read by the file-backed image loader, which does not exist on wasm.
@@ -160,11 +162,21 @@ impl Session {
         Arc::clone(&self.cancel)
     }
 
+    pub(crate) fn camera_clip(&self) -> Option<&inbetween_doc::Camera> {
+        self.camera_clip.as_ref()
+    }
+
+    pub(crate) fn set_camera_clip(&mut self, camera: inbetween_doc::Camera) {
+        self.camera_clip = Some(camera);
+    }
+
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn begin_cancellable(&self) {
         self.cancel
             .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn check_cancel(&self) -> Result<(), CommandError> {
         if self.cancel.load(std::sync::atomic::Ordering::Relaxed) {
             Err(CommandError::Cancelled)

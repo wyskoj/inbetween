@@ -315,3 +315,121 @@ fn enabled_effect_without_its_image_is_an_error() {
         assert!(r.render_frame(1).is_err(), "{which}");
     }
 }
+
+fn pan(camera: &mut inbetween_doc::Camera, to_x: f64) {
+    camera.enabled = true;
+    camera.set_key(CameraKey::identity(0.0)).unwrap();
+    camera
+        .set_key(CameraKey {
+            x: to_x,
+            ..CameraKey::identity(1.0)
+        })
+        .unwrap();
+}
+
+#[test]
+fn a_foreground_camera_slides_the_overlay_and_leaves_the_morph_alone() {
+    let (a, b) = (solid(RED), solid(RED));
+    let green = solid([0.0, 1.0, 0.0, 1.0]);
+    let mut s = seq(3);
+    s.effects.foreground.enabled = true;
+    let fx = EffectImages {
+        foreground: Some(&green),
+        ..EffectImages::default()
+    };
+    let still = render(&s, &a, &b, fx, 2);
+    assert_eq!(still.get(0, 0), Some([0.0, 1.0, 0.0, 1.0]));
+    // Frame 0 sits at the first key (identity): the same as no camera.
+    pan(&mut s.effects.cameras.foreground, 0.5);
+    assert_eq!(
+        render(&s, &a, &b, fx, 0),
+        render(&seq_with_fg(), &a, &b, fx, 0)
+    );
+    // The last frame: the overlay is shifted four pixels right, the morph shows on the left.
+    let last = render(&s, &a, &b, fx, 2);
+    assert_eq!(last.get(0, 0), Some(RED));
+    assert_eq!(last.get(3, 0), Some(RED));
+    assert_eq!(last.get(4, 0), Some([0.0, 1.0, 0.0, 1.0]));
+    assert_valid(&last);
+    // The whole-sequence camera is untouched.
+    assert!(!s.camera.is_active());
+}
+
+fn seq_with_fg() -> Sequence {
+    let mut s = seq(3);
+    s.effects.foreground.enabled = true;
+    s
+}
+
+#[test]
+fn a_moved_mask_or_light_is_neutral_where_the_picture_left() {
+    let (a, b) = (solid(RED), solid(RED));
+    let white = solid([1.0, 1.0, 1.0, 1.0]);
+    let mut s = seq(3);
+    s.effects.mask.enabled = true;
+    s.effects.mask.intensity = 100.0;
+    pan(&mut s.effects.cameras.mask, 0.5);
+    let fx = EffectImages {
+        mask: Some(&white),
+        ..EffectImages::default()
+    };
+    // A white mask hides nothing, moved or not; the uncovered strip is white too.
+    let last = render(&s, &a, &b, fx, 2);
+    assert_eq!(last, solid(RED));
+
+    let mut l = seq(3);
+    l.effects.light.enabled = true;
+    l.effects.light.bright = 100.0;
+    l.effects.light.dark = 100.0;
+    pan(&mut l.effects.cameras.light, 1.0);
+    let gray = solid([0.5, 0.5, 0.5, 1.0]);
+    let fx = EffectImages {
+        light: Some(&gray),
+        ..EffectImages::default()
+    };
+    // Mid-gray light and the neutral strip both leave the colour as it is.
+    assert_eq!(render(&l, &a, &b, fx, 2), solid(RED));
+}
+
+#[test]
+fn a_dark_mask_moved_aside_uncovers_the_morph_only_on_the_neutral_side() {
+    let (a, b) = (solid(RED), solid(RED));
+    let black = solid([0.0, 0.0, 0.0, 1.0]);
+    let mut s = seq(3);
+    s.effects.mask.enabled = true;
+    s.effects.mask.intensity = 100.0;
+    let fx = EffectImages {
+        mask: Some(&black),
+        ..EffectImages::default()
+    };
+    // Black hides everything...
+    assert_eq!(render(&s, &a, &b, fx, 2).get(0, 0), Some([0.0; 4]));
+    // ...until the mask slides half off: the strip it left is neutral, so the morph shows.
+    pan(&mut s.effects.cameras.mask, 0.5);
+    let last = render(&s, &a, &b, fx, 2);
+    assert_eq!(last.get(0, 0), Some(RED));
+    assert_eq!(last.get(7, 0), Some([0.0; 4]));
+}
+
+#[test]
+fn a_transition_camera_changes_when_pixels_dissolve_and_keeps_the_ends() {
+    let (a, b) = (solid(RED), solid(BLUE));
+    let wipe = left_dark_right_light();
+    let mut s = seq(5);
+    s.effects.transition.enabled = true;
+    let fx = EffectImages {
+        transition: Some(&wipe),
+        ..EffectImages::default()
+    };
+    let before = render(&s, &a, &b, fx, 2);
+    pan(&mut s.effects.cameras.transition, 0.5);
+    let after = render(&s, &a, &b, fx, 2);
+    assert_ne!(before, after);
+    assert_eq!(render(&s, &a, &b, fx, 0), a_fit(&a));
+    assert_valid(&after);
+    assert_eq!(after, render(&s, &a, &b, fx, 2));
+}
+
+fn a_fit(a: &Image) -> Image {
+    a.clone()
+}
