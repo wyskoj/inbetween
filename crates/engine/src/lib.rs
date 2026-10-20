@@ -37,6 +37,7 @@ mod list_cmds;
 mod match_cmds;
 #[cfg(not(target_arch = "wasm32"))]
 mod movie;
+mod movie_cmds;
 mod params;
 mod project_cmds;
 mod registry;

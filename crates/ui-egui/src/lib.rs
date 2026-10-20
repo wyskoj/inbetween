@@ -11,6 +11,7 @@
     clippy::unreachable
 )]
 
+pub mod actions;
 pub mod app;
 pub mod crop;
 pub mod curves;

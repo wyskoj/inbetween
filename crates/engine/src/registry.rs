@@ -51,6 +51,7 @@ impl Registry {
         specs.extend(crate::view_cmds::specs());
         #[cfg(not(target_arch = "wasm32"))]
         specs.extend(crate::match_cmds::specs());
+        specs.extend(crate::movie_cmds::specs());
         specs.extend(crate::sequence_cmds::specs());
         specs.extend(crate::list_cmds::specs());
         specs.extend(crate::curve_cmds::specs());

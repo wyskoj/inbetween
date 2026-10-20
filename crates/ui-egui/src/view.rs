@@ -4,7 +4,10 @@ use egui::{Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 
 pub const MIN_ZOOM: f32 = 0.02;
-pub const MAX_ZOOM: f32 = 64.0;
+pub const MAX_ZOOM: f32 = 16.0;
+/// The zoom levels the zoom keys and menu step through (12.5% to 800%); the wheel goes on to
+/// [`MAX_ZOOM`] (1600%).
+pub const ZOOM_PRESETS: [f32; 7] = [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0];
 /// Space left around a fitted frame, in screen points.
 const FIT_MARGIN: f32 = 10.0;
 
@@ -101,6 +104,66 @@ impl View {
         self.zoom = new;
         self.offset = [offset.x, offset.y];
         self.auto_fit = false;
+    }
+
+    /// Fit the frame's width to the panel; the top of the frame stays in view when it is taller
+    /// than the panel.
+    pub fn fit_width(frame: Vec2, panel: Rect) -> Self {
+        let avail = (panel.size().x - 2.0 * FIT_MARGIN).max(1.0);
+        let zoom = if frame.x > 0.0 { avail / frame.x } else { 1.0 };
+        let zoom = finite(zoom, 1.0).clamp(MIN_ZOOM, MAX_ZOOM);
+        let x = (panel.size().x - frame.x * zoom) / 2.0;
+        let slack = panel.size().y - frame.y * zoom;
+        let y = if slack >= 0.0 {
+            slack / 2.0
+        } else {
+            FIT_MARGIN
+        };
+        Self {
+            zoom,
+            offset: [x, y],
+            auto_fit: false,
+        }
+    }
+
+    /// Fit the frame's height to the panel; the left of the frame stays in view when it is wider
+    /// than the panel.
+    pub fn fit_height(frame: Vec2, panel: Rect) -> Self {
+        let avail = (panel.size().y - 2.0 * FIT_MARGIN).max(1.0);
+        let zoom = if frame.y > 0.0 { avail / frame.y } else { 1.0 };
+        let zoom = finite(zoom, 1.0).clamp(MIN_ZOOM, MAX_ZOOM);
+        let y = (panel.size().y - frame.y * zoom) / 2.0;
+        let slack = panel.size().x - frame.x * zoom;
+        let x = if slack >= 0.0 {
+            slack / 2.0
+        } else {
+            FIT_MARGIN
+        };
+        Self {
+            zoom,
+            offset: [x, y],
+            auto_fit: false,
+        }
+    }
+
+    /// Move to the next zoom preset above (`zoom_in`) or below the current zoom, keeping the
+    /// middle of the panel where it is.
+    pub fn step_preset(&mut self, panel: Rect, zoom_in: bool) {
+        let now = self.zoom();
+        let target = if zoom_in {
+            ZOOM_PRESETS.iter().copied().find(|z| *z > now * 1.001)
+        } else {
+            ZOOM_PRESETS
+                .iter()
+                .rev()
+                .copied()
+                .find(|z| *z < now / 1.001)
+        };
+        if let Some(target) = target {
+            self.zoom_at(panel, panel.center(), target / now);
+            // Land exactly on the preset, not a rounding error away from it.
+            self.zoom = target;
+        }
     }
 
     pub fn pan(&mut self, delta: Vec2) {
@@ -220,5 +283,47 @@ mod tests {
         let r = v.frame_rect(panel(), Vec2::new(100.0, 80.0));
         assert!((r.center() - panel().center()).length() < 1e-3);
         assert_eq!(r.size(), Vec2::new(100.0, 80.0));
+    }
+
+    #[test]
+    fn fit_width_and_height_fill_one_axis() {
+        let frame = Vec2::new(200.0, 100.0);
+        let w = View::fit_width(frame, panel());
+        assert!((w.frame_rect(panel(), frame).width() - 380.0).abs() < 1e-3);
+        assert!(!w.auto_fit);
+        let h = View::fit_height(frame, panel());
+        assert!((h.frame_rect(panel(), frame).height() - 280.0).abs() < 1e-3);
+        // A frame taller than the panel keeps its top in view under fit-width.
+        let tall = View::fit_width(Vec2::new(100.0, 1000.0), panel());
+        assert!((tall.offset[1] - FIT_MARGIN).abs() < 1e-3);
+        // Degenerate frames still give a finite view.
+        assert!(View::fit_width(Vec2::ZERO, panel()).zoom().is_finite());
+        assert!(View::fit_height(Vec2::ZERO, panel()).zoom().is_finite());
+    }
+
+    #[test]
+    fn presets_step_through_the_ladder_and_stop_at_the_ends() {
+        let mut v = View::actual_size(Vec2::new(100.0, 80.0), panel());
+        v.step_preset(panel(), true);
+        assert_eq!(v.zoom(), 2.0);
+        for _ in 0..10 {
+            v.step_preset(panel(), true);
+        }
+        assert_eq!(v.zoom(), 8.0);
+        for _ in 0..10 {
+            v.step_preset(panel(), false);
+        }
+        assert_eq!(v.zoom(), 0.125);
+        // From between presets it goes to the next one in that direction.
+        v.zoom = 1.3;
+        v.step_preset(panel(), true);
+        assert_eq!(v.zoom(), 2.0);
+        v.zoom = 1.3;
+        v.step_preset(panel(), false);
+        assert_eq!(v.zoom(), 1.0);
+        // The wheel limit is 1600%.
+        let mut w = View::default();
+        w.zoom_at(panel(), panel().center(), 1000.0);
+        assert_eq!(w.zoom(), MAX_ZOOM);
     }
 }

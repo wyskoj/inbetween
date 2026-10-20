@@ -49,17 +49,41 @@ impl ProjectType {
 }
 
 /// A whole project: output settings and its sequences.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Project {
     pub kind: ProjectType,
     pub output: OutputSettings,
+    /// Frames per second of the movie (1 to 60). Playback and exports default to it, and
+    /// `sequence.length` converts seconds with it. Written only when not the default.
+    #[serde(skip_serializing_if = "is_default_fps")]
+    pub fps: f64,
     pub sequences: Vec<Sequence>,
     /// The face dot model the face tools place and fit.
     pub face: FaceModel,
     /// A caption drawn over every frame of the movie.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caption: Option<Caption>,
+}
+
+/// Frames per second a new project plays and exports at.
+pub const DEFAULT_FPS: f64 = 24.0;
+
+fn is_default_fps(fps: &f64) -> bool {
+    *fps == DEFAULT_FPS
+}
+
+impl Default for Project {
+    fn default() -> Self {
+        Self {
+            kind: ProjectType::default(),
+            output: OutputSettings::default(),
+            fps: DEFAULT_FPS,
+            sequences: Vec::new(),
+            face: FaceModel::default(),
+            caption: None,
+        }
+    }
 }
 
 impl Project {
@@ -141,6 +165,9 @@ impl Project {
         if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
             return Err(DocError::BadOutputSize { width, height });
         }
+        if !(self.fps.is_finite() && (1.0..=60.0).contains(&self.fps)) {
+            return Err(DocError::BadFps);
+        }
         self.face.validate()?;
         if let Some(c) = &self.caption {
             c.validate()?;
@@ -152,6 +179,26 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fps_must_be_1_to_60_and_default_is_not_written() {
+        for bad in [0.0, 0.5, 61.0, f64::NAN, f64::INFINITY] {
+            let p = Project {
+                fps: bad,
+                ..Project::default()
+            };
+            assert!(matches!(p.validate(), Err(DocError::BadFps)), "{bad}");
+        }
+        let p = Project {
+            fps: 29.97,
+            ..Project::default()
+        };
+        assert!(p.validate().is_ok());
+        let text = serde_json::to_string(&Project::default()).unwrap();
+        assert!(!text.contains("fps"));
+        let back: Project = serde_json::from_str("{}").unwrap();
+        assert_eq!(back.fps, DEFAULT_FPS);
+    }
 
     #[test]
     fn default_project_is_valid() {

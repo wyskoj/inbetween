@@ -132,6 +132,35 @@ impl Preview {
         self.error = outcome.err();
     }
 
+    /// Show a finished frame (a layer composite, drawn by the CPU) for `revision` and `frame`.
+    /// `render` is only called when that frame is not already on screen.
+    pub fn refresh_composite(
+        &mut self,
+        ctx: &egui::Context,
+        handle: Option<&GpuHandle>,
+        revision: u64,
+        frame: u32,
+        render: impl FnOnce() -> Result<inbetween_raster::Image, String>,
+    ) {
+        // A frame number far outside any real movie marks "a composite", so switching between
+        // the sequence preview and the composite always redraws.
+        const COMPOSITE: u32 = 1 << 31;
+        let key = (revision, frame | COMPOSITE);
+        if self.drawn == Some(key) {
+            return;
+        }
+        self.drawn = Some(key);
+        self.release_gpu(handle);
+        let outcome = render().map(|image| {
+            let color = to_color_image(&image, ctx.input(|i| i.max_texture_side));
+            match &mut self.cpu {
+                Some(handle) => handle.set(color, TextureOptions::LINEAR),
+                None => self.cpu = Some(ctx.load_texture("preview", color, TextureOptions::LINEAR)),
+            }
+        });
+        self.error = outcome.err();
+    }
+
     fn refresh_gpu(
         &mut self,
         handle: &GpuHandle,

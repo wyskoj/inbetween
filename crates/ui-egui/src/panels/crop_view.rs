@@ -138,7 +138,7 @@ pub(super) fn crop_mode(
     }
 
     // --- drawing ---
-    let (painter, frame_rect) = draw_background(ui, rect, &v, panel.frame);
+    let (painter, frame_rect) = draw_background(ui, rect, &v, panel.frame, panel.checker);
     match &panel.shown {
         Some(shown) => draw_shown(&painter, &v, rect, shown),
         None => draw_message(

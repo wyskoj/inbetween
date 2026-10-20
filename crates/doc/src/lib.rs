@@ -36,6 +36,6 @@ pub use edit::{
 pub use effects::{BackColor, Effects, ImageLayer, Light, Mask, Radial, Trail, Transition};
 pub use error::DocError;
 pub use face::{FaceDot, FaceModel, FACE_PRESETS, MAX_FACE_DOTS, MAX_FACE_GUIDES, MAX_FACE_NAME};
-pub use project::{OutputSettings, Project, ProjectType, MAX_SIDE};
+pub use project::{OutputSettings, Project, ProjectType, DEFAULT_FPS, MAX_SIDE};
 pub use sequence::{FitMode, ImageRef, MeshPolicy, MorphType, Sequence, MAX_FRAMES, MAX_HOLD};
 pub use track::{Track, TrackPoint, MAX_TENSION, MAX_TRACK_POINTS, MAX_TRACK_REACH};

@@ -11,8 +11,23 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-/// How many undo steps are kept.
-const MAX_UNDO: usize = 200;
+/// The undo history keeps at least this many steps however big the project is.
+const MIN_UNDO: usize = 200;
+/// Past `MIN_UNDO` steps, the oldest are dropped once the history is estimated to hold more
+/// than this many bytes.
+const UNDO_BUDGET: usize = 256 * 1024 * 1024;
+/// A hard stop, so even tiny projects cannot grow the history without end.
+const MAX_UNDO: usize = 100_000;
+
+/// A cheap estimate of the memory one history step holds: the dots, which are what grows
+/// large, plus a flat allowance per sequence and for the project itself.
+fn snapshot_cost(project: &Project) -> usize {
+    project.sequences.iter().fold(8 * 1024, |sum, s| {
+        sum + 16 * 1024
+            + std::mem::size_of_val(&s.dots.pairs[..])
+            + std::mem::size_of_val(&s.dots.lines[..])
+    })
+}
 
 /// An open project plus the caches that make repeated commands cheap.
 ///
@@ -279,9 +294,27 @@ impl Session {
             self.group_recorded = true;
         }
         self.undo.push(before);
-        if self.undo.len() > MAX_UNDO {
-            self.undo.remove(0);
+        self.trim_undo();
+    }
+
+    /// Drop the oldest steps while the history is over its byte budget, keeping `MIN_UNDO`.
+    fn trim_undo(&mut self) {
+        let mut total: usize = self.undo.iter().map(snapshot_cost).sum();
+        let mut drop = 0;
+        while self.undo.len() - drop > MAX_UNDO
+            || (self.undo.len() - drop > MIN_UNDO && total > UNDO_BUDGET)
+        {
+            total = total.saturating_sub(self.undo.get(drop).map_or(0, snapshot_cost));
+            drop += 1;
         }
+        if drop > 0 {
+            self.undo.drain(..drop);
+        }
+    }
+
+    /// How many steps `undo` can go back.
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
     }
 
     /// Start merging edits into one undo step (nestable).

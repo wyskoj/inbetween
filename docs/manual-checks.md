@@ -27,3 +27,14 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Lines: press L and click several points; Shift+click ends with a dot, right-click, Enter or Esc ends without one; hovering a line lights its whole group; dragging a line in the Edit tool moves the group.
 - [ ] View: Ctrl+G, Ctrl+D, Ctrl+L, Ctrl+T, Ctrl+M toggle the grid, dots, lines, triangles and tracks; the Magnifier follows the pointer, N and M change its power; Dot Style and Dot Color change the dots.
 - [ ] Dots: Ctrl+C, Ctrl+X, Ctrl+V move dots and their lines (pasted dots sit 10 px apart from the originals), Delete removes the selection, Ctrl+H, Ctrl+R and Ctrl+K open scale, rotate and skew.
+
+## M18: movie and workspace
+
+- [ ] Drag the two splitters (between the sources and the preview, and between Image 1 and Image 2); double-click a splitter does not need to work, but neither panel may vanish.
+- [ ] F5 to F9 switch layouts; F9 opens the preview in a second window you can move to another monitor; closing that window returns to Full.
+- [ ] F11 and Alt+Enter toggle fullscreen.
+- [ ] Transport "Sequence" button switches to "Movie": play a two-sequence project across the join; the sequence list selection follows.
+- [ ] Scrub with the % box ticked and with the wheel over the transport bar.
+- [ ] Ctrl+=, Ctrl+-, Ctrl+0, Alt+Ctrl+0, Alt+Right and Alt+Down zoom the panel under the pointer; with the preview linked it follows.
+- [ ] F8 frame strip on a long sequence: scrolling stays smooth and thumbnails fill in.
+- [ ] Sequence > Movie Size: pick 1080p; the dots still sit on their features.

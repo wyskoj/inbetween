@@ -37,31 +37,114 @@ const LENGTH_PARAMS: &[ParamSpec] = &[
         "Extra frames after the morph that repeat Image 2; omit to leave it as it is",
     )
     .range(0.0, 999.0),
+    ParamSpec::new(
+        "seconds",
+        ParamKind::Number,
+        false,
+        "Morph length in seconds at the movie frame rate, instead of `frames`",
+    )
+    .range(0.0, 999.0),
+    ParamSpec::new(
+        "hold_start_seconds",
+        ParamKind::Number,
+        false,
+        "Start hold in seconds, instead of `hold_start`",
+    )
+    .range(0.0, 999.0),
+    ParamSpec::new(
+        "hold_end_seconds",
+        ParamKind::Number,
+        false,
+        "End hold in seconds, instead of `hold_end`",
+    )
+    .range(0.0, 999.0),
+    ParamSpec::new(
+        "apply_all",
+        ParamKind::Bool,
+        false,
+        "Give every sequence these lengths (all or nothing)",
+    ),
 ];
+
+/// A field given in frames or in seconds (not both): the frame count, if either was given.
+fn frames_or_seconds(
+    params: &Params,
+    frames: &str,
+    seconds: &str,
+    fps: f64,
+) -> Result<Option<u32>, CommandError> {
+    match (params.integer(frames), params.number(seconds)) {
+        (Some(_), Some(_)) => Err(CommandError::BadParams(format!(
+            "give `{frames}` or `{seconds}`, not both"
+        ))),
+        (Some(n), None) => Ok(Some(u32::try_from(n).unwrap_or(u32::MAX))),
+        (None, Some(s)) if s.is_finite() && s >= 0.0 => {
+            Ok(Some((s * fps).round().min(f64::from(u32::MAX)) as u32))
+        }
+        (None, Some(_)) => Err(CommandError::BadParams(format!(
+            "`{seconds}` must be a number of seconds, 0 or more"
+        ))),
+        (None, None) => Ok(None),
+    }
+}
 
 fn length(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     let index = session.sequence_index(params)?;
-    let seq = session.sequence_mut(index)?;
-    let before = (seq.frames, seq.hold_start, seq.hold_end);
-    if let Some(n) = params.integer("frames") {
-        seq.frames = n as u32;
+    let fps = session.project().fps;
+    let frames = frames_or_seconds(params, "frames", "seconds", fps)?;
+    let hold_start = frames_or_seconds(params, "hold_start", "hold_start_seconds", fps)?;
+    let hold_end = frames_or_seconds(params, "hold_end", "hold_end_seconds", fps)?;
+    if frames.is_some_and(|n| !(2..=999).contains(&n)) {
+        return Err(CommandError::BadParams(
+            "the morph needs 2 to 999 frames".into(),
+        ));
     }
-    if let Some(n) = params.integer("hold_start") {
-        seq.hold_start = n as u32;
+    if hold_start.is_some_and(|n| n > 999) || hold_end.is_some_and(|n| n > 999) {
+        return Err(CommandError::BadParams("a hold is 0 to 999 frames".into()));
     }
-    if let Some(n) = params.integer("hold_end") {
-        seq.hold_end = n as u32;
+    let targets: Vec<usize> = if params.boolean("apply_all") == Some(true) {
+        (0..session.project().sequences.len()).collect()
+    } else {
+        vec![index]
+    };
+    // All or nothing: remember every old value and put them back if any sequence refuses.
+    let mut before = Vec::with_capacity(targets.len());
+    let mut failure = None;
+    for &i in &targets {
+        let seq = session.sequence_mut(i)?;
+        before.push((i, seq.frames, seq.hold_start, seq.hold_end));
+        if let Some(n) = frames {
+            seq.frames = n;
+        }
+        if let Some(n) = hold_start {
+            seq.hold_start = n;
+        }
+        if let Some(n) = hold_end {
+            seq.hold_end = n;
+        }
+        if let Err(e) = seq.validate() {
+            failure = Some(e);
+            break;
+        }
     }
-    if let Err(e) = seq.validate() {
-        (seq.frames, seq.hold_start, seq.hold_end) = before;
+    if let Some(e) = failure {
+        for (i, f, s, t) in before {
+            let seq = session.sequence_mut(i)?;
+            (seq.frames, seq.hold_start, seq.hold_end) = (f, s, t);
+        }
         return Err(e.into());
     }
+    let seq = session.sequence(index)?;
+    let total = seq.total_frames();
     Ok(json!({
         "sequence": index,
         "frames": seq.frames,
         "hold_start": seq.hold_start,
         "hold_end": seq.hold_end,
-        "total_frames": seq.total_frames(),
+        "total_frames": total,
+        "seconds": f64::from(total) / fps,
+        "fps": fps,
+        "changed": targets.len(),
     }))
 }
 

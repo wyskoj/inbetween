@@ -14,6 +14,8 @@ pub enum DocError {
     BadLine(&'static str),
     /// Output width or height is zero or above the limit.
     BadOutputSize { width: u32, height: u32 },
+    /// The movie's frames per second is not a number from 1 to 60.
+    BadFps,
     /// A curve breaks the rules (the text says which).
     BadCurve(&'static str),
     /// An effect setting is out of range (the text says which).
@@ -54,6 +56,7 @@ impl fmt::Display for DocError {
             Self::BadFace(why) => write!(f, "invalid face model: {why}"),
             Self::BadEdit(why) => write!(f, "invalid image edit: {why}"),
             Self::BadCaption(why) => write!(f, "invalid caption: {why}"),
+            Self::BadFps => write!(f, "frames per second must be a number from 1 to 60"),
             Self::BadOutputSize { width, height } => write!(
                 f,
                 "output size {width} x {height} is not allowed (each side 1 to {})",

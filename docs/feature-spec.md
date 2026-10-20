@@ -118,7 +118,7 @@ All source edits are undoable and non-destructive (dots stay attached to the edi
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `sequence.length` | 2–999 morph frames, plus 0–999 hold frames on each end, set separately; enter as frames or seconds; optional apply-to-all | P0 |
+| [x] | `sequence.length` | 2–999 morph frames, plus 0–999 hold frames on each end, set separately; enter as frames or seconds; optional apply-to-all | P0 |
 | [x] | `sequence.add` | Add a continued sequence (previous Image 2 becomes new Image 1) | P1 |
 | [x] | `sequence.addBlank` | Add an empty sequence | P1 |
 | [x] | `sequence.delete/duplicate/rename` | | P1 |
@@ -198,11 +198,11 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `movie.size` | Match source size, presets, or custom | P0 |
-| [~] | `preview.scrub` | Scrub 0–100% in 1% steps; mouse wheel steps one frame; preview one sequence or all | P0 |
+| [x] | `movie.size` / `movie.fps` | Match an image's size, presets, or custom; dots move with their pictures, sequence and movie captions scale; project frame rate | P0 |
+| [x] | `preview.scrub` | Scrub 0–100% in 1% steps; mouse wheel steps one frame; preview one sequence or all (sequence or whole movie, layers stacked) | P0 |
 | [x] | `play.*` | Play/pause, first, last, previous, next frame, loop, ping-pong; 1–60 fps | P1 |
 | [~] |  | Live preview updates while dragging dots, curves, camera, effects | P0 |
-| [ ] |  | Checkerboard behind transparent preview areas | P1 |
+| [x] |  | Checkerboard behind transparent preview areas | P1 |
 
 ---
 
@@ -247,12 +247,12 @@ Built on open landmark models (e.g. MediaPipe Face Mesh, dlib). Inbetween's face
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [ ] | `view.mode.full/edit/preview/frames/dual/fullscreen` | Six layouts (F5–F9, F11); dual-monitor split of editor and preview | P1 |
-| [ ] | `view.split` | Resizable split between Image 1, Image 2, Preview | P1 |
-| [~] | `view.zoom` | 12.5%–800% via tools, up to 1600% via wheel; best fit, actual size, fit width/height | P1 |
-| [~] | `view.syncSources` / `view.syncPreview` | Zoom/pan both sources together, and the preview with them | P1 |
-| [ ] | `view.frameStrip` | Frame Sequence mode: thumbnail grid of every frame; thumb size adjustable | P1 |
-| [~] | `edit.undo/redo` | Unlimited, covering images, dots, sequences, curves | P0 |
+| [x] | `view.mode.full/edit/preview/frames/dual/fullscreen` | Six layouts (F5–F9, F11); dual-monitor split of editor and preview (dual opens the preview in a second window; multi-monitor use is a manual check) | P1 |
+| [x] | `view.split` | Resizable split between Image 1, Image 2, Preview | P1 |
+| [x] | `view.zoom` | 12.5%–800% via tools, up to 1600% via wheel; best fit, actual size, fit width/height | P1 |
+| [x] | `view.syncSources` / `view.syncPreview` | Zoom/pan both sources together, and the preview with them | P1 |
+| [x] | `view.frameStrip` | Frame Sequence mode: thumbnail grid of every frame; thumb size adjustable | P1 |
+| [x] | `edit.undo/redo` | Unlimited (a byte budget, at least 200 steps), covering images, dots, sequences, curves | P0 |
 | [ ] | `export.pdf` | Contact sheet of sources, preview or all frames, with captions | P2 |
 | [ ] | `tools.benchmark` | Measure preview and export throughput | P2 |
 | [ ] | `tools.sequencePacker` | Pack an arbitrary image list into a movie | P2 |

@@ -30,14 +30,18 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
+mod actions_ui;
 mod adjust_ui;
 mod caption_ui;
 mod crop_ui;
 mod curve_ui;
 mod drops_ui;
 mod form_ui;
+mod frames_ui;
+mod layout_ui;
 mod prompt_ui;
 mod select_ui;
+mod transport_ui;
 mod visual_ui;
 
 /// Screen rectangles of the three canvases from the last frame (used by tests and screenshots).
@@ -221,6 +225,9 @@ pub struct InbetweenApp {
     title: String,
     screenshot: Option<ScreenshotPlan>,
     pub layout: Layout,
+    fullscreen: bool,
+    fullscreen_request: Option<bool>,
+    strip: frames_ui::StripCache,
 }
 
 impl InbetweenApp {
@@ -272,6 +279,9 @@ impl InbetweenApp {
             title: String::new(),
             screenshot: None,
             layout: Layout::default(),
+            fullscreen: false,
+            fullscreen_request: None,
+            strip: frames_ui::StripCache::default(),
         }
     }
 
@@ -335,6 +345,19 @@ impl InbetweenApp {
                     self.list = None;
                 }
                 self.follow_list_change(id, done);
+                if matches!(id, "edit.undo" | "edit.redo") {
+                    // Undo ends any open group; a window that is still up keeps its edits
+                    // together by opening a fresh one.
+                    for open in [self.adjust_group_open, self.caption_group_open] {
+                        if open {
+                            let _ = self.registry.run_caught(
+                                &mut self.session,
+                                "edit.beginGroup",
+                                &json!({}),
+                            );
+                        }
+                    }
+                }
                 if self.state.adjust_window.is_some() && id.starts_with("image.") {
                     self.adjust_changed = true;
                 }
@@ -799,7 +822,11 @@ impl InbetweenApp {
                 self.close_caption();
             }
         }
-        let frames = self.prepared().map_or(1, |p| p.sequence.total_frames());
+        let frames = if self.layer_movie() {
+            self.transport_frames()
+        } else {
+            self.prepared().map_or(1, |p| p.sequence.total_frames())
+        };
         self.state.frame = self.state.frame.min(frames.saturating_sub(1));
     }
 
@@ -861,8 +888,8 @@ impl InbetweenApp {
                 }
             }
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
-            self.state.show_sequence_list = !self.state.show_sequence_list;
+        if self.action_keys(ctx) {
+            return;
         }
         if self.dot_keys(ctx) {
             return;
@@ -885,17 +912,16 @@ impl InbetweenApp {
         if fit {
             self.state.refit_all();
         }
-        let frames = self.total_frames();
-        if left && self.state.frame > 0 {
-            self.state.frame -= 1;
+        if left {
+            self.step_transport(-1);
         }
-        if right && self.state.frame + 1 < frames {
-            self.state.frame += 1;
+        if right {
+            self.step_transport(1);
         }
     }
 
     fn advance_playback(&mut self, ctx: &Context) {
-        let frames = self.total_frames();
+        let frames = self.transport_frames();
         if !self.state.playing || frames < 2 {
             self.state.playing = false;
             self.play_clock = 0.0;
@@ -906,7 +932,7 @@ impl InbetweenApp {
         while self.play_clock >= step {
             self.play_clock -= step;
             let at = Cursor {
-                frame: self.state.frame,
+                frame: self.transport_pos(),
                 forward: self.play_forward,
             };
             let mode = Mode {
@@ -914,7 +940,7 @@ impl InbetweenApp {
                 ping_pong: self.state.ping_pong,
             };
             let (next, go) = playback::step(at, frames, mode);
-            self.state.frame = next.frame;
+            self.set_transport_pos(next.frame);
             self.play_forward = next.forward;
             if !go {
                 self.state.playing = false;
@@ -936,10 +962,15 @@ impl InbetweenApp {
             let mut visuals = egui::Visuals::dark();
             visuals.window_shadow = egui::epaint::Shadow::NONE;
             ctx.set_visuals(visuals);
+            // Ctrl+= and Ctrl+- zoom the image panels, not the whole interface.
+            ctx.options_mut(|o| o.zoom_with_keyboard = false);
             ctx.data_mut(|d| d.insert_temp(ready, true));
             ctx.request_repaint();
             return;
         }
+        // Playback runs at the movie's frame rate.
+        self.state.fps = self.session.project().fps as f32;
+        self.apply_view_requests(ctx);
         self.handle_drops(ctx);
         self.handle_keys(ctx);
         self.refresh_prepared();
@@ -1109,6 +1140,16 @@ impl InbetweenApp {
         let revision = self.session.revision();
         let frame = self.state.frame;
         let gpu = self.gpu.clone();
+        if self.layer_movie() && self.session.has_sequences() {
+            let session = &mut self.session;
+            self.preview
+                .refresh_composite(ctx, gpu.as_ref(), revision, frame, || {
+                    session
+                        .render_movie_frame(u64::from(frame) + 1)
+                        .map_err(|e| e.to_string())
+                });
+            return;
+        }
         if let Some(PreparedCache {
             result: Ok(prepared),
             ..
@@ -1136,8 +1177,8 @@ impl InbetweenApp {
 
     fn menu_bar(&mut self, ctx: &Context) {
         let mut clicked: Option<&'static str> = None;
-        let mut view = (false, self.state.show_numbers, self.state.link_sources);
         let mut view_action: Option<&'static str> = None;
+        let entries = self.action_entries();
         let toggles: Vec<(&'static str, bool)> = TOGGLES
             .iter()
             .filter_map(|id| Some((*id, self.toggle_state(id)?)))
@@ -1187,46 +1228,42 @@ impl InbetweenApp {
                     }
                 }
                 ui.menu_button("View", |ui| {
-                    if ui.button("Fit all panels").clicked() {
-                        view_action = Some("fit");
-                        ui.close_menu();
-                    }
-                    if ui.button("Actual size (100%)").clicked() {
-                        view_action = Some("actual");
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    for node in &self.menus {
-                        if let MenuNode::Menu { name, children } = node {
-                            if name == "View" {
-                                menu_items(
-                                    ui,
-                                    children,
-                                    &self.registry,
-                                    &self.session,
-                                    &toggles,
-                                    &mut clicked,
-                                );
-                            }
+                    for (id, label, shortcut, gap) in &entries {
+                        if *gap {
+                            ui.separator();
                         }
-                    }
-                    ui.checkbox(&mut view.1, "Show dot numbers");
-                    ui.checkbox(&mut view.2, "Link the two image views");
-                    ui.checkbox(&mut self.state.show_sequence_list, "Sequence list (F2)");
-                    ui.separator();
-                    if ui.button("Help").clicked() {
-                        view_action = Some("help");
-                        ui.close_menu();
+                        if *id == "view.sequenceList" {
+                            // The engine's display commands sit between the layouts and the rest.
+                            for node in &self.menus {
+                                if let MenuNode::Menu { name, children } = node {
+                                    if name == "View" {
+                                        menu_items(
+                                            ui,
+                                            children,
+                                            &self.registry,
+                                            &self.session,
+                                            &toggles,
+                                            &mut clicked,
+                                        );
+                                    }
+                                }
+                            }
+                            ui.separator();
+                        }
+                        let mut button = egui::Button::new(label.as_str());
+                        if let Some(sc) = shortcut {
+                            button = button.shortcut_text(shortcuts::label(sc));
+                        }
+                        if ui.add(button).clicked() {
+                            view_action = Some(id);
+                            ui.close_menu();
+                        }
                     }
                 });
             });
         });
-        (_, self.state.show_numbers, self.state.link_sources) = view;
-        match view_action {
-            Some("fit") => self.state.refit_all(),
-            Some("actual") => self.actual_size(),
-            Some("help") => self.state.show_help = !self.state.show_help,
-            _ => {}
+        if let Some(id) = view_action {
+            self.run_action(id);
         }
         if let Some((path, exists)) = recent_click {
             if exists {
@@ -1265,19 +1302,6 @@ impl InbetweenApp {
         }
     }
 
-    fn actual_size(&mut self) {
-        let Some(p) = self.prepared() else { return };
-        let frame = Vec2::new(p.output.0 as f32, p.output.1 as f32);
-        let layout = self.layout;
-        for (panel, rect) in [
-            (Panel::Source1, layout.source1),
-            (Panel::Source2, layout.source2),
-            (Panel::Preview, layout.preview),
-        ] {
-            *self.state.view_mut(panel) = View::actual_size(frame, rect);
-        }
-    }
-
     fn status_bar(&mut self, ctx: &Context) {
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -1305,160 +1329,6 @@ impl InbetweenApp {
                 });
             });
         });
-    }
-
-    fn transport_bar(&mut self, ctx: &Context) {
-        let frames = self.total_frames();
-        let enabled = frames > 1;
-        // Just the timing, so the closure below does not borrow the session.
-        let timing = self.prepared().map(|p| inbetween_doc::Sequence {
-            frames: p.sequence.frames,
-            hold_start: p.sequence.hold_start,
-            hold_end: p.sequence.hold_end,
-            ..Default::default()
-        });
-        egui::TopBottomPanel::bottom("transport").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.add_enabled_ui(enabled, |ui| {
-                    if ui.button("|<").on_hover_text("First frame").clicked() {
-                        self.state.frame = 0;
-                        self.play_forward = true;
-                    }
-                    if ui.button("<").on_hover_text("Previous frame").clicked() {
-                        self.state.frame = self.state.frame.saturating_sub(1);
-                    }
-                    let label = if self.state.playing { "Pause" } else { "Play" };
-                    if ui.button(label).clicked() {
-                        self.state.playing = !self.state.playing;
-                        self.play_forward = true;
-                    }
-                    if ui.button(">").on_hover_text("Next frame").clicked() {
-                        self.state.frame = (self.state.frame + 1).min(frames.saturating_sub(1));
-                    }
-                    if ui.button(">|").on_hover_text("Last frame").clicked() {
-                        self.state.frame = frames.saturating_sub(1);
-                    }
-                    let mut frame = self.state.frame;
-                    ui.spacing_mut().slider_width = (ui.available_width() - 460.0).max(80.0);
-                    ui.add(
-                        egui::Slider::new(&mut frame, 0..=frames.saturating_sub(1)).text("frame"),
-                    );
-                    self.state.frame = frame;
-                    let t = timing.map_or(0.0, |s| s.frame_time(self.state.frame));
-                    ui.label(format!("{} / {frames}   t = {t:.2}", self.state.frame + 1));
-                    ui.checkbox(&mut self.state.looping, "Loop");
-                    ui.checkbox(&mut self.state.ping_pong, "Ping-pong");
-                    ui.add(
-                        egui::DragValue::new(&mut self.state.fps)
-                            .range(1.0..=60.0)
-                            .suffix(" fps"),
-                    );
-                });
-            });
-        });
-    }
-
-    fn canvases(&mut self, ctx: &Context) {
-        // Everything the panels need is copied out first, so drawing never borrows the session.
-        let mut snapshot = self.snapshot(ctx);
-        let mut crops = std::mem::take(&mut snapshot.crop);
-        let mut views = self.state.views;
-        let mut drag = self.drag;
-        let mut grabs = self.grabs;
-        let mut actions: Vec<Action> = Vec::new();
-        let show_numbers = self.state.show_numbers;
-        let prefs = *self.session.prefs();
-        let tool = self.state.tool;
-        let selected = self.session.selection().clone();
-        let mut hover = [Hover::default(); 2];
-        let top_fraction = self.state.top_fraction;
-        let mut layout = self.layout;
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let avail = ui.available_rect_before_wrap();
-            let gap = 6.0;
-            let top_h = (avail.height() * top_fraction - gap / 2.0).max(60.0);
-            let half = ((avail.width() - gap) / 2.0).max(60.0);
-            let left = Rect::from_min_size(avail.min, Vec2::new(half, top_h));
-            let right = Rect::from_min_size(
-                Pos2::new(avail.min.x + half + gap, avail.min.y),
-                Vec2::new(half, top_h),
-            );
-            let bottom =
-                Rect::from_min_max(Pos2::new(avail.min.x, avail.min.y + top_h + gap), avail.max);
-            let frame = snapshot.frame;
-
-            for (index, rect) in [(0usize, left), (1, right)] {
-                let panel = SourcePanel {
-                    image: index as u8 + 1,
-                    title: snapshot.titles[index].clone(),
-                    frame,
-                    shown: snapshot.shown[index],
-                    dots: &snapshot.dots[index],
-                    lines: &snapshot.lines[index],
-                    mesh: &snapshot.mesh[index],
-                    selected: &selected,
-                    prefs,
-                    tool,
-                    show_numbers,
-                    partner_hover: snapshot.partner_hover[index],
-                    hot_group: &snapshot.hot_group,
-                    ghost: snapshot.ghost[index],
-                    chain_from: snapshot.chain_from[index],
-                    message: Some(snapshot.message.clone()),
-                    crop: crops[index].take(),
-                    caption: snapshot.caption[index],
-                };
-                let out = ui
-                    .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                        panels::source_panel(ui, &panel, &mut views[index], &mut drag, &mut grabs)
-                    })
-                    .inner;
-                actions.extend(out.actions);
-                hover[index] = out.hover;
-                if index == 0 {
-                    layout.source1 = out.rect;
-                } else {
-                    layout.source2 = out.rect;
-                }
-            }
-            let preview = PreviewPanel {
-                title: snapshot.titles[2].clone(),
-                frame,
-                shown: snapshot.shown[2],
-                mesh: &snapshot.mesh[2],
-                prefs,
-                tracks: &snapshot.tracks,
-                message: snapshot.preview_message.clone(),
-                caption: snapshot.caption[2],
-            };
-            let out = ui
-                .scope_builder(egui::UiBuilder::new().max_rect(bottom), |ui| {
-                    panels::preview_panel(ui, &preview, &mut views[2], &mut grabs)
-                })
-                .inner;
-            layout.preview = out.rect;
-            actions.extend(out.actions);
-        });
-
-        // Linked source views move together: whichever one changed drives the other.
-        if self.state.link_sources {
-            let old = self.state.views;
-            if views[0] != old[0] {
-                views[1] = views[0];
-            } else if views[1] != old[1] {
-                views[0] = views[1];
-            }
-        }
-        self.state.views = views;
-        self.drag = drag;
-        self.hover = hover;
-        self.grabs = grabs;
-        self.layout = layout;
-        self.track_focus(ctx);
-        for action in actions {
-            self.apply(action);
-        }
     }
 
     fn snapshot(&mut self, ctx: &Context) -> Snapshot {

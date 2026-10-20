@@ -225,6 +225,8 @@ pub struct SourcePanel<'a> {
     /// While the caption window is open for this image: where the caption sits, in frame
     /// coordinates, so a drag that starts on it moves it.
     pub caption: Option<Rect>,
+    /// Draw a checkerboard behind transparent areas.
+    pub checker: bool,
 }
 
 /// The crop tool as a source panel draws it.
@@ -278,11 +280,55 @@ fn view_input(
     }
 }
 
-fn draw_background(ui: &Ui, rect: Rect, view: &View, frame: Vec2) -> (egui::Painter, Rect) {
+/// A 16 x 16 texture of four 8 x 8 squares, repeated to tile the checkerboard.
+fn checker_texture(ctx: &egui::Context) -> egui::TextureHandle {
+    let id = egui::Id::new("inbetween_checker");
+    if let Some(t) = ctx.data(|d| d.get_temp::<egui::TextureHandle>(id)) {
+        return t;
+    }
+    let mut pixels = Vec::with_capacity(16 * 16);
+    for y in 0..16 {
+        for x in 0..16 {
+            let dark = (x / 8 + y / 8) % 2 == 0;
+            pixels.push(if dark {
+                Color32::from_gray(58)
+            } else {
+                Color32::from_gray(84)
+            });
+        }
+    }
+    let image = egui::ColorImage {
+        size: [16, 16],
+        pixels,
+    };
+    let options = egui::TextureOptions {
+        wrap_mode: egui::TextureWrapMode::Repeat,
+        ..egui::TextureOptions::NEAREST
+    };
+    let handle = ctx.load_texture("checkerboard", image, options);
+    ctx.data_mut(|d| d.insert_temp(id, handle.clone()));
+    handle
+}
+
+fn draw_background(
+    ui: &Ui,
+    rect: Rect,
+    view: &View,
+    frame: Vec2,
+    checker: bool,
+) -> (egui::Painter, Rect) {
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, BACKDROP);
     let frame_rect = view.frame_rect(rect, frame);
     painter.rect_filled(frame_rect, 0.0, FRAME_BG);
+    let visible = frame_rect.intersect(rect);
+    if checker && visible.width() > 0.0 && visible.height() > 0.0 {
+        // One 16-point tile, anchored to the frame so the squares pan with the picture.
+        let texture = checker_texture(ui.ctx());
+        let min = (visible.min - frame_rect.min) / 16.0;
+        let uv = Rect::from_min_size(min.to_pos2(), visible.size() / 16.0);
+        painter.image(texture.id(), visible, uv, Color32::WHITE);
+    }
     (painter, frame_rect)
 }
 
@@ -575,7 +621,7 @@ pub fn source_panel(
     }
 
     // --- drawing ---
-    let (painter, frame_rect) = draw_background(ui, rect, view, panel.frame);
+    let (painter, frame_rect) = draw_background(ui, rect, view, panel.frame, panel.checker);
     match &panel.shown {
         Some(shown) => draw_shown(&painter, view, rect, shown),
         None => draw_message(
@@ -677,6 +723,7 @@ pub struct PreviewPanel<'a> {
     /// While the caption window is open for the sequence or the movie: where the caption sits,
     /// in frame coordinates. A drag that starts on it moves it instead of panning.
     pub caption: Option<Rect>,
+    pub checker: bool,
 }
 
 /// Draw the preview. It is view-only: any drag pans and the wheel zooms, except a drag that
@@ -716,7 +763,7 @@ pub fn preview_panel(
     if resp.hovered() {
         ui.ctx().set_cursor_icon(CursorIcon::Default);
     }
-    let (painter, frame_rect) = draw_background(ui, rect, view, panel.frame);
+    let (painter, frame_rect) = draw_background(ui, rect, view, panel.frame, panel.checker);
     match &panel.shown {
         Some(shown) => draw_shown(&painter, view, rect, shown),
         None => draw_message(

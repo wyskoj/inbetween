@@ -85,3 +85,6 @@ Every crate has its own error type and returns it with `?`. Non-test code never 
 ## Source edits and captions (M16)
 
 `raster` holds the pixel operations (`transform`, `adjust`, `filter`). `doc::ImageEdit` and `doc::Caption` are plain data on every `Sequence` (`edit1`, `edit2`, `caption`) and on `Project` (`caption`); `ImageEdit::geometry` defines the edited size and the edited-to-source map. `render-cpu::source::apply_edit` applies an edit and `render-cpu::caption` draws captions (`render_layer`, `composite`, `caption_bounds`, bundled Roboto). `Session::source` caches processed sources and `Session::caption_layer` caches drawn caption layers; `Prepared` carries the sequence and movie layers. Commands live in `engine/src/image_cmds.rs`, `filter_cmds.rs` and `caption_cmds.rs`. The shell adds `crop.rs` (box geometry), `app/crop_ui.rs`, `app/adjust_ui.rs` and `app/caption_ui.rs`. See D43 to D47.
+
+## Movie, preview and workspace (M18)
+Movie settings are engine commands (`movie_cmds.rs`: `movie.size`, `movie.fps`); `Session::render_movie_frame` renders any movie frame. In the shell, `app/transport_ui.rs` owns the playhead (sequence or movie scope), `actions.rs` plus `app/actions_ui.rs` the view actions, `app/layout_ui.rs` the layouts, splitters and dual window, and `app/frames_ui.rs` the frame strip. See D49 to D51.

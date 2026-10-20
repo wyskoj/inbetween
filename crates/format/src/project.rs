@@ -188,6 +188,7 @@ mod tests {
                 width: 640,
                 height: 480,
             },
+            fps: 29.97,
             sequences: vec![
                 Sequence {
                     name: "first \"quoted\" \u{1F600}".into(),

@@ -55,6 +55,54 @@ impl Tool {
     }
 }
 
+/// How the canvases are arranged (F5 to F9).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewMode {
+    /// Both source images over the preview.
+    #[default]
+    Full,
+    /// Both source images, full height.
+    Edit,
+    /// The preview alone.
+    Preview,
+    /// A grid of thumbnails of every frame.
+    Frames,
+    /// The editor here and the preview in a second window.
+    Dual,
+}
+
+impl ViewMode {
+    pub const ALL: [Self; 5] = [
+        Self::Full,
+        Self::Edit,
+        Self::Preview,
+        Self::Frames,
+        Self::Dual,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Full => "Full",
+            Self::Edit => "Edit",
+            Self::Preview => "Preview",
+            Self::Frames => "Frame Sequence",
+            Self::Dual => "Dual Window",
+        }
+    }
+}
+
+/// What the preview and transport play.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreviewScope {
+    /// The selected sequence only.
+    #[default]
+    Sequence,
+    /// The whole movie: every visible sequence in turn (or stacked, in a layer project).
+    Movie,
+}
+
 /// What the caption window edits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -118,6 +166,18 @@ pub struct ViewState {
     pub fps: f32,
     /// Share of the height the two source panels get, the rest goes to the preview.
     pub top_fraction: f32,
+    /// Share of the width Image 1 gets of the two source panels.
+    pub left_fraction: f32,
+    pub mode: ViewMode,
+    pub preview_scope: PreviewScope,
+    /// Draw a checkerboard behind transparent areas.
+    pub checkerboard: bool,
+    /// Keep the preview zoomed and panned like the source panels.
+    pub sync_preview: bool,
+    /// The scrub slider shows percent (in 1% steps) instead of frames.
+    pub scrub_percent: bool,
+    /// Edge of a frame-strip thumbnail in points.
+    pub strip_size: f32,
     pub show_help: bool,
     /// The sequence the panels edit and the preview plays.
     pub sequence: usize,
@@ -155,6 +215,13 @@ impl Default for ViewState {
             ping_pong: false,
             fps: 24.0,
             top_fraction: 0.5,
+            left_fraction: 0.5,
+            mode: ViewMode::Full,
+            preview_scope: PreviewScope::Sequence,
+            checkerboard: true,
+            sync_preview: false,
+            scrub_percent: false,
+            strip_size: 120.0,
             show_help: false,
             sequence: 0,
             show_sequence_list: true,
@@ -180,6 +247,14 @@ impl ViewState {
             self.top_fraction = 0.5;
         }
         self.top_fraction = self.top_fraction.clamp(0.2, 0.8);
+        if !self.left_fraction.is_finite() {
+            self.left_fraction = 0.5;
+        }
+        self.left_fraction = self.left_fraction.clamp(0.2, 0.8);
+        if !self.strip_size.is_finite() {
+            self.strip_size = 120.0;
+        }
+        self.strip_size = self.strip_size.clamp(48.0, 256.0);
         self.prefs = self.prefs.sanitized();
         let mut seen: Vec<String> = Vec::new();
         for p in std::mem::take(&mut self.recent) {

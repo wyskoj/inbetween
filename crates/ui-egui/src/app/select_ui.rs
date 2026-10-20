@@ -255,13 +255,12 @@ impl InbetweenApp {
             }
         }
         if mods.command && !mods.alt {
-            let frames = self.total_frames();
-            if b && self.state.frame > 0 {
-                self.state.frame -= 1;
+            if b && self.transport_pos() > 0 {
+                self.step_transport(-1);
                 return true;
             }
-            if f && self.state.frame + 1 < frames {
-                self.state.frame += 1;
+            if f && self.transport_pos() + 1 < self.transport_frames() {
+                self.step_transport(1);
                 return true;
             }
         }

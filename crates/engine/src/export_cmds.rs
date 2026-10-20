@@ -54,6 +54,13 @@ mod files {
         )
         .range(0.0, MAX_FRAMES as f64),
         SEQUENCE,
+        ParamSpec::new(
+            "movie_frame",
+            ParamKind::Integer,
+            false,
+            "Movie frame number, starting at 1 across all visible sequences (layer projects: the stacked layers); instead of t, frame and sequence",
+        )
+        .range(1.0, MAX_FRAMES as f64),
     ];
 
     const EDIT_PARAMS: &[ParamSpec] = &[
@@ -146,7 +153,18 @@ mod files {
     }
 
     fn frame(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-        let (_, image, _, _) = render_one(session, params)?;
+        let image = match params.integer("movie_frame") {
+            Some(n) => {
+                if params.has("t") || params.has("frame") || params.has("sequence") {
+                    return Err(CommandError::BadParams(
+                        "`movie_frame` replaces `t`, `frame` and `sequence`; give only one way to pick the frame"
+                            .into(),
+                    ));
+                }
+                session.render_movie_frame(u64::try_from(n).unwrap_or(0))?
+            }
+            None => render_one(session, params)?.1,
+        };
         let out = params.string("out").unwrap_or_default();
         write_image(Path::new(out), &image)?;
         Ok(json!({

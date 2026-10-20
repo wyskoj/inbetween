@@ -16,7 +16,7 @@ pub fn parse(text: &str) -> Option<KeyboardShortcut> {
                 if key.is_some() {
                     return None;
                 }
-                key = Key::from_name(&capitalise(other));
+                key = Key::from_name(part).or_else(|| Key::from_name(&capitalise(other)));
             }
         }
     }

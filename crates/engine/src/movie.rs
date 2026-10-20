@@ -178,3 +178,36 @@ fn render_layers(
     }
     Ok(sent)
 }
+
+impl Session {
+    /// Movie frame `n` (counting from 1 across the visible sequences, or the stacked layers of
+    /// a layer project) with the movie caption drawn over it.
+    pub fn render_movie_frame(&mut self, n: u64) -> Result<Image, CommandError> {
+        let total = self.project().total_frames();
+        if n == 0 || n > total {
+            return Err(CommandError::BadParams(format!(
+                "movie frame {n} is outside the movie (1 to {total})"
+            )));
+        }
+        let range = MovieRange {
+            first: n,
+            last: n,
+            reverse: false,
+            drop_join_duplicates: false,
+        };
+        let mut found = None;
+        render_movie(self, range, &mut |_, image| {
+            found = Some(image.clone());
+            Ok(())
+        })?;
+        found.ok_or_else(|| CommandError::BadParams(format!("movie frame {n} has nothing to draw")))
+    }
+
+    /// Movie frame `n` shrunk to fit a `max_side` square, for frame strips.
+    pub fn movie_thumbnail(&mut self, n: u64, max_side: u32) -> Result<Image, CommandError> {
+        let frame = self.render_movie_frame(n)?;
+        frame
+            .downscale_to_fit(max_side)
+            .map_err(|e| CommandError::Image(e.to_string()))
+    }
+}

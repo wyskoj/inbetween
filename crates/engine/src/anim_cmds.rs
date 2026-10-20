@@ -88,7 +88,7 @@ mod files {
             "Frames per second, 1 to 60",
         )
         .range(1.0, 60.0)
-        .default_is("15"),
+        .default_is("the movie frame rate"),
         ParamSpec::new(
             "loop",
             ParamKind::Bool,
@@ -127,7 +127,7 @@ mod files {
         .one_of(VIDEO_FORMATS),
         ParamSpec::new("fps", ParamKind::Number, false, "Frames per second, 1 to 60")
             .range(1.0, 60.0)
-            .default_is("30"),
+            .default_is("the movie frame rate"),
         MATTE,
         ParamSpec::new(
             "ffmpeg",
@@ -163,8 +163,8 @@ mod files {
         }
     }
 
-    fn fps(params: &Params, default: f64) -> f64 {
-        params.number("fps").unwrap_or(default)
+    fn fps(params: &Params, session: &Session) -> f64 {
+        params.number("fps").unwrap_or(session.project().fps)
     }
 
     fn write_file(path: &Path, bytes: &[u8]) -> Result<(), CommandError> {
@@ -201,7 +201,7 @@ mod files {
             },
         };
         let opts = AnimationOptions {
-            fps: fps(params, 15.0),
+            fps: fps(params, session),
             looping: if params.boolean("loop") == Some(false) {
                 Loop::Once
             } else {
@@ -275,7 +275,7 @@ mod files {
         })?;
         let opts = VideoOptions {
             format,
-            fps: fps(params, 30.0),
+            fps: fps(params, session),
             matte: matte(params)?,
             ffmpeg: params.string("ffmpeg").map(Into::into),
         };
