@@ -48,6 +48,7 @@ mod frames_ui;
 mod layout_ui;
 mod prompt_ui;
 mod select_ui;
+mod track_ui;
 mod transport_ui;
 mod visual_ui;
 
@@ -242,6 +243,7 @@ pub struct InbetweenApp {
     camera_drag: Option<camera_ui::CameraDrag>,
     /// What the face windows remember between frames.
     face: face_model_ui::FaceUi,
+    track_ui: track_ui::TrackUi,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -307,6 +309,7 @@ impl InbetweenApp {
             camera_group_open: false,
             camera_drag: None,
             face: Default::default(),
+            track_ui: Default::default(),
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -418,6 +421,7 @@ impl InbetweenApp {
                     || self.state.face_model_window
                     || self.state.face_mix_window
                     || self.state.face_library_window
+                    || self.state.track_window
                     || self.state.effects_window.is_some();
                 if !curve_drag
                     && !live_window
@@ -560,6 +564,10 @@ impl InbetweenApp {
             }
             "caption.sequence" => {
                 self.open_caption(CaptionScope::Sequence);
+                return;
+            }
+            "curve.track" => {
+                self.open_track();
                 return;
             }
             "face.model" => {
@@ -1082,6 +1090,7 @@ impl InbetweenApp {
         self.face_model_window(ctx);
         self.face_mix_window(ctx);
         self.face_library_window(ctx);
+        self.track_window(ctx);
         self.form_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);

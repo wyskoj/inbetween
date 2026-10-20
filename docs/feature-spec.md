@@ -141,7 +141,7 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 | [x] | `curve.feature` | Remaps the colour-dissolve amount over time | P1 |
 | [x] | `curve.shape` | Remaps the shape-interpolation amount over time | P1 |
 | [x] | `curve.master` | Controls the sequence's overall opacity (fade in/out) | P2 |
-| [~] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
+| [x] | `curve.track` | Dots travel along a 2D curve instead of a straight line; adjustable tension 0–20; flip H/V; endpoints movable (enables caricature/anti-face extrapolation) | P2 |
 | [x] | `curve.edit` | Click to add point, drag to move, right-click to delete, linear toggle, reset | P1 |
 | [x] | `curve.library` | Save, load, delete library curves | P2 |
 

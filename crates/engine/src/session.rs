@@ -256,6 +256,7 @@ impl Session {
     }
 
     /// Record that the project was just saved.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn mark_saved(&mut self) {
         self.saved_revision = self.revision;
     }

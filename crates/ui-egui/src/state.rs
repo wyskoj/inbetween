@@ -233,6 +233,8 @@ pub struct ViewState {
     pub face_model_window: bool,
     pub face_mix_window: bool,
     pub face_library_window: bool,
+    /// The Track Curve window.
+    pub track_window: bool,
     /// The crop being drawn, when the crop tool is active.
     pub crop: Option<CropTool>,
 }
@@ -276,6 +278,7 @@ impl Default for ViewState {
             face_model_window: false,
             face_mix_window: false,
             face_library_window: false,
+            track_window: false,
             crop: None,
         }
     }
