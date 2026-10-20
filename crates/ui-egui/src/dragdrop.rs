@@ -82,7 +82,8 @@ fn kind_of(path: &str) -> Kind {
         "inbetween" => Kind::Project,
         "inbetweendots" => Kind::Dots,
         "wav" | "mp3" => Kind::Sound,
-        e if inbetween_codecs::IMAGE_EXTENSIONS.contains(&e) => Kind::Image,
+        // Pictures, and videos (which stand for their first or last frame).
+        e if inbetween_engine::source_media::SOURCE_EXTENSIONS.contains(&e) => Kind::Image,
         _ => Kind::Other,
     }
 }
@@ -310,8 +311,16 @@ mod tests {
     }
 
     #[test]
+    fn a_video_is_a_picture_source() {
+        for name in ["clip.mp4", "clip.MOV", "clip.webm"] {
+            let a = route_drop(&drop(&[name]), None, true);
+            assert_eq!(a, vec![set(1, name)], "{name}");
+        }
+    }
+
+    #[test]
     fn unsupported_files_and_missing_paths_are_reported_not_acted_on() {
-        let f = drop(&["notes.txt", "movie.mp4", "noext"]);
+        let f = drop(&["notes.txt", "movie.xyz", "noext"]);
         let actions = route_drop(&f, None, true);
         assert_eq!(actions.len(), 3);
         assert!(actions

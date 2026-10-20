@@ -67,3 +67,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - Camera tool (spec section 6): open Sequence > Camera, drag the outline, the squares and the circle on the preview in a real window; check the handles stay grabbable at 25% and 800% zoom, and that the cursor changes while dragging.
 
 - Face tools (spec section 10): in a real window, fit a located face with Face > Smart Drag on (and Alt held for plain drags); drag a landmark in the Face Model window; drag a library tile onto Image 2 with the mouse (the test sends the drop as synthetic events); Save recipe and Load recipe in the Mix window with the real file dialogs.
+
+- Video sources (spec section 11): drop an .mp4 on Image 1 and another on Image 2 in the real window and scrub the preview; export a video and play it to see clip, morph, clip. Try a clip with odd dimensions and a variable frame rate.

@@ -423,7 +423,7 @@ mod files {
             true,
             "The new sequence's Image 2 (PNG, JPEG, BMP, TIFF, TGA, GIF or PSD)",
         )
-        .open_file(inbetween_codecs::IMAGE_EXTENSIONS),
+        .open_file(crate::source_media::SOURCE_EXTENSIONS),
         AFTER,
         NAME,
     ];

@@ -12,6 +12,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 #[cfg(not(target_arch = "wasm32"))]
 mod files {
     use super::*;
+    use crate::clips::{self, VIDEO_CLIPS};
     use crate::export_options::{self, OPEN_AFTER, SAVE_FIRST};
     use crate::movie::{self, MAX_MOVIE_FRAMES};
     use crate::Prepared;
@@ -400,6 +401,7 @@ mod files {
         .range(0.0, 1_000_000.0)
         .default_is("the whole movie"),
         DPI,
+        VIDEO_CLIPS,
         SAVE_FIRST,
         OPEN_AFTER,
     ];
@@ -414,11 +416,12 @@ mod files {
             ));
         }
         let range = movie::range_from(session, params)?;
+        let clip_plan = clips::plan(session, params, &range, session.project().fps)?;
         let total = session.project().total_frames();
         let dir = Path::new(params.string("out_dir").unwrap_or_default());
         std::fs::create_dir_all(dir)
             .map_err(|e| CommandError::Io(format!("{}: {e}", dir.display())))?;
-        let written = movie::render_movie(session, range, &mut |n, image| {
+        let written = clips::render_export(session, &clip_plan, range, &mut |n, image| {
             write_image_with(
                 &dir.join(format!("{prefix}_{n:04}.png")),
                 image,
@@ -435,6 +438,7 @@ mod files {
             "first": range.first,
             "last": range.last,
             "total_frames": total,
+            "clip_frames": clip_plan.as_ref().map_or(0, |p| p.extra_frames),
             "width": w,
             "height": h,
         });

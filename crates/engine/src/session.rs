@@ -543,7 +543,7 @@ impl Session {
                 "the {name} effect of sequence {seq} is on but has no image; set one with effect.{name}"
             )));
         }
-        self.load_path(reference, &format!("The {name} effect image"))
+        self.load_path(reference, &format!("The {name} effect image"), 0)
             .map(Some)
     }
 
@@ -729,7 +729,7 @@ impl Session {
                 )));
             }
             session
-                .load_path(&image.0, &format!("The movie {name} effect image"))
+                .load_path(&image.0, &format!("The movie {name} effect image"), 0)
                 .map(Some)
         };
         let background = load(
@@ -776,29 +776,47 @@ impl Session {
                 "Image {which} of sequence {seq} has no file set; choose one with sequence.image"
             )));
         }
-        self.load_path(reference, &format!("Image {which}"))
+        self.load_path(reference, &format!("Image {which}"), which)
     }
 
     /// Load a movie effect image (or any file by its path) through the cache.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn load_effect_path(&mut self, reference: &str) -> Result<Arc<Image>, CommandError> {
-        self.load_path(reference, "The movie effect image")
+        self.load_path(reference, "The movie effect image", 0)
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn load_path(&mut self, reference: &str, label: &str) -> Result<Arc<Image>, CommandError> {
+    /// `which` is the image number (1 or 2; 0 for effect images). A video file stands for its
+    /// last frame as Image 1 and its first frame otherwise, so each end is cached on its own.
+    fn load_path(
+        &mut self,
+        reference: &str,
+        label: &str,
+        which: u8,
+    ) -> Result<Arc<Image>, CommandError> {
         inbetween_format::check_image_path(reference)?;
         let full = self.resolve_image_path(reference);
         let meta = std::fs::metadata(&full)
             .map_err(|e| CommandError::Image(format!("{label}: {}: {e}", full.display())))?;
         let stamp = (meta.modified().ok(), meta.len());
-        if let Some(hit) = self.images.get(&full).filter(|c| c.stamp == stamp) {
+        let video = inbetween_export::source::is_video_source(reference);
+        let key = if video {
+            PathBuf::from(format!("{}#{}", full.display(), u8::from(which == 1)))
+        } else {
+            full.clone()
+        };
+        if let Some(hit) = self.images.get(&key).filter(|c| c.stamp == stamp) {
             return Ok(Arc::clone(&hit.image));
         }
-        let rgba = inbetween_codecs::read_file(&full)?;
+        let rgba = if video {
+            crate::source_media::video_frame(&full, which)
+                .map_err(|e| CommandError::Image(format!("{label}: {e}")))?
+        } else {
+            inbetween_codecs::read_file(&full)?
+        };
         let image = Arc::new(Image::from_rgba8(rgba.width, rgba.height, &rgba.data)?);
         self.images.insert(
-            full,
+            key,
             CachedImage {
                 stamp,
                 image: Arc::clone(&image),

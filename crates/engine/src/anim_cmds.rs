@@ -13,6 +13,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
 #[cfg(not(target_arch = "wasm32"))]
 mod files {
     use super::*;
+    use crate::clips::{self, VIDEO_CLIPS};
     use crate::export_options::{self, OPEN_AFTER, SAVE_FIRST};
     use crate::movie::{self, MovieRange, MAX_MOVIE_FRAMES};
     use crate::{CommandError, ParamKind, ParamSpec, Params, Session};
@@ -119,6 +120,7 @@ mod files {
         ONLY_SEQUENCE,
         FIRST,
         LAST,
+        VIDEO_CLIPS,
         SAVE_FIRST,
         OPEN_AFTER,
     ];
@@ -160,6 +162,7 @@ mod files {
         ONLY_SEQUENCE,
         FIRST,
         LAST,
+        VIDEO_CLIPS,
         SAVE_FIRST,
         OPEN_AFTER,
     ];
@@ -235,15 +238,18 @@ mod files {
             matte: matte(params)?,
         };
         let range = movie::range_from(session, params)?;
+        let clip_plan = clips::plan(session, params, &range, opts.fps)?;
+        let extra = clip_plan.as_ref().map_or(0, |p| p.extra_frames);
+        let wanted = selected(&range).saturating_add(extra);
         let (width, height) = (
             session.project().output.width,
             session.project().output.height,
         );
         // Refuse before rendering anything if the frames cannot be held in memory.
         let bytes = u64::from(width) * u64::from(height) * 4;
-        if bytes.saturating_mul(selected(&range)) > MAX_BUFFERED_BYTES {
+        if bytes.saturating_mul(wanted) > MAX_BUFFERED_BYTES {
             return Err(ExportError::TooMuchData {
-                frames: usize::try_from(selected(&range)).unwrap_or(usize::MAX),
+                frames: usize::try_from(wanted).unwrap_or(usize::MAX),
                 width,
                 height,
             }
@@ -252,7 +258,7 @@ mod files {
         inbetween_export::check_fps(opts.fps)?;
 
         let mut frames: Vec<Vec<u8>> = Vec::new();
-        movie::render_movie(session, range, &mut |_, image| {
+        clips::render_export(session, &clip_plan, range, &mut |_, image| {
             frames.push(image.to_rgba8());
             Ok(())
         })?;
@@ -274,6 +280,7 @@ mod files {
             "out": out,
             "format": format,
             "frames": frames.len(),
+            "clip_frames": extra,
             "fps": opts.fps,
             "width": width,
             "height": height,
@@ -308,6 +315,8 @@ mod files {
             audio: None,
         };
         let range = movie::range_from(session, params)?;
+        let clip_plan = clips::plan(session, params, &range, opts.fps)?;
+        let extra = clip_plan.as_ref().map_or(0, |p| p.extra_frames);
         let mut opts = opts;
         let mut audio_report = json!("none");
         if let Some(sound) = session
@@ -317,7 +326,7 @@ mod files {
             .filter(|s| s.is_active() && params.boolean("audio") != Some(false))
         {
             let probe = crate::sound_cmds::probe(session, &sound.path.0)?;
-            let frames = range.last - range.first + 1;
+            let frames = range.last - range.first + 1 + extra;
             opts.audio = Some(inbetween_export::video::AudioMux {
                 path: session.resolve_image_path(&sound.path.0),
                 looped: sound.looped,
@@ -336,7 +345,7 @@ mod files {
         let path = Path::new(out);
         make_parent(path)?;
         let mut writer = VideoWriter::start(width, height, path, &opts)?;
-        let frames = movie::render_movie(session, range, &mut |_, image| {
+        let frames = clips::render_export(session, &clip_plan, range, &mut |_, image| {
             writer.push(&image.to_rgba8()).map_err(Into::into)
         })?;
         writer.finish()?;
@@ -345,6 +354,7 @@ mod files {
             "format": format.id(),
             "frames": frames,
             "audio": audio_report,
+            "clip_frames": extra,
             "fps": opts.fps,
             "width": width,
             "height": height,

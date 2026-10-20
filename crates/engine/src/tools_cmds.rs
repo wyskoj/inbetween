@@ -75,7 +75,7 @@ mod files {
             false,
             "Images to pack, in the order given",
         )
-        .open_files(inbetween_codecs::IMAGE_EXTENSIONS)
+        .open_files(crate::source_media::SOURCE_EXTENSIONS)
         .range(1.0, 1000.0),
         ParamSpec::new(
             "folder",
@@ -155,7 +155,7 @@ mod files {
         for entry in read.filter_map(Result::ok).take(MAX_SCANNED) {
             let path = entry.path();
             let is_image = path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
-                inbetween_codecs::IMAGE_EXTENSIONS
+                crate::source_media::SOURCE_EXTENSIONS
                     .iter()
                     .any(|x| x.eq_ignore_ascii_case(e))
             });
@@ -203,7 +203,7 @@ mod files {
         let (mut images, mut skipped) = (Vec::new(), Vec::new());
         let mut first_size = None;
         for f in listed {
-            match inbetween_codecs::read_file(Path::new(&f.path)) {
+            match crate::source_media::read_any(Path::new(&f.path)) {
                 Ok(img) => {
                     first_size.get_or_insert((img.width, img.height));
                     images.push(f.path);
@@ -215,10 +215,13 @@ mod files {
             return Err(CommandError::BadParams(format!(
                 "need at least two readable images to pack, found {}{}",
                 images.len(),
-                if skipped.is_empty() {
-                    String::new()
-                } else {
-                    format!(" ({} skipped as unreadable)", skipped.len())
+                match skipped.first() {
+                    None => String::new(),
+                    Some(first) => format!(
+                        " ({} skipped as unreadable, the first: {})",
+                        skipped.len(),
+                        first["error"].as_str().unwrap_or("unknown error")
+                    ),
                 }
             )));
         }

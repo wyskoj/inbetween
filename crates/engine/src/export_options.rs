@@ -53,6 +53,8 @@ pub(crate) fn before(
     session: &mut Session,
     params: &Params,
 ) -> Result<Option<String>, CommandError> {
+    // Every export starts here: a stop requested for an earlier one does not carry over.
+    session.begin_cancellable();
     if params.boolean("save_first") != Some(true) {
         return Ok(None);
     }

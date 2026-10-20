@@ -231,7 +231,7 @@ const WIZARD_PARAMS: &[ParamSpec] = &[
         true,
         "The images to chain, in order: each one morphs into the next",
     )
-    .open_files(inbetween_codecs::IMAGE_EXTENSIONS)
+    .open_files(crate::source_media::SOURCE_EXTENSIONS)
     .range(2.0, 1000.0),
     ParamSpec::new(
         "kind",
@@ -292,7 +292,7 @@ fn wizard(session: &mut Session, params: &Params) -> Result<Value, CommandError>
         .collect::<Result<Vec<_>, _>>()?;
     let mut first_size = (0, 0);
     for (i, path) in images.iter().enumerate() {
-        let img = inbetween_codecs::read_file(Path::new(path))?;
+        let img = crate::source_media::read_any(Path::new(path))?;
         if i == 0 {
             first_size = (img.width, img.height);
         }

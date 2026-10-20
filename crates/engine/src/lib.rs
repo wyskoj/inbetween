@@ -16,6 +16,8 @@
 mod anim_cmds;
 mod camera_cmds;
 mod caption_cmds;
+#[cfg(not(target_arch = "wasm32"))]
+mod clips;
 mod curve_cmds;
 mod curve_library_cmds;
 mod dots_cmds;
@@ -53,6 +55,8 @@ mod select_cmds;
 mod sequence_cmds;
 mod session;
 mod sound_cmds;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod source_media;
 mod state;
 mod tools_cmds;
 mod track_cmds;

@@ -20,6 +20,8 @@ pub mod pdf;
 mod webp;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod source;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod video;
 
 pub use apng::encode_apng;

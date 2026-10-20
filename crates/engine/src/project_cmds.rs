@@ -73,7 +73,7 @@ pub(crate) mod files {
     use inbetween_doc::{ImageRef, OutputSettings, Project, ProjectType, Sequence, MAX_SIDE};
     use std::path::{Path, PathBuf};
 
-    use inbetween_codecs::IMAGE_EXTENSIONS;
+    use crate::source_media::SOURCE_EXTENSIONS as IMAGE_EXTENSIONS;
 
     const NEW_PARAMS: &[ParamSpec] = &[
         ParamSpec::new(
@@ -170,8 +170,8 @@ pub(crate) mod files {
             absolute(params.string("image1").unwrap_or_default())?,
             absolute(params.string("image2").unwrap_or_default())?,
         );
-        let a = inbetween_codecs::read_file(Path::new(&one))?;
-        inbetween_codecs::read_file(Path::new(&two))?; // fail early on an unreadable second image
+        let a = crate::source_media::read_any(Path::new(&one))?;
+        crate::source_media::read_any(Path::new(&two))?; // fail early on an unreadable second image
         let name = match params.string("name") {
             Some(n) => n.to_string(),
             None => format!("{} to {}", stem(&one), stem(&two)),

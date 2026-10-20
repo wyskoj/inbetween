@@ -98,7 +98,6 @@ pub(crate) fn render_movie(
     range: MovieRange,
     each: &mut dyn FnMut(u64, &Image) -> Result<(), CommandError>,
 ) -> Result<u64, CommandError> {
-    session.begin_cancellable();
     let finish = session.movie_finish()?;
     let total = session.project().total_frames();
     let progress = |n: u64| movie_progress(n.saturating_sub(1), total);
@@ -265,6 +264,7 @@ impl Session {
             reverse: false,
             drop_join_duplicates: false,
         };
+        self.begin_cancellable();
         let mut found = None;
         render_movie(self, range, &mut |_, image| {
             found = Some(image.clone());

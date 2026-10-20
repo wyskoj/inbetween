@@ -237,7 +237,7 @@ Built on an open landmark model (MediaPipe face mesh, Apache-2.0; see D52). Inbe
 | [x] | `export.video` | Modern targets: MP4/H.264, WebM (with alpha), ProRes 4444 optional | P1 |
 | [x] | `export.gif` | Animated GIF, loop or once, opaque or transparent (also APNG/animated WebP) | P1 |
 | [x] | `export.options` | fps 1–60 (plus 29.97), JPEG quality, DPI, reverse frames, drop duplicate frames at sequence joins, cancellable | P1 |
-| [ ] | `export.videoSource` | When a source is a video, include its clip before/after the morph | P2 |
+| [x] | `export.videoSource` | When a source is a video, include its clip before/after the morph | P2 |
 | [x] | `export.afterSave/afterOpen` | Auto-save project before export; open the result afterwards | P2 |
 | [x] |  | Output size not capped by the GPU (tile or fall back to CPU) | P1 |
 
