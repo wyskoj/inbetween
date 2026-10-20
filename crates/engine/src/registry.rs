@@ -59,6 +59,7 @@ impl Registry {
         specs.extend(crate::fx_cmds::specs());
         specs.extend(crate::image_cmds::specs());
         specs.extend(crate::filter_cmds::specs());
+        specs.extend(crate::movie_fx_cmds::specs());
         specs.extend(crate::caption_cmds::specs());
         specs.extend(crate::camera_cmds::specs());
         specs.extend(crate::track_cmds::specs());

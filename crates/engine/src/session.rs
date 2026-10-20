@@ -1,9 +1,9 @@
+use crate::movie_finish::{movie_progress, MovieFinish};
 use crate::state::{DisplayPrefs, DotClip};
 use crate::{CommandError, Params};
 #[cfg(not(target_arch = "wasm32"))]
 use inbetween_doc::Caption;
 use inbetween_doc::{Project, Sequence};
-use crate::movie_finish::{movie_progress, MovieFinish};
 use inbetween_raster::Image;
 use inbetween_render_cpu::caption::Font;
 use inbetween_render_cpu::{EffectImages, RenderError, Renderer};
@@ -683,9 +683,19 @@ impl Session {
                 .load_path(&image.0, &format!("The movie {name} effect image"))
                 .map(Some)
         };
-        let background = load(self, fx.background.enabled, &fx.background.image, "background")?;
+        let background = load(
+            self,
+            fx.background.enabled,
+            &fx.background.image,
+            "background",
+        )?;
         let mask = load(self, fx.mask.enabled, &fx.mask.image, "mask")?;
-        let foreground = load(self, fx.foreground.enabled, &fx.foreground.image, "foreground")?;
+        let foreground = load(
+            self,
+            fx.foreground.enabled,
+            &fx.foreground.image,
+            "foreground",
+        )?;
         let light = load(self, fx.light.enabled, &fx.light.image, "light")?;
         Ok(MovieFinish {
             effects: fx,

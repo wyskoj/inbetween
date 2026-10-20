@@ -1,9 +1,7 @@
 //! Effects over the whole movie: back colour through a transparent morph, the movie trail,
 //! refusals, undo, and saving.
 
-use inbetween_doc::{
-    DotPair, DotSet, ImageRef, OutputSettings, Project, ProjectType, Sequence,
-};
+use inbetween_doc::{DotPair, DotSet, ImageRef, OutputSettings, Project, ProjectType, Sequence};
 use inbetween_engine::{CommandError, Registry, Session};
 use inbetween_geom::Point;
 use inbetween_raster::Image;
@@ -58,7 +56,12 @@ fn corners() -> DotSet {
     )
 }
 
-fn project(dir: &Dir, kind: ProjectType, a: ([u8; 4], Option<u32>), b: ([u8; 4], Option<u32>)) -> Session {
+fn project(
+    dir: &Dir,
+    kind: ProjectType,
+    a: ([u8; 4], Option<u32>),
+    b: ([u8; 4], Option<u32>),
+) -> Session {
     write_png(&dir.path("a.png"), a.0, a.1);
     write_png(&dir.path("b.png"), b.0, b.1);
     let mut s = Session::new();
@@ -150,13 +153,21 @@ fn the_movie_trail_is_the_same_in_an_export_and_in_a_single_frame() {
     );
     // One frame on its own looks the same as inside the export.
     assert_eq!(s.render_movie_frame(3).unwrap().to_rgba8(), trail3);
-    assert_eq!(s.render_movie_frame(5).unwrap().to_rgba8(), read_png(&d.path("trail/frame_0005.png")));
+    assert_eq!(
+        s.render_movie_frame(5).unwrap().to_rgba8(),
+        read_png(&d.path("trail/frame_0005.png"))
+    );
 }
 
 #[test]
 fn a_transition_cannot_be_a_movie_effect() {
     let d = Dir::new("transition");
-    let mut s = project(&d, ProjectType::Sequence, ([9, 9, 9, 255], None), ([9, 9, 9, 255], None));
+    let mut s = project(
+        &d,
+        ProjectType::Sequence,
+        ([9, 9, 9, 255], None),
+        ([9, 9, 9, 255], None),
+    );
     let err = run(
         &mut s,
         "effect.transition",
@@ -169,8 +180,18 @@ fn a_transition_cannot_be_a_movie_effect() {
 #[test]
 fn movie_effects_undo_and_redo() {
     let d = Dir::new("undo");
-    let mut s = project(&d, ProjectType::Sequence, ([9, 9, 9, 255], None), ([9, 9, 9, 255], None));
-    run(&mut s, "effect.radial", json!({"scope": "movie", "intensity": 60})).unwrap();
+    let mut s = project(
+        &d,
+        ProjectType::Sequence,
+        ([9, 9, 9, 255], None),
+        ([9, 9, 9, 255], None),
+    );
+    run(
+        &mut s,
+        "effect.radial",
+        json!({"scope": "movie", "intensity": 60}),
+    )
+    .unwrap();
     assert!(s.project().effects.radial.enabled);
     run(&mut s, "edit.undo", json!({})).unwrap();
     assert!(!s.project().effects.radial.enabled);
@@ -181,7 +202,12 @@ fn movie_effects_undo_and_redo() {
 #[test]
 fn movie_effect_images_are_saved_and_rebased() {
     let d = Dir::new("save");
-    let mut s = project(&d, ProjectType::Sequence, ([9, 9, 9, 255], None), ([9, 9, 9, 255], None));
+    let mut s = project(
+        &d,
+        ProjectType::Sequence,
+        ([9, 9, 9, 255], None),
+        ([9, 9, 9, 255], None),
+    );
     write_png(&d.path("fg.png"), [255, 0, 0, 128], None);
     run(
         &mut s,
@@ -192,23 +218,47 @@ fn movie_effect_images_are_saved_and_rebased() {
     let before = s.render_movie_frame(2).unwrap();
     run(&mut s, "project.save", json!({"path": d.s("p.inbetween")})).unwrap();
     let mut again = Session::new();
-    run(&mut again, "project.open", json!({"path": d.s("p.inbetween")})).unwrap();
+    run(
+        &mut again,
+        "project.open",
+        json!({"path": d.s("p.inbetween")}),
+    )
+    .unwrap();
     assert!(again.project().effects.foreground.enabled);
     assert_eq!(again.render_movie_frame(2).unwrap(), before);
     // Saved into another folder, the effect image is rebased and still found.
     let sub = d.path("moved");
     std::fs::create_dir_all(&sub).unwrap();
     let moved = sub.join("q.inbetween");
-    run(&mut s, "project.save", json!({"path": moved.display().to_string()})).unwrap();
+    run(
+        &mut s,
+        "project.save",
+        json!({"path": moved.display().to_string()}),
+    )
+    .unwrap();
     let mut third = Session::new();
-    run(&mut third, "project.open", json!({"path": moved.display().to_string()})).unwrap();
+    run(
+        &mut third,
+        "project.open",
+        json!({"path": moved.display().to_string()}),
+    )
+    .unwrap();
     assert_eq!(third.render_movie_frame(2).unwrap(), before);
 }
 
 #[test]
 fn a_movie_effect_without_an_image_is_refused() {
     let d = Dir::new("noimg");
-    let mut s = project(&d, ProjectType::Sequence, ([9, 9, 9, 255], None), ([9, 9, 9, 255], None));
-    let err = run(&mut s, "effect.mask", json!({"scope": "movie", "enabled": true}));
+    let mut s = project(
+        &d,
+        ProjectType::Sequence,
+        ([9, 9, 9, 255], None),
+        ([9, 9, 9, 255], None),
+    );
+    let err = run(
+        &mut s,
+        "effect.mask",
+        json!({"scope": "movie", "enabled": true}),
+    );
     assert!(matches!(err, Err(CommandError::BadParams(_))), "{err:?}");
 }

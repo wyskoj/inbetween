@@ -41,6 +41,7 @@ mod match_cmds;
 mod movie;
 mod movie_cmds;
 mod movie_finish;
+mod movie_fx_cmds;
 mod params;
 mod project_cmds;
 mod registry;
@@ -52,8 +53,8 @@ mod track_cmds;
 mod view_cmds;
 
 pub use error::CommandError;
+pub use movie_finish::MovieFinish;
 pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_LIST_ENTRIES, MAX_STRING_BYTES};
 pub use registry::{CommandInfo, CommandSpec, Registry};
-pub use movie_finish::MovieFinish;
 pub use session::{Prepared, Session};
 pub use state::{DisplayPrefs, DotClip, DotColorMode, DotStyle};

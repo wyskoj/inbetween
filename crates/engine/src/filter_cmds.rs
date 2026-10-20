@@ -10,7 +10,7 @@ use crate::effect_cmds::SEQUENCE;
 use crate::image_cmds::{run_edit, IMAGE};
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
 use inbetween_doc::{Filter, MAX_FILTERS};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 const INDEX: ParamSpec = ParamSpec::new(
     "index",
@@ -50,30 +50,107 @@ fn int(params: &Params, name: &str, default: u32) -> u32 {
 
 fn no_filter(index: i64, count: usize) -> CommandError {
     CommandError::BadParams(format!(
-        "there is no filter {index} (this image has {count}; numbering starts at 0)"
+        "there is no filter {index} (the list has {count}; numbering starts at 0)"
     ))
 }
 
-/// Append `filter` to the image's list, or replace the one at `index`.
-fn put(session: &mut Session, params: &Params, filter: Filter) -> Result<Value, CommandError> {
-    run_edit(session, params, false, |e, _| {
+/// Whose filter list a command changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Scope {
+    /// One image of a sequence (`sequence` and `image` parameters).
+    Image,
+    /// Every finished frame of one sequence (`sequence` parameter).
+    Sequence,
+    /// Every finished frame of the movie.
+    Movie,
+}
+
+impl Scope {
+    fn holder(self) -> &'static str {
+        match self {
+            Self::Image => "an image",
+            Self::Sequence => "a sequence",
+            Self::Movie => "the movie",
+        }
+    }
+}
+
+/// Read the `scope` parameter of the `movie.filter.*` commands (`movie` when it is absent).
+pub(crate) fn scope_of(params: &Params) -> Scope {
+    if params.string("scope") == Some("sequence") {
+        Scope::Sequence
+    } else {
+        Scope::Movie
+    }
+}
+
+/// Change the filter list `scope` points at with `change`, check it, store it and report it.
+pub(crate) fn edit_filters(
+    session: &mut Session,
+    params: &Params,
+    scope: Scope,
+    change: impl FnOnce(&mut Vec<Filter>) -> Result<(), CommandError>,
+) -> Result<Value, CommandError> {
+    match scope {
+        Scope::Image => run_edit(session, params, false, |e, _| {
+            change_list(&mut e.filters, scope, change)
+        }),
+        Scope::Sequence => {
+            let index = session.sequence_index(params)?;
+            let seq = session.sequence_mut(index)?;
+            change_list(&mut seq.filters, scope, change)?;
+            Ok(json!({"scope": "sequence", "sequence": index, "filters": to_json(&seq.filters)?}))
+        }
+        Scope::Movie => {
+            let project = session.project_mut();
+            change_list(&mut project.filters, scope, change)?;
+            Ok(json!({"scope": "movie", "sequence": null, "filters": to_json(&project.filters)?}))
+        }
+    }
+}
+
+fn change_list(
+    list: &mut Vec<Filter>,
+    scope: Scope,
+    change: impl FnOnce(&mut Vec<Filter>) -> Result<(), CommandError>,
+) -> Result<(), CommandError> {
+    let mut new = list.clone();
+    change(&mut new)?;
+    if new.len() > MAX_FILTERS {
+        return Err(CommandError::BadParams(format!(
+            "{} holds at most {MAX_FILTERS} filters; remove one first",
+            scope.holder()
+        )));
+    }
+    new.iter()
+        .try_for_each(Filter::validate)
+        .map_err(CommandError::Doc)?;
+    *list = new;
+    Ok(())
+}
+
+fn to_json(filters: &[Filter]) -> Result<Value, CommandError> {
+    serde_json::to_value(filters).map_err(|e| CommandError::Internal(e.to_string()))
+}
+
+/// Append `filter` to the list `scope` points at, or replace the one at `index`.
+pub(crate) fn put(
+    session: &mut Session,
+    params: &Params,
+    scope: Scope,
+    filter: Filter,
+) -> Result<Value, CommandError> {
+    edit_filters(session, params, scope, |list| {
         match params.integer("index") {
             Some(i) => {
-                let count = e.filters.len();
+                let count = list.len();
                 let slot = usize::try_from(i)
                     .ok()
-                    .and_then(|i| e.filters.get_mut(i))
+                    .and_then(|i| list.get_mut(i))
                     .ok_or_else(|| no_filter(i, count))?;
                 *slot = filter;
             }
-            None => {
-                if e.filters.len() >= MAX_FILTERS {
-                    return Err(CommandError::BadParams(format!(
-                        "an image holds at most {MAX_FILTERS} filters; remove one first"
-                    )));
-                }
-                e.filters.push(filter);
-            }
+            None => list.push(filter),
         }
         Ok(())
     })
@@ -93,13 +170,13 @@ const SMOOTH_PARAMS: &[ParamSpec] = &[
     .default_is("1"),
 ];
 fn smooth(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Smooth {
-            strength: num(p, "strength", 1.0),
-        },
-    )
+    put(s, p, Scope::Image, build_smooth(p))
+}
+
+pub(crate) fn build_smooth(p: &Params) -> Filter {
+    Filter::Smooth {
+        strength: num(p, "strength", 1.0),
+    }
 }
 
 const BLUR_PARAMS: &[ParamSpec] = &[
@@ -116,13 +193,13 @@ const BLUR_PARAMS: &[ParamSpec] = &[
     .default_is("3"),
 ];
 fn blur(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Blur {
-            radius: int(p, "radius", 3),
-        },
-    )
+    put(s, p, Scope::Image, build_blur(p))
+}
+
+pub(crate) fn build_blur(p: &Params) -> Filter {
+    Filter::Blur {
+        radius: int(p, "radius", 3),
+    }
 }
 
 const GAUSSIAN_PARAMS: &[ParamSpec] = &[
@@ -139,13 +216,13 @@ const GAUSSIAN_PARAMS: &[ParamSpec] = &[
     .default_is("4"),
 ];
 fn gaussian(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Gaussian {
-            sigma: num(p, "sigma", 4.0),
-        },
-    )
+    put(s, p, Scope::Image, build_gaussian(p))
+}
+
+pub(crate) fn build_gaussian(p: &Params) -> Filter {
+    Filter::Gaussian {
+        sigma: num(p, "sigma", 4.0),
+    }
 }
 
 const ZOOM_BLUR_PARAMS: &[ParamSpec] = &[
@@ -164,15 +241,15 @@ const ZOOM_BLUR_PARAMS: &[ParamSpec] = &[
     .default_is("0.3"),
 ];
 fn zoom_blur(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::ZoomBlur {
-            cx: num(p, "cx", 0.5),
-            cy: num(p, "cy", 0.5),
-            amount: num(p, "amount", 0.3),
-        },
-    )
+    put(s, p, Scope::Image, build_zoom_blur(p))
+}
+
+pub(crate) fn build_zoom_blur(p: &Params) -> Filter {
+    Filter::ZoomBlur {
+        cx: num(p, "cx", 0.5),
+        cy: num(p, "cy", 0.5),
+        amount: num(p, "amount", 0.3),
+    }
 }
 
 const RADIAL_BLUR_PARAMS: &[ParamSpec] = &[
@@ -191,15 +268,15 @@ const RADIAL_BLUR_PARAMS: &[ParamSpec] = &[
     .default_is("15"),
 ];
 fn radial_blur(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::RadialBlur {
-            cx: num(p, "cx", 0.5),
-            cy: num(p, "cy", 0.5),
-            angle: num(p, "angle", 15.0),
-        },
-    )
+    put(s, p, Scope::Image, build_radial_blur(p))
+}
+
+pub(crate) fn build_radial_blur(p: &Params) -> Filter {
+    Filter::RadialBlur {
+        cx: num(p, "cx", 0.5),
+        cy: num(p, "cy", 0.5),
+        angle: num(p, "angle", 15.0),
+    }
 }
 
 const SHARPEN_PARAMS: &[ParamSpec] = &[
@@ -219,14 +296,14 @@ const SHARPEN_PARAMS: &[ParamSpec] = &[
     .default_is("1.5"),
 ];
 fn sharpen(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Sharpen {
-            amount: num(p, "amount", 1.0),
-            radius: num(p, "radius", 1.5),
-        },
-    )
+    put(s, p, Scope::Image, build_sharpen(p))
+}
+
+pub(crate) fn build_sharpen(p: &Params) -> Filter {
+    Filter::Sharpen {
+        amount: num(p, "amount", 1.0),
+        radius: num(p, "radius", 1.5),
+    }
 }
 
 const EMBOSS_PARAMS: &[ParamSpec] = &[
@@ -254,15 +331,15 @@ const EMBOSS_PARAMS: &[ParamSpec] = &[
     .default_is("0.5"),
 ];
 fn emboss(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Emboss {
-            angle: num(p, "angle", 45.0),
-            depth: num(p, "depth", 1.0),
-            base: num(p, "base", 0.5),
-        },
-    )
+    put(s, p, Scope::Image, build_emboss(p))
+}
+
+pub(crate) fn build_emboss(p: &Params) -> Filter {
+    Filter::Emboss {
+        angle: num(p, "angle", 45.0),
+        depth: num(p, "depth", 1.0),
+        base: num(p, "base", 0.5),
+    }
 }
 
 const MOSAIC_PARAMS: &[ParamSpec] = &[
@@ -279,13 +356,13 @@ const MOSAIC_PARAMS: &[ParamSpec] = &[
     .default_is("8"),
 ];
 fn mosaic(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Mosaic {
-            cell: int(p, "cell", 8),
-        },
-    )
+    put(s, p, Scope::Image, build_mosaic(p))
+}
+
+pub(crate) fn build_mosaic(p: &Params) -> Filter {
+    Filter::Mosaic {
+        cell: int(p, "cell", 8),
+    }
 }
 
 const OIL_PAINT_PARAMS: &[ParamSpec] = &[
@@ -310,14 +387,14 @@ const OIL_PAINT_PARAMS: &[ParamSpec] = &[
     .default_is("32"),
 ];
 fn oil_paint(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::OilPaint {
-            radius: int(p, "radius", 3),
-            levels: int(p, "levels", 32),
-        },
-    )
+    put(s, p, Scope::Image, build_oil_paint(p))
+}
+
+pub(crate) fn build_oil_paint(p: &Params) -> Filter {
+    Filter::OilPaint {
+        radius: int(p, "radius", 3),
+        levels: int(p, "levels", 32),
+    }
 }
 
 const SPLASH_PARAMS: &[ParamSpec] = &[
@@ -342,14 +419,14 @@ const SPLASH_PARAMS: &[ParamSpec] = &[
     .default_is("0"),
 ];
 fn splash(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Splash {
-            radius: int(p, "radius", 5),
-            seed: u64::try_from(p.integer("seed").unwrap_or(0).max(0)).unwrap_or(0),
-        },
-    )
+    put(s, p, Scope::Image, build_splash(p))
+}
+
+pub(crate) fn build_splash(p: &Params) -> Filter {
+    Filter::Splash {
+        radius: int(p, "radius", 5),
+        seed: u64::try_from(p.integer("seed").unwrap_or(0).max(0)).unwrap_or(0),
+    }
 }
 
 const CYLINDER_PARAMS: &[ParamSpec] = &[
@@ -372,14 +449,14 @@ const CYLINDER_PARAMS: &[ParamSpec] = &[
     .default_is("0.5"),
 ];
 fn cylinder(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Cylinder {
-            vertical: p.boolean("vertical").unwrap_or(false),
-            amount: num(p, "amount", 0.5),
-        },
-    )
+    put(s, p, Scope::Image, build_cylinder(p))
+}
+
+pub(crate) fn build_cylinder(p: &Params) -> Filter {
+    Filter::Cylinder {
+        vertical: p.boolean("vertical").unwrap_or(false),
+        amount: num(p, "amount", 0.5),
+    }
 }
 
 const WHIRL_PARAMS: &[ParamSpec] = &[
@@ -401,16 +478,16 @@ const WHIRL_PARAMS: &[ParamSpec] = &[
     .default_is("90"),
 ];
 fn whirl(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Whirl {
-            cx: num(p, "cx", 0.5),
-            cy: num(p, "cy", 0.5),
-            radius: num(p, "radius", 200.0),
-            angle: num(p, "angle", 90.0),
-        },
-    )
+    put(s, p, Scope::Image, build_whirl(p))
+}
+
+pub(crate) fn build_whirl(p: &Params) -> Filter {
+    Filter::Whirl {
+        cx: num(p, "cx", 0.5),
+        cy: num(p, "cy", 0.5),
+        radius: num(p, "radius", 200.0),
+        angle: num(p, "angle", 90.0),
+    }
 }
 
 const PINCH_PARAMS: &[ParamSpec] = &[
@@ -432,19 +509,19 @@ const PINCH_PARAMS: &[ParamSpec] = &[
     .default_is("0.5"),
 ];
 fn pinch(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
-    put(
-        s,
-        p,
-        Filter::Pinch {
-            cx: num(p, "cx", 0.5),
-            cy: num(p, "cy", 0.5),
-            radius: num(p, "radius", 200.0),
-            amount: num(p, "amount", 0.5),
-        },
-    )
+    put(s, p, Scope::Image, build_pinch(p))
 }
 
-const REMOVE_PARAMS: &[ParamSpec] = &[
+pub(crate) fn build_pinch(p: &Params) -> Filter {
+    Filter::Pinch {
+        cx: num(p, "cx", 0.5),
+        cy: num(p, "cy", 0.5),
+        radius: num(p, "radius", 200.0),
+        amount: num(p, "amount", 0.5),
+    }
+}
+
+pub(crate) const REMOVE_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
     IMAGE,
     ParamSpec::new(
@@ -456,18 +533,26 @@ const REMOVE_PARAMS: &[ParamSpec] = &[
     .range(0.0, 15.0),
 ];
 fn remove(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    remove_from(session, params, Scope::Image)
+}
+
+pub(crate) fn remove_from(
+    session: &mut Session,
+    params: &Params,
+    scope: Scope,
+) -> Result<Value, CommandError> {
     let index = params.integer("index").unwrap_or(-1);
-    run_edit(session, params, false, |e, _| {
+    edit_filters(session, params, scope, |list| {
         let at = usize::try_from(index)
             .ok()
-            .filter(|i| *i < e.filters.len())
-            .ok_or_else(|| no_filter(index, e.filters.len()))?;
-        e.filters.remove(at);
+            .filter(|i| *i < list.len())
+            .ok_or_else(|| no_filter(index, list.len()))?;
+        list.remove(at);
         Ok(())
     })
 }
 
-const MOVE_PARAMS: &[ParamSpec] = &[
+pub(crate) const MOVE_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
     IMAGE,
     ParamSpec::new(
@@ -480,12 +565,20 @@ const MOVE_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("to", ParamKind::Integer, true, "The position to move it to").range(0.0, 15.0),
 ];
 fn move_filter(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    move_in(session, params, Scope::Image)
+}
+
+pub(crate) fn move_in(
+    session: &mut Session,
+    params: &Params,
+    scope: Scope,
+) -> Result<Value, CommandError> {
     let (from, to) = (
         params.integer("index").unwrap_or(-1),
         params.integer("to").unwrap_or(-1),
     );
-    run_edit(session, params, false, |e, _| {
-        let count = e.filters.len();
+    edit_filters(session, params, scope, |list| {
+        let count = list.len();
         let pick = |n: i64| {
             usize::try_from(n)
                 .ok()
@@ -493,16 +586,24 @@ fn move_filter(session: &mut Session, params: &Params) -> Result<Value, CommandE
                 .ok_or_else(|| no_filter(n, count))
         };
         let (from, to) = (pick(from)?, pick(to)?);
-        let f = e.filters.remove(from);
-        e.filters.insert(to, f);
+        let f = list.remove(from);
+        list.insert(to, f);
         Ok(())
     })
 }
 
-const CLEAR_PARAMS: &[ParamSpec] = &[SEQUENCE, IMAGE];
+pub(crate) const CLEAR_PARAMS: &[ParamSpec] = &[SEQUENCE, IMAGE];
 fn clear(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
-    run_edit(session, params, false, |e, _| {
-        e.filters.clear();
+    clear_list(session, params, Scope::Image)
+}
+
+pub(crate) fn clear_list(
+    session: &mut Session,
+    params: &Params,
+    scope: Scope,
+) -> Result<Value, CommandError> {
+    edit_filters(session, params, scope, |list| {
+        list.clear();
         Ok(())
     })
 }

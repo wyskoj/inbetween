@@ -10,7 +10,9 @@
 
 use crate::effect_cmds::SEQUENCE;
 use crate::{CommandError, CommandSpec, ParamKind, ParamSpec, Params, Session};
-use inbetween_doc::{affine_apply, affine_inv, affine_mul, Affine, Crop, ImageEdit};
+use inbetween_doc::{
+    affine_apply, affine_inv, affine_mul, AdjustSettings, Affine, Crop, ImageEdit,
+};
 use inbetween_geom::Point;
 use inbetween_morph::fit_transform;
 use serde_json::{json, Value};
@@ -463,7 +465,7 @@ const ADJUST_FIELDS: [(&str, &str); 7] = [
     ("saturation", "Saturation, -100 to 100"),
 ];
 
-const ADJUST_PARAMS: &[ParamSpec] = &[
+pub(crate) const ADJUST_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
     IMAGE,
     ParamSpec::new("brightness", ParamKind::Number, false, ADJUST_FIELDS[0].1).range(-100.0, 100.0),
@@ -485,30 +487,34 @@ const ADJUST_PARAMS: &[ParamSpec] = &[
 
 fn adjust(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     run_edit(session, params, false, |e, _| {
-        let a = &mut e.adjust;
-        if params.boolean("reset").unwrap_or(false) {
-            *a = Default::default();
-        }
-        let set = |name: &str, slot: &mut f64| {
-            if let Some(v) = params.number(name) {
-                *slot = v;
-            }
-        };
-        set("brightness", &mut a.brightness);
-        set("contrast", &mut a.contrast);
-        set("red", &mut a.red);
-        set("green", &mut a.green);
-        set("blue", &mut a.blue);
-        set("hue", &mut a.hue);
-        set("saturation", &mut a.saturation);
-        if let Some(v) = params.boolean("negative") {
-            a.negative = v;
-        }
-        if let Some(v) = params.boolean("grayscale") {
-            a.grayscale = v;
-        }
+        change_adjust(&mut e.adjust, params);
         Ok(())
     })
+}
+
+/// Apply the adjustment parameters (`reset` first, then each one given) to `a`.
+pub(crate) fn change_adjust(a: &mut AdjustSettings, params: &Params) {
+    if params.boolean("reset").unwrap_or(false) {
+        *a = Default::default();
+    }
+    let set = |name: &str, slot: &mut f64| {
+        if let Some(v) = params.number(name) {
+            *slot = v;
+        }
+    };
+    set("brightness", &mut a.brightness);
+    set("contrast", &mut a.contrast);
+    set("red", &mut a.red);
+    set("green", &mut a.green);
+    set("blue", &mut a.blue);
+    set("hue", &mut a.hue);
+    set("saturation", &mut a.saturation);
+    if let Some(v) = params.boolean("negative") {
+        a.negative = v;
+    }
+    if let Some(v) = params.boolean("grayscale") {
+        a.grayscale = v;
+    }
 }
 
 const RESET_PARAMS: &[ParamSpec] = &[
