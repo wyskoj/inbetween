@@ -70,6 +70,8 @@ impl Registry {
         specs.extend(crate::file_cmds::specs());
         #[cfg(not(target_arch = "wasm32"))]
         specs.extend(crate::face_media::specs());
+        #[cfg(not(target_arch = "wasm32"))]
+        specs.extend(crate::face_detect::specs());
         Self { specs }
     }
 

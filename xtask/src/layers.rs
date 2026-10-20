@@ -13,6 +13,7 @@ pub const LAYERS: &[(&str, u8)] = &[
     ("inbetween-codecs", 0),
     ("inbetween-doc", 1),
     ("inbetween-morph", 2),
+    ("inbetween-detect", 2),
     ("inbetween-render-cpu", 3),
     ("inbetween-render-gpu", 3),
     ("inbetween-format", 3),

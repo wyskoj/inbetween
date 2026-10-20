@@ -619,6 +619,36 @@ fn every_command_survives_adversarial_parameters() {
         }
     }
 
+    // The detector paths, which the generic matrix never selects (`source` is a choice
+    // parameter), in every session from empty to deliberately broken.
+    let detect_calls = [
+        ("face.detect", json!({})),
+        ("face.detect", json!({"mesh": true, "image": 1})),
+        ("face.detect", json!({"image": 2, "sequence": 1})),
+        ("face.locate", json!({"source": "detect"})),
+        ("face.locate", json!({"source": "detect", "image": 2})),
+        (
+            "face.locate",
+            json!({"source": "detect", "all_faces": true, "face": 15, "mode": "append"}),
+        ),
+        (
+            "face.locate",
+            json!({"source": "detect", "all_sequences": true}),
+        ),
+        (
+            "face.locate",
+            json!({"source": "landmarks", "layout": "mesh478", "landmarks": fx.s("garbage.bin")}),
+        ),
+        ("face.locateAll", json!({"sequence": 0})),
+        ("face.extract", json!({"out_dir": "detect-out"})),
+    ];
+    for (id, params) in &detect_calls {
+        let spec = registry.get(id).unwrap();
+        for (variant, make) in &variants {
+            attempt(spec, variant, make.as_ref(), params.clone());
+        }
+    }
+
     println!(
         "panic hunt: {runs} calls, {oks} succeeded, {} failures",
         failures.len()

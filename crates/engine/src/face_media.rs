@@ -120,6 +120,19 @@ fn extract_sequence(
         Some(t) => t,
         None => FaceBox::centered(output.width, output.height).map_err(morph_error)?,
     };
+    // No face placed here yet: find one in each image and place the model on it.
+    if crate::face_detect::AVAILABLE && session.sequence(index)?.dots.len() == first {
+        let [one, two] =
+            crate::face_detect::runs(session, index, None, crate::face_detect::Pick::One(0))?;
+        if let (Some(a), Some(b)) = (one.first(), two.first()) {
+            let target = session.sequence_mut(index)?;
+            for (p, q) in a.iter().zip(b) {
+                let mut pair = DotPair::fixed(*p);
+                pair.set_end(2, *q);
+                target.dots.pairs.push(pair);
+            }
+        }
+    }
     let seq = session.sequence(index)?.clone();
     let mut done = 0;
     for which in [1u8, 2] {

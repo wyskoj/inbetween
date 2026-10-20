@@ -1,0 +1,35 @@
+[package]
+name = "inbetween-detect"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+inbetween-geom = { path = "../geom" }
+inbetween-raster = { path = "../raster" }
+tract-onnx = "0.23"
+
+# tract's random-number crate needs the browser entropy source on wasm32.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+[dev-dependencies]
+inbetween-codecs = { path = "../codecs" }
+
+[features]
+default = ["bundled-models"]
+# Embeds about 3 MB of ONNX models. Slim builds drop it and `Detector::new` returns an error.
+bundled-models = []
+
+[lints]
+workspace = true
+
+[[example]]
+name = "perf_detect"
+required-features = ["bundled-models"]
+
+[[example]]
+name = "wasm_check"
+required-features = ["bundled-models"]

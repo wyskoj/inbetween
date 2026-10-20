@@ -53,3 +53,15 @@ That is about 40 times faster than the CPU renderer at 4 threads (28 ms) before 
 | 2026-10-19 | cylinder, whirl, pinch | 47 ms, 29 ms, 43 ms |
 
 The adjust (15 ms) and gaussian (60 ms) targets are not met yet; both are memory-bound on a 33 MB image (a plain flip costs 6 ms). Edits are processed once per source and cached by the session, so this cost is paid on edit, not per frame. Zoom and radial blur take 24 bilinear taps per pixel and are the slowest; they are the first candidates if interactive dragging feels slow.
+
+## Face detection (M19)
+
+`cargo xtask perf` runs `crates/detect/examples/perf_detect.rs`, which fails over a 30 ms budget (also `crates/detect/tests/detect.rs` `timing`, by hand): the portrait placed in a 1920x1080 frame, mean of 10 runs after a warm-up, release build.
+
+| Date | Operation | Time |
+|---|---|---|
+| 2026-10-20 | load both models (`Detector::new`, once per process) | 59 to 68 ms |
+| 2026-10-20 | `faces` on 1920x1080 (three box-detector windows on threads, one mesh) | 50 ms with the windows in sequence, 22 ms on threads (borrowed image, finiteness scanned on the shrunk copy) |
+| 2026-10-20 | `faces` on 512x640 (one window) | 9 ms |
+
+The target was under 30 ms for a 1080p image and is met. Detections are cached per source image, so undo and repeat cost nothing.

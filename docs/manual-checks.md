@@ -38,3 +38,10 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Ctrl+=, Ctrl+-, Ctrl+0, Alt+Ctrl+0, Alt+Right and Alt+Down zoom the panel under the pointer; with the preview linked it follows.
 - [ ] F8 frame strip on a long sequence: scrolling stays smooth and thumbnails fill in.
 - [ ] Sequence > Movie Size: pick 1080p; the dots still sit on their features.
+
+## M19: face detection
+
+- [x] With a portrait pair in a project (public domain or your own, never committed), Face > Locate Face puts 38 dots on each image's own face; the dots sit on the eyes, brows, nose, mouth and jaw of both pictures (checked 2026-10-20 with the two NASA portraits in the real window).
+- [x] Face > Locate All Faces on a group photo places one run of dots per face, left to right (checked 2026-10-20: the two portraits side by side give 76 dots, 38 on each person, in both panels).
+- [x] A picture with no face leaves the dots alone and shows "no face found in image N" in the Locate Face form and in the status bar (checked 2026-10-20 in an offscreen render of the real shell, `INBETWEEN_UI_SHOTS=folder cargo test -p inbetween-ui-egui --test face_detect`; the demo project's sun and moon images have no face).
+- [x] `inbetween out.inbetween --screenshot shot.png` shows the dot overlay on both panels (checked 2026-10-20 on the two NASA portraits).

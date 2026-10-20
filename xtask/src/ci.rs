@@ -30,6 +30,33 @@ fn full() -> Result<(), String> {
         ],
     )?;
     step("test", &["test", "--workspace"])?;
+    // The slim build: no bundled face detector, so `face.locate` falls back to a box.
+    step(
+        "slim clippy",
+        &[
+            "clippy",
+            "-p",
+            "inbetween-detect",
+            "-p",
+            "inbetween-engine",
+            "--no-default-features",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+    )?;
+    step(
+        "slim test",
+        &[
+            "test",
+            "-p",
+            "inbetween-detect",
+            "-p",
+            "inbetween-engine",
+            "--no-default-features",
+        ],
+    )?;
     step("layers", &["xtask", "layers"])?;
     step("wasm", &["xtask", "wasm"])?;
     deny()

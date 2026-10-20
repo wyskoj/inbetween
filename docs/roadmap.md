@@ -81,6 +81,7 @@
 | M16 | Source image editing and captions, spec §2 and §8 (done) |
 | M17 | Key dots, spec §3 (done) |
 | M18 | Movie, preview and workspace, spec §9 and §12 (done) |
+| M19 | Bundled face landmark detector, spec §10 (done) |
 
 ### M15: Projects and files (spec §1) (done)
 - Image import: BMP, TIFF, TGA, GIF (first frame) and a flattened PSD reader, all with alpha where the format has it.
@@ -109,6 +110,13 @@
 - Shell: movie-scope preview and scrub, checkerboard, layouts F5 to F9 and F11, splitters, frame strip, zoom presets and preview sync, one table of view actions (D50), memory-based undo (D51).
 
 **Exit:** the §9 and §12 rows are `[x]` except live preview while dragging camera and effects (no on-canvas camera handles yet).
+
+### M19: Bundled face landmark detector (spec §10) (done)
+
+- `crates/detect` (L2): box detector and 468-point mesh network on `tract-onnx`, name-keyed mesh map (D52).
+- Commands: `face.detect`, `face.locateAll`, `face.locate` (`source`, `face`, `all_faces`, `layout: mesh478`), detection inside `face.extract`.
+
+**Exit:** `face.locate` and `face.extract` find the face in each image themselves, offline, in pure Rust. Open: nothing; hairline landmarks stay approximate.
 
 ## Known debt
 

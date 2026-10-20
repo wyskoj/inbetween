@@ -261,7 +261,11 @@ fn locate_defaults_to_a_centred_box_and_can_fill_every_sequence() {
     let d = Dir::new("locate-all");
     let mut s = session(&d);
     run(&mut s, "sequence.duplicate", json!({}));
-    run(&mut s, "face.locate", json!({"all_sequences": true}));
+    run(
+        &mut s,
+        "face.locate",
+        json!({"all_sequences": true, "source": "box"}),
+    );
     let centred = FaceBox::centered(W, H).unwrap();
     let expected = face::place(&s.project().face, &centred);
     for seq in 0..2 {
@@ -273,7 +277,11 @@ fn locate_defaults_to_a_centred_box_and_can_fill_every_sequence() {
         "face.model",
         json!({"op": "preset", "preset": "minimal"}),
     );
-    run(&mut s, "face.locate", json!({"sequence": 1}));
+    run(
+        &mut s,
+        "face.locate",
+        json!({"sequence": 1, "source": "box"}),
+    );
     assert_eq!(
         s.project().sequences[1].dots.len(),
         s.project().face.active_count()

@@ -24,6 +24,8 @@ mod error;
 mod export_cmds;
 mod face_cmds;
 #[cfg(not(target_arch = "wasm32"))]
+mod face_detect;
+#[cfg(not(target_arch = "wasm32"))]
 mod face_media;
 #[cfg(not(target_arch = "wasm32"))]
 mod file_cmds;

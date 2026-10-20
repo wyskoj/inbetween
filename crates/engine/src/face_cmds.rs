@@ -322,9 +322,9 @@ fn load_model(_: &str) -> Result<FaceModel, CommandError> {
 
 // --------------------------------------------------------------- face.locate
 
-const LOCATE_MODES: &[&str] = &["replace", "append"];
+pub(crate) const LOCATE_MODES: &[&str] = &["replace", "append"];
 
-const LOCATE_PARAMS: &[ParamSpec] = &[
+pub(crate) const LOCATE_PARAMS: &[ParamSpec] = &[
     SEQUENCE,
     ParamSpec::new(
         "all_sequences",
@@ -359,7 +359,94 @@ const LOCATE_PARAMS: &[ParamSpec] = &[
         "A .inbetweenlandmarks file with the face's landmark positions in the model's order (from any landmark detector), instead of a box",
     )
     .open_file(&["inbetweenlandmarks"]),
+    ParamSpec::new(
+        "source",
+        ParamKind::String,
+        false,
+        "Where the face comes from: detect (the bundled detector finds the face in each image and places the model on each image separately); box (the face box, or a centred starting box); landmarks (a .inbetweenlandmarks file)",
+    )
+    .one_of(LOCATE_SOURCES)
+    .default_is("detect, or landmarks / box when those parameters are given"),
+    ParamSpec::new(
+        "face",
+        ParamKind::Integer,
+        false,
+        "With source detect: which detected face to place, counting from 0, best first",
+    )
+    .range(0.0, 15.0)
+    .default_is("0"),
+    ParamSpec::new(
+        "all_faces",
+        ParamKind::Bool,
+        false,
+        "With source detect: place every face found, left to right, one after another (both images must have the same number of faces)",
+    ),
+    ParamSpec::new(
+        "layout",
+        ParamKind::String,
+        false,
+        "How the landmarks file is laid out: model (one position per enabled landmark of the face model) or mesh478 (a 468 or 478 point face mesh, mapped onto the model by landmark name)",
+    )
+    .one_of(LOCATE_LAYOUTS)
+    .default_is("model"),
 ];
+
+const LOCATE_SOURCES: &[&str] = &["detect", "box", "landmarks"];
+const LOCATE_LAYOUTS: &[&str] = &["model", "mesh478"];
+
+/// Whether `face.locate` detects by default (the detector is built in).
+fn detects_by_default() -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        crate::face_detect::AVAILABLE
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        false
+    }
+}
+
+/// The detected landmark runs of sequence `index` for the wanted images.
+#[cfg(not(target_arch = "wasm32"))]
+fn detected_runs(
+    session: &mut Session,
+    index: usize,
+    image: Option<i64>,
+    face: usize,
+    all: bool,
+) -> Result<[Vec<Vec<Point>>; 2], CommandError> {
+    let pick = if all {
+        crate::face_detect::Pick::All
+    } else {
+        crate::face_detect::Pick::One(face)
+    };
+    crate::face_detect::runs(session, index, image, pick)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn detected_runs(
+    _: &mut Session,
+    _: usize,
+    _: Option<i64>,
+    _: usize,
+    _: bool,
+) -> Result<[Vec<Vec<Point>>; 2], CommandError> {
+    Err(CommandError::BadParams(
+        "face detection is not available in this build; give a face box".into(),
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn mesh_landmarks(points: &[Point], model: &FaceModel) -> Result<Vec<Point>, CommandError> {
+    crate::face_detect::from_mesh(points, model)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn mesh_landmarks(_: &[Point], _: &FaceModel) -> Result<Vec<Point>, CommandError> {
+    Err(CommandError::BadParams(
+        "mesh landmark files are not available in this build".into(),
+    ))
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 fn read_landmarks(path: &str) -> Result<Vec<Point>, CommandError> {
@@ -375,7 +462,7 @@ fn read_landmarks(_: &str) -> Result<Vec<Point>, CommandError> {
     ))
 }
 
-fn locate(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+pub(crate) fn locate(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
     let targets: Vec<usize> = if params.boolean("all_sequences").unwrap_or(false) {
         (0..session.project().sequences.len()).collect()
     } else {
@@ -389,40 +476,91 @@ fn locate(session: &mut Session, params: &Params) -> Result<Value, CommandError>
         ));
     }
     let output = session.project().output;
-    let placed = match params.string("landmarks") {
-        Some(path) => {
-            if explicit_box(params)?.is_some() {
-                return Err(CommandError::BadParams(
-                    "give a face box or a landmarks file, not both".into(),
-                ));
-            }
+    let landmarks_path = params.string("landmarks");
+    let boxed = explicit_box(params)?;
+    if landmarks_path.is_some() && boxed.is_some() {
+        return Err(CommandError::BadParams(
+            "give a face box or a landmarks file, not both".into(),
+        ));
+    }
+    let source = match params.string("source") {
+        Some(s) => s,
+        None if landmarks_path.is_some() => "landmarks",
+        None if boxed.is_some() => "box",
+        None if detects_by_default() => "detect",
+        None => "box",
+    };
+    let wrong = |what: &str| {
+        Err(CommandError::BadParams(format!(
+            "source `{source}` does not use {what}; leave it out or change `source`"
+        )))
+    };
+    if source != "landmarks" && landmarks_path.is_some() {
+        return wrong("a landmarks file");
+    }
+    if source != "box" && boxed.is_some() {
+        return wrong("a face box");
+    }
+    // One set of positions for both images (box and landmarks), or none (detect, which
+    // places each image's own face).
+    let shared: Option<Vec<Point>> = match source {
+        "landmarks" => {
+            let path = landmarks_path.ok_or_else(|| {
+                CommandError::BadParams("source `landmarks` needs the `landmarks` file".into())
+            })?;
             let points = read_landmarks(path)?;
-            if points.len() != count {
+            if params.string("layout") == Some("mesh478") {
+                Some(mesh_landmarks(&points, &model)?)
+            } else if points.len() == count {
+                Some(points)
+            } else {
                 return Err(CommandError::BadParams(format!(
                     "the landmarks file has {} positions but the face model has {count} enabled landmarks",
                     points.len()
                 )));
             }
-            points
         }
-        None => {
-            let face_box = match explicit_box(params)? {
+        "box" => {
+            let face_box = match boxed {
                 Some(b) => b,
                 None => FaceBox::centered(output.width, output.height).map_err(morph_error)?,
             };
-            face::place(&model, &face_box)
+            Some(face::place(&model, &face_box))
         }
+        _ => None,
     };
     let image = params.integer("image");
     let append = params.string("mode") == Some("append");
+    let face_number = params
+        .integer("face")
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(0);
+    let all_faces = params.boolean("all_faces").unwrap_or(false);
     for &index in &targets {
+        let (first, second) = match &shared {
+            Some(p) => (p.clone(), p.clone()),
+            None => {
+                let [a, b] = detected_runs(session, index, image, face_number, all_faces)?;
+                (a.concat(), b.concat())
+            }
+        };
         let seq = session.sequence_mut(index)?;
+        let both = |k: usize| {
+            let mut pair = DotPair::fixed(first.get(k).copied().unwrap_or_default());
+            pair.set_end(2, second.get(k).copied().unwrap_or_default());
+            pair
+        };
+        let placed = if image == Some(2) { &second } else { &first };
         if append {
-            seq.dots
-                .pairs
-                .extend(placed.iter().map(|p| DotPair::fixed(*p)));
+            if image.is_none() {
+                seq.dots.pairs.extend((0..first.len()).map(both));
+            } else {
+                seq.dots
+                    .pairs
+                    .extend(placed.iter().map(|p| DotPair::fixed(*p)));
+            }
         } else if image.is_none() {
-            seq.dots.pairs = placed.iter().map(|p| DotPair::fixed(*p)).collect();
+            seq.dots.pairs = (0..first.len()).map(both).collect();
             seq.dots.lines.clear();
         } else {
             for (k, p) in placed.iter().enumerate() {
@@ -438,6 +576,7 @@ fn locate(session: &mut Session, params: &Params) -> Result<Value, CommandError>
     }
     Ok(json!({
         "sequences": targets,
+        "source": source,
         "dots_per_face": count,
         "dots": targets.iter().map(|&i| session.project().sequences.get(i).map_or(0, |s| s.dots.len())).collect::<Vec<_>>(),
     }))
@@ -538,7 +677,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             label: "Locate Face",
             menu: "Face/Locate Face...",
             shortcut: None,
-            description: "Place the face model's dots on a face: in a face box you give (or a centred starting box), or at landmark positions a detector wrote to a .inbetweenlandmarks file. Replace the sequence's dots or append another face; apply to one sequence or all. Inbetween does not detect faces itself.",
+            description: "Place the face model's dots on a face. By default Inbetween's bundled detector finds the face in each image and places the model on each image separately; or give a face box (or use a centred starting box), or landmark positions another tool wrote to a .inbetweenlandmarks file (as the model's landmarks, or as a 468/478 point mesh). Replace the sequence's dots or append another face (all_faces places every face found); apply to one sequence or all.",
             params: LOCATE_PARAMS,
             enabled: has_sequence,
             disabled_reason: "the project has no sequence to put a face in",

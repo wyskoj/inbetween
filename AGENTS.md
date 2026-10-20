@@ -25,6 +25,7 @@ crates/
   codecs        L0  image file read/write (standalone, no workspace deps)
   doc           L1  project model: sequences, images, dot sets, curves, effects (pure data)
   morph         L2  triangulation policy, dot interpolation, curves, frame planning
+  detect        L2  face detector: ONNX models on tract, anchors, mesh-to-landmark map
   render-cpu    L3  CPU renderer: the reference oracle
   render-gpu    L3  wgpu renderer, tested against render-cpu
   format        L3  .inbetween project and dot-set files (versioned, serde)
