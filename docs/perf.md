@@ -65,3 +65,13 @@ The adjust (15 ms) and gaussian (60 ms) targets are not met yet; both are memory
 | 2026-10-20 | `faces` on 512x640 (one window) | 9 ms |
 
 The target was under 30 ms for a 1080p image and is met. Detections are cached per source image, so undo and repeat cost nothing.
+
+## Movie pass (effects, adjust, filters)
+
+| Date | What | Time |
+|---|---|---|
+| 2026-10-20 | back colour and radial rays on a 1920x1080 frame (release) | 13 ms |
+| 2026-10-20 | colour adjust (brightness and hue) | 22 ms |
+| 2026-10-20 | Gaussian filter, sigma 3 | 65 ms |
+
+Measured by `cargo test -p inbetween-render-cpu --release --test movie_pass_perf -- --ignored --nocapture`. Effects and filters are CPU only, so a project that uses them previews on the CPU.

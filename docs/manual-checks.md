@@ -56,3 +56,10 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Drag a row by its title onto another row: it takes that position and stays selected; Ctrl+Z puts it back in one step.
 - [ ] Drag a thumbnail onto another row's thumbnail: the image and its dots arrive there; dropping on a title does nothing; the pointer feels right while dragging (highlight on the targets).
 - [ ] Switch the list's type box to Layers: rows say layer 1 (top), layer 2 (below); the preview stacks them; switch back and the movie plays in order.
+
+## §7: effects, sound and slots
+
+- [ ] Effects > Mask... opens the Effects window; the Sequence/Movie switch changes whose effects the rows show; every checkbox, slider and colour button changes the preview at once, and Ctrl+Z after Close undoes the whole session in one step.
+- [ ] Drag an image file from the desktop over a thumbnail slot: the slot lights up and the hint names it; dropping fills it and switches the effect on. A WAV or MP3 dropped anywhere becomes the movie's sound.
+- [ ] With a sound set, Play plays it from the right spot, a loop jumps back in time with the picture, scrubbing while paused is silent, and View > Mute Sound silences it. With no sound device the status bar says so and nothing crashes.
+- [ ] Image > Adjust... > Movie: the sliders change every frame; Sequence filters changes only the selected sequence.

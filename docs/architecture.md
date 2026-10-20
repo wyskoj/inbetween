@@ -8,7 +8,7 @@ A crate depends only on crates in a strictly lower layer. `cargo xtask layers` e
 
 | Layer | Crates | Role |
 |---|---|---|
-| L0 | `geom`, `raster`, `codecs` | Math, pixels, image file I/O. No workspace deps. |
+| L0 | `geom`, `raster`, `codecs`, `audio` | Math, pixels, image file I/O, sound decoding. No workspace deps. |
 | L1 | `doc` | Project model as pure data. |
 | L2 | `morph` | Triangulation policy, dot interpolation, curves, frame planning. |
 | L3 | `render-cpu`, `render-gpu`, `format` | Renderers and file formats. |
@@ -17,7 +17,7 @@ A crate depends only on crates in a strictly lower layer. `cargo xtask layers` e
 | L6 | `ui-egui`, `mcp` | Shells over the engine. The only layer allowed egui, eframe, winit, rfd. |
 | apps | `inbetween` (desktop), `inbetween-cli` (binary `ib`) | Entry points. |
 
-Crate directories drop the `inbetween-` prefix (`crates/geom` is package `inbetween-geom`). `inbetween-testkit` and `xtask` sit outside the stack. Crates are added when a milestone needs them. Present so far: `geom`, `raster`, `codecs`, `doc`, `morph`, `render-cpu`, `format`, `testkit`.
+Crate directories drop the `inbetween-` prefix (`crates/geom` is package `inbetween-geom`). `inbetween-testkit` and `xtask` sit outside the stack. Crates are added when a milestone needs them. Present so far: `geom`, `raster`, `codecs`, `audio`, `doc`, `morph`, `render-cpu`, `format`, `testkit`.
 
 L0 to L5 stay wasm-clean (file-system code is gated behind `cfg(not(target_arch = "wasm32"))` or a platform service).
 
@@ -94,3 +94,5 @@ Movie settings are engine commands (`movie_cmds.rs`: `movie.size`, `movie.fps`);
 ## MCP server (as built in M14)
 
 `inbetween-mcp` (L6) wraps a `Session` and a `Registry` in a stdio JSON-RPC loop (`Server::handle` for one message, `Server::serve` for the stream). `tools/list` is generated from `Registry::specs()` (`schema.rs` turns a `ParamSpec` list into JSON Schema), and `tools/call` dispatches through `Registry::run_caught`. `ib mcp` is the only entry point; see D53 for the rules.
+
+`audio` (L0) decodes WAV (`hound`) and MP3 (`puremp3`) bytes to `f32` samples with allocation caps, and holds `Envelope`, the pure rule for which part of the sound plays when (loop, cut, fades). The engine's `effect.sound` stores `Project::sound`; `export.video` muxes it through ffmpeg (`export::video::ffmpeg_args`); the shell plays it with `cpal` (`ui-egui/src/audio.rs`). Movie effects, adjustment and filters run in `render-cpu::movie_pass` and the engine's `MovieFinish`, which `render_movie` and `Prepared::finish` share. See D55 to D58.

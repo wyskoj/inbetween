@@ -82,6 +82,7 @@
 | M17 | Key dots, spec §3 (done) |
 | M18 | Movie, preview and workspace, spec §9 and §12 (done) |
 | M19 | Bundled face landmark detector, spec §10 (done) |
+| M20 | Effects, spec §7 (done) |
 
 ### M14: MCP server, packaging and signed releases
 
@@ -129,6 +130,14 @@
 
 **Exit:** `face.locate` and `face.extract` find the face in each image themselves, offline, in pure Rust. Open: nothing; hairline landmarks stay approximate.
 
+### M20: Effects (spec §7) (done)
+
+- Movie-level effects through `scope=movie`, movie-wide adjust and filters, per-sequence filters, the camera zone (D55 to D57).
+- `effect.sound`: the audio crate, ffmpeg mux, playback with mute (D58).
+- Shell: the Effects window with thumbnail slots, drop onto slots, Adjust scopes.
+
+**Exit:** every §7 row and `file.dragDrop` are `[x]`. GPU effects are listed under Known debt.
+
 ## Known debt
 
 Work that is not a feature row but should not be forgotten. Pick from here when a milestone leaves room.
@@ -136,4 +145,6 @@ Work that is not a feature row but should not be forgotten. Pick from here when 
 - **Image operation speed** (`docs/perf.md`, 1080p, 4 threads): `image.adjust` takes about 27 ms (target 15) and a Gaussian of sigma 10 about 124 ms (target 60). Zoom blur (0.5 s) and radial blur (1.1 s) take 24 bilinear taps per pixel. Edits are cached per source, so this is felt only while dragging a slider.
 - **Caption reach:** a caption wholly outside the frame draws nothing, and border or shadow reach from outside the frame is limited to 256 px (D46).
 - **Live-window checks:** the by-hand list in `docs/manual-checks.md` has not been run for M15 and M16.
+- **GPU effects:** effects, the movie pass, filters and captions are drawn by the CPU renderer; a project that uses any of them previews on the CPU. A GPU port must match `render-cpu` (the movie pass costs 13 ms for effects, 22 ms for adjust and 65 ms for a Gaussian at 1080p, `docs/perf.md`).
+- **Movie trail in the sequence preview:** the shell's sequence-scope preview has no earlier movie frames, so it shows no movie trail (exports and the movie preview do).
 - **Other platforms:** only Windows has been run.

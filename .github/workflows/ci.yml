@@ -31,7 +31,7 @@ jobs:
       # tests must run there. On Windows and macOS they skip when no adapter exists.
       - name: software Vulkan (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+        run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers libvulkan1 libasound2-dev
       - name: test
         run: cargo test --workspace
         env:

@@ -48,7 +48,7 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 | [x] | `file.wizard` | New-project wizard: pick type, pick an ordered image list (Add, Up, Down, Remove), optional loop back to the first, build sequences | P1 |
 | [x] | `dots.export` / `dots.import` | Export/import a dot set on its own (`.inbetweendots`) | P1 |
 | [x] | `frame.exportEdit` | Export a single frame together with its dot set | P2 |
-| [~] | `file.dragDrop` | Drop images onto either source panel (done), a project or dot file, or several images to open the wizard; effect slots open | P1 |
+| [x] | `file.dragDrop` | Drop images onto either source panel (done), a project or dot file, or several images to open the wizard; images and sound files onto the Effects window's slots | P1 |
 
 **Image import:** BMP, JPEG, TIFF, PNG, PSD (flattened), TGA, GIF; keep alpha for BMP/TIFF/PNG/PSD/TGA. P0 for PNG/JPEG, P1 for the rest. *Status: done (`codecs` reads all of them; PSD is an in-house flattened-composite reader; GIF reads the first frame; import only, export stays PNG/JPEG).*
 
@@ -164,22 +164,22 @@ All curves are smooth splines through ≥2 control points, with per-frame tick m
 
 ## 7. Effects
 
-*Status: back colour, background, mask and foreground are built per sequence (`effect.*` commands, CPU renderer, D34). Movie-level effects, thumbnail slots, drag-and-drop onto slots and the camera zone are open.*
+*Status: built. Every row is a command (`effect.*` with `scope=sequence|movie`, `effect.sound`, `movie.adjust`, `movie.filter.*`), saved in the project and drawn by the CPU renderer (D55 to D58). The Effects window has a thumbnail slot, on/off box and Clear for each effect, and files can be dropped onto the slots. Effects are CPU only; the GPU port is listed under Known debt.*
 
 Movie-level effects cover the whole frame; sequence-level effects apply only inside that sequence's camera zone. Each effect has an on/off switch, a thumbnail slot, and a clear action.
 
 | | Id | Behaviour | Pri |
 |---|---|---|---|
-| [~] | `effect.backColor` | Solid colour behind the morph; can tint a background image | P1 |
-| [~] | `effect.background` | Image behind the morph, opacity 0–100 (visible through alpha or a mask) | P1 |
-| [~] | `effect.mask` | Grayscale image controls morph opacity; intensity −100..100; invert option | P1 |
-| [~] | `effect.foreground` | RGBA overlay (frames, graphics), opacity 0–100 | P1 |
-| [~] | `effect.transition` | Grayscale image controls *when* each pixel dissolves (dark first); border softness 0–100; invert | P2 |
-| [~] | `effect.light` | Grayscale image brightens/darkens the morph; separate bright and dark intensity | P2 |
-| [~] | `effect.trail` | Motion blur (overlay on) or motion trail (overlay off); tint colour; intensity | P2 |
-| [~] | `effect.radial` | Radiating rays over or under the morph; tint colour; intensity | P2 |
-| [ ] | `effect.sound` | WAV/MP3 track starting at frame 0; cut at movie end, loop, fade in/out lengths | P2 |
-| [ ] | `movie.adjust` / `movie.filter.*` | Same adjustments and filters as §2, applied to the output (filters also per sequence) | P2 |
+| [x] | `effect.backColor` | Solid colour behind the morph; can tint a background image | P1 |
+| [x] | `effect.background` | Image behind the morph, opacity 0–100 (visible through alpha or a mask) | P1 |
+| [x] | `effect.mask` | Grayscale image controls morph opacity; intensity −100..100; invert option | P1 |
+| [x] | `effect.foreground` | RGBA overlay (frames, graphics), opacity 0–100 | P1 |
+| [x] | `effect.transition` | Grayscale image controls *when* each pixel dissolves (dark first); border softness 0–100; invert | P2 |
+| [x] | `effect.light` | Grayscale image brightens/darkens the morph; separate bright and dark intensity | P2 |
+| [x] | `effect.trail` | Motion blur (overlay on) or motion trail (overlay off); tint colour; intensity | P2 |
+| [x] | `effect.radial` | Radiating rays over or under the morph; tint colour; intensity | P2 |
+| [x] | `effect.sound` | WAV/MP3 track starting at frame 0; cut at movie end, loop, fade in/out lengths | P2 |
+| [x] | `movie.adjust` / `movie.filter.*` | Same adjustments and filters as §2, applied to the output (filters also per sequence) | P2 |
 
 ---
 
