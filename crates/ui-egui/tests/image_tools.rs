@@ -118,11 +118,11 @@ fn the_image_menu_lists_the_generated_commands_and_the_quick_items() {
     h.get_by_label("Image").click();
     h.run();
     for label in [
-        "Crop...",
-        "Adjust...",
+        "Crop\u{2026}",
+        "Adjust\u{2026}",
         "Swap Images",
-        "Caption...",
-        "Rotate...",
+        "Caption\u{2026}",
+        "Rotate\u{2026}",
     ] {
         assert!(
             h.query_by_label(label).is_some(),

@@ -25,10 +25,10 @@ impl InbetweenApp {
             || "this project".to_string(),
             |n| n.to_string_lossy().into_owned(),
         );
-        let what = if pending.id == QUIT {
-            "before closing"
-        } else {
-            "before replacing it"
+        let what = match pending.id.as_str() {
+            QUIT => "before quitting",
+            "file.close" => "before closing it",
+            _ => "before replacing it",
         };
         let mut choice = None;
         egui::Window::new("Unsaved changes")

@@ -116,8 +116,10 @@ pub struct Radii {
 pub struct Controls {
     /// Buttons and inputs in dialogs.
     pub height: f32,
-    /// Buttons inside cards and dense tool windows.
+    /// Buttons inside cards and dense tool windows; also a menu row.
     pub compact_height: f32,
+    /// The narrowest a dropdown menu gets.
+    pub menu_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -191,6 +193,7 @@ impl Theme {
             control: Controls {
                 height: 36.0,
                 compact_height: 28.0,
+                menu_width: 248.0,
             },
             shadow: Shadows {
                 window: Shadow {
@@ -244,6 +247,7 @@ impl Theme {
         s.button_padding = Vec2::new(self.space.sm, self.space.xs);
         s.window_margin = Margin::same(self.space.md as i8);
         s.menu_margin = Margin::same(self.space.xs as i8);
+        s.menu_width = self.control.menu_width;
         s.interact_size.y = 24.0;
 
         let v = &mut style.visuals;
@@ -338,7 +342,11 @@ mod tests {
         for v in [s.xs, s.sm, s.md, s.lg, s.xl, s.xxl] {
             assert_eq!(v % 4.0, 0.0, "{v}");
         }
-        for v in [t.control.height, t.control.compact_height] {
+        for v in [
+            t.control.height,
+            t.control.compact_height,
+            t.control.menu_width,
+        ] {
             assert_eq!(v % 4.0, 0.0, "{v}");
         }
     }
@@ -367,6 +375,13 @@ mod tests {
             ("secondary on field", c.text_secondary, c.field),
             ("tertiary on field", c.text_tertiary, c.field),
             ("tertiary on footer", c.text_tertiary, c.footer),
+            ("menu hint on surface", c.text_tertiary, c.surface),
+            (
+                "menu hint on a hovered row",
+                c.text_secondary,
+                c.field_hover,
+            ),
+            ("missing tag on surface", c.danger_text, c.surface),
             ("accent text on surface", c.accent_text, c.surface),
             ("white on accent", c.on_accent, c.accent),
             ("white on accent hover", c.on_accent, c.accent_hover),

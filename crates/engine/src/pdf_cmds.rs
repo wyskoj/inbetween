@@ -339,7 +339,7 @@ mod files {
         vec![CommandSpec {
             id: "export.pdf",
             label: "Export Contact Sheet (PDF)",
-            menu: "File/Export/Contact Sheet (PDF)...",
+            menu: "File/Export/Contact Sheet...",
             shortcut: None,
             description: "Write a PDF contact sheet: the source images of every sequence, a few frames of each sequence, or every frame of the movie, in a grid with a caption under each picture.",
             params: PARAMS,

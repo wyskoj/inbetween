@@ -21,7 +21,16 @@ fn builder() -> egui_kittest::HarnessBuilder<InbetweenApp> {
 }
 
 fn empty_app() -> InbetweenApp {
-    InbetweenApp::new(&egui::Context::default(), None, ViewState::default())
+    let mut app = InbetweenApp::new(&egui::Context::default(), None, ViewState::default());
+    // Never open a real file dialog in a test: picking is cancelled unless a test says otherwise.
+    app.set_file_picker(Box::new(|_| None));
+    app
+}
+
+/// Make the next file dialogs return `path` (or cancel, with `None`).
+fn picks(h: &mut H, path: Option<String>) {
+    h.state_mut()
+        .set_file_picker(Box::new(move |_| path.clone()));
 }
 
 fn harness_with(app: InbetweenApp) -> H {
@@ -203,9 +212,6 @@ fn screenshots_for_a_human_to_look_at() {
     h.run();
     shot(&mut h, "help");
     h.state_mut().state.show_help = false;
-    h.state_mut().invoke("project.open");
-    h.run();
-    shot(&mut h, "open-dialog");
 }
 
 // ------------------------------------------------------------------------------------ dots
@@ -491,37 +497,30 @@ fn menu_commands_open_forms_and_run_through_the_engine() {
         "disabled commands must not open a form"
     );
 
+    // Open goes straight to the file dialog; cancelling it does nothing.
     h.state_mut().invoke("project.open");
     h.run();
-    let form = h.state().form().expect("project.open needs a path");
-    assert_eq!(form.id, "project.open");
-    h.state_mut().submit_form();
-    assert!(h
-        .state()
-        .form()
-        .unwrap()
-        .error
-        .as_deref()
-        .unwrap()
-        .contains("required"));
+    assert!(h.state().form().is_none(), "no form in front of the dialog");
+    assert!(!h.state().session().has_sequences());
 
-    h.state_mut().form_mut().unwrap().set(
-        "path",
-        format!("{}/missing.inbetween", env!("CARGO_MANIFEST_DIR")),
+    picks(
+        &mut h,
+        Some(format!("{}/missing.inbetween", env!("CARGO_MANIFEST_DIR"))),
     );
-    h.state_mut().submit_form();
-    assert!(
-        h.state().form().is_some(),
-        "a failing command keeps the form open"
-    );
-    assert!(h.state().form().unwrap().error.is_some());
+    h.state_mut().invoke("project.open");
+    h.run();
+    assert_eq!(h.state().status().map(|s| s.is_error), Some(true));
 
-    h.state_mut().form_mut().unwrap().set("path", demo_path());
-    h.state_mut().submit_form();
+    picks(&mut h, Some(demo_path()));
+    h.state_mut().invoke("project.open");
     h.run();
     assert!(h.state().form().is_none());
     assert!(h.state().session().has_sequences());
     assert_eq!(h.state().status().map(|s| s.is_error), Some(false));
+
+    // A command that needs input still opens its form.
+    h.state_mut().invoke("export.frame");
+    assert_eq!(h.state().form().map(|f| f.id), Some("export.frame"));
 }
 
 #[test]
@@ -540,26 +539,20 @@ fn saving_an_unsaved_project_asks_for_a_path_and_writes_it() {
     click(&mut h, at, PointerButton::Primary);
     assert!(h.state().session().is_dirty());
 
-    h.state_mut().invoke("project.save");
-    let error = h
-        .state()
-        .form()
-        .expect("no file yet, so ask for one")
-        .error
-        .clone();
-    assert!(error.unwrap().contains("no file"));
+    // No file yet: Save asks for one with the file dialog.
     let target = dir.join("mine.inbetween");
-    h.state_mut()
-        .form_mut()
-        .unwrap()
-        .set("path", target.display().to_string());
-    h.state_mut().submit_form();
+    picks(&mut h, Some(target.display().to_string()));
+    h.state_mut().invoke("project.save");
     h.run();
+    assert!(h.state().form().is_none());
     assert!(target.exists());
     assert!(!h.state().session().is_dirty());
-    // A second save needs no form.
+    // A second save asks nothing.
+    picks(&mut h, None);
+    click(&mut h, at, PointerButton::Primary);
     h.state_mut().invoke("project.save");
     assert!(h.state().form().is_none());
+    assert!(!h.state().session().is_dirty());
     let saved = std::fs::read_to_string(&target).unwrap();
     assert!(
         saved.contains("sun.png") && !saved.contains(&sun),
@@ -901,17 +894,10 @@ fn save_without_a_file_goes_through_save_as_and_then_carries_on() {
     let dir = std::env::temp_dir().join(format!("inbetween-ui-saveas-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut h = dirty_unsaved();
+    let target = dir.join("kept.inbetween");
+    picks(&mut h, Some(target.display().to_string()));
     h.state_mut().invoke("file.new");
     h.state_mut().answer_prompt(PromptChoice::Save);
-    h.run();
-    let form = h.state().form().expect("no file yet: Save As opens");
-    assert_eq!(form.id, "project.saveAs");
-    let target = dir.join("kept.inbetween");
-    h.state_mut()
-        .form_mut()
-        .unwrap()
-        .set("path", target.display().to_string());
-    h.state_mut().submit_form();
     h.run();
     assert!(target.exists());
     assert!(h.state().form().is_none());
@@ -929,31 +915,16 @@ fn cancelling_save_as_drops_the_pending_action() {
     let dir = std::env::temp_dir().join(format!("inbetween-ui-cancel-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut h = dirty_unsaved();
+    // The file dialog is cancelled (the default picker in these tests).
     h.state_mut().invoke("file.new");
     h.state_mut().answer_prompt(PromptChoice::Save);
-    h.run();
-    assert!(h.state().form().is_some());
-    frame(
-        &mut h,
-        vec![Event::Key {
-            key: Key::Escape,
-            physical_key: None,
-            pressed: true,
-            repeat: false,
-            modifiers: Modifiers::NONE,
-        }],
-    );
     h.run();
     assert!(h.state().form().is_none());
     assert!(h.state().session().is_dirty(), "nothing was replaced");
     // A later Save As must not run the stale action.
-    h.state_mut().invoke("project.saveAs");
     let target = dir.join("later.inbetween");
-    h.state_mut()
-        .form_mut()
-        .unwrap()
-        .set("path", target.display().to_string());
-    h.state_mut().submit_form();
+    picks(&mut h, Some(target.display().to_string()));
+    h.state_mut().invoke("project.saveAs");
     h.run();
     assert_eq!(
         h.state().session().path().map(|p| p.display().to_string()),

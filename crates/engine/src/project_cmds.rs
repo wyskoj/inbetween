@@ -224,6 +224,16 @@ pub(crate) mod files {
         Ok(out)
     }
 
+    /// Nothing open: no sequences and no file, as when the app starts.
+    fn close(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
+        session.set_project(Project::default(), None);
+        Ok(json!({}))
+    }
+
+    fn has_project(session: &Session) -> bool {
+        session.has_sequences() || session.path().is_some()
+    }
+
     fn open(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
         let path = PathBuf::from(params.string("path").unwrap_or_default());
         let project = inbetween_format::read_project(&path)?;
@@ -360,7 +370,7 @@ pub(crate) mod files {
             CommandSpec {
                 id: "file.new",
                 label: "New Project",
-                menu: "File/New",
+                menu: "File/New Project",
                 shortcut: Some("Ctrl+N"),
                 description: "Start an empty project with one blank sequence, replacing the current project.",
                 params: FILE_NEW_PARAMS,
@@ -396,7 +406,7 @@ pub(crate) mod files {
             CommandSpec {
                 id: "project.save",
                 label: "Save Project",
-                menu: "File/Save...",
+                menu: "File/Save",
                 shortcut: Some("Ctrl+S"),
                 description: "Write the project to a .inbetween file. Nothing is written if the project is invalid.",
                 params: SAVE_PARAMS,
@@ -416,6 +426,18 @@ pub(crate) mod files {
                 disabled_reason: "",
                 edits: false,
                 run: save_as,
+            },
+            CommandSpec {
+                id: "file.close",
+                label: "Close Project",
+                menu: "File/Close Project",
+                shortcut: Some("Ctrl+W"),
+                description: "Close the project and return to the start screen. Unsaved changes are lost; the shell asks first.",
+                params: &[],
+                enabled: has_project,
+                disabled_reason: "No project is open.",
+                edits: false,
+                run: close,
             },
         ]
     }
@@ -486,6 +508,20 @@ pub(crate) mod files {
             // Saving again with no path overwrites the same file.
             r.run(&mut fresh, "project.save", &json!({})).unwrap();
             let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[test]
+        fn file_close_leaves_nothing_open() {
+            let r = Registry::standard();
+            let mut s = Session::new();
+            assert!(!r.is_enabled("file.close", &s));
+            r.run(&mut s, "file.new", &json!({})).unwrap();
+            r.run(&mut s, "sequence.addBlank", &json!({})).unwrap();
+            assert!(s.is_dirty() && r.is_enabled("file.close", &s));
+            r.run(&mut s, "file.close", &json!({})).unwrap();
+            assert!(!s.has_sequences() && s.path().is_none());
+            assert!(!s.is_dirty() && !s.can_undo());
+            assert!(!r.is_enabled("file.close", &s));
         }
 
         #[test]

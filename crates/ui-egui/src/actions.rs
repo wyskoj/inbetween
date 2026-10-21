@@ -1,8 +1,9 @@
-//! Shell-only view actions: zoom, layouts, fullscreen, preview scope. They change view state,
-//! never the project, so they are not engine commands. One table drives the View menu and the
-//! keyboard, so a key and its menu entry cannot drift apart.
+//! Shell-only actions: zoom, layouts, fullscreen, preview scope, and Quit. They change view
+//! state or the window, never the project, so they are not engine commands. One table drives
+//! the menus and the keyboard, so a key and its menu entry cannot drift apart. The `view.*`
+//! actions make up the View menu; the File menu places Quit through its layout.
 
-/// One view action. `id` follows the spec's command ids (`view.*`).
+/// One shell action. `id` follows the spec's command ids (`view.*`, `app.*`).
 #[derive(Clone, Copy, Debug)]
 pub struct ShellAction {
     pub id: &'static str,
@@ -58,6 +59,7 @@ pub const ACTIONS: &[ShellAction] = &[
     action("view.toggle.numbers", "Dot Numbers", None, false),
     action("view.toggle.mute", "Mute Sound", None, false),
     action("view.help", "Help", None, true),
+    action("app.quit", "Quit", Some("Ctrl+Q"), false),
 ];
 
 /// Extra spellings of the same actions that the menu does not list.

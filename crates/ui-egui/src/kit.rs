@@ -2,6 +2,9 @@
 //! fields, drawn from the [`crate::theme`] tokens. A window built from these follows the design
 //! system without restating any colour or size.
 
+mod menu;
+pub use menu::*;
+
 use crate::theme::{self, Theme};
 use egui::{
     Align2, Color32, Context, CornerRadius, Frame, Margin, Pos2, Rect, Response, RichText, Sense,

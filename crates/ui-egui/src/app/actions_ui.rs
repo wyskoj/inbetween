@@ -114,6 +114,11 @@ impl InbetweenApp {
             "view.toggle.numbers" => self.state.show_numbers = !self.state.show_numbers,
             "view.toggle.mute" => self.state.muted = !self.state.muted,
             "view.help" => self.state.show_help = !self.state.show_help,
+            "app.quit" => {
+                if self.request_quit() {
+                    self.close_now = true;
+                }
+            }
             _ => return false,
         }
         true
@@ -181,6 +186,7 @@ impl InbetweenApp {
     pub(super) fn action_entries(&self) -> Vec<(&'static str, String, Option<&'static str>, bool)> {
         ACTIONS
             .iter()
+            .filter(|a| a.id.starts_with("view."))
             .map(|a| {
                 let label = match self.action_checked(a.id) {
                     Some(true) => format!("[x] {}", a.label),

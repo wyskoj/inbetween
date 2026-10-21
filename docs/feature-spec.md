@@ -43,6 +43,7 @@ A morph is *shape deformation* plus *feature (colour) cross-dissolve*, driven by
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [x] | `file.new` / `project.open` / `project.save` / `project.saveAs` | `.inbetween` project file: blank New (Ctrl+N), Open, Save, Save As (Ctrl+Shift+S), recent files, unsaved-changes prompt on replace and on close, cross-drive images kept as absolute paths, embedded thumbnail | P0 |
+| [x] | `file.close` / `app.quit` | Close Project (Ctrl+W): back to the start screen with nothing open; Quit (Ctrl+Q, a shell action). Both ask about unsaved changes | P1 |
 | [x] | `file.openVisual` | Open dialog that shows project thumbnails: recent projects or a chosen folder | P2 |
 | [x] | `file.appendProject` | Merge another project's sequences into this one | P1 |
 | [x] | `file.wizard` | New-project wizard: pick type, pick an ordered image list (Add, Up, Down, Remove), optional loop back to the first, build sequences | P1 |

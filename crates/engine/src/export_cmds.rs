@@ -452,7 +452,7 @@ mod files {
             CommandSpec {
                 id: "export.movie",
                 label: "Export Whole Movie",
-                menu: "File/Export/Whole Movie...",
+                menu: "File/Export/Movie Image Sequence...",
                 shortcut: None,
                 description: "Render every visible sequence, one after another, to continuously numbered PNG files.",
                 params: MOVIE_PARAMS,
@@ -464,7 +464,7 @@ mod files {
             CommandSpec {
                 id: "export.frame",
                 label: "Export Frame",
-                menu: "File/Export/Frame...",
+                menu: "File/Export/Image...",
                 shortcut: None,
                 description: "Render one frame of a sequence to an image file.",
                 params: FRAME_PARAMS,
@@ -488,7 +488,7 @@ mod files {
             CommandSpec {
                 id: "frame.exportEdit",
                 label: "Export Frame For Editing",
-                menu: "File/Export/Frame For Editing...",
+                menu: "File/Export/Image With Dots...",
                 shortcut: None,
                 description: "Render one frame to an image file and write the dots as they sit in that frame to a .inbetweendots file beside it, so the frame can start a new sequence.",
                 params: EDIT_PARAMS,

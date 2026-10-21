@@ -35,7 +35,9 @@ pub mod state;
 pub mod theme;
 pub mod view;
 
-pub use app::{InbetweenApp, Layout, PromptChoice, ScreenshotPlan, Status, REPLACES_PROJECT};
+pub use app::{
+    FilePicker, InbetweenApp, Layout, PromptChoice, ScreenshotPlan, Status, REPLACES_PROJECT,
+};
 pub use preview::GpuHandle;
 pub use serde_json::json;
 pub use state::ViewState;

@@ -77,7 +77,6 @@ impl InbetweenApp {
         };
         let mut submit = false;
         let mut cancel = false;
-        let form_id = form.id;
         egui::Window::new(&form.title)
             .collapsible(false)
             .resizable(false)
@@ -140,9 +139,6 @@ impl InbetweenApp {
         }
         self.form = Some(form);
         if cancel {
-            if form_id == "project.saveAs" {
-                self.after_save = None;
-            }
             self.form = None;
         } else if submit {
             self.submit_form();

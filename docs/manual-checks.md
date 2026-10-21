@@ -9,7 +9,9 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Drop two image files on the window: the New From Images form opens in drop order.
 - [ ] Close the window with unsaved changes: the Save / Don't Save / Cancel prompt appears.
 - [ ] File > Open Recent lists what you opened; a deleted file is greyed and clicking it removes it.
-- [ ] File > Open Visually shows thumbnails for a folder of projects; double-click opens one.
+- [ ] File > Open Recent > Browse Projects shows thumbnails for a folder of projects; double-click opens one.
+- [ ] File > Close Project (Ctrl+W) with unsaved changes asks first, then shows the start screen. File > Quit (Ctrl+Q) asks the same way and closes the window.
+- [ ] Hover File > Open Recent and File > Export: each submenu opens beside its row, with a chevron (not a box or question mark) at the right of the row.
 
 ## M16: source editing and captions
 

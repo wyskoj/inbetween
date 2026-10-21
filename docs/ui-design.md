@@ -32,7 +32,7 @@ Every colour, text size, gap, radius, control height and shadow is a field of `T
 | Type | Geist Regular and Medium only (Roboto Regular behind them for missing characters). title 18 medium, body 14, label 13 medium, small 12, mono 13 |
 | Space | xs 4, sm 8, md 12, lg 16, xl 24, xxl 32 |
 | Radius | small 4, control 6, card 8, window 12 |
-| Controls | height 36 (dialogs), compact_height 28 (inside cards, dense tools) |
+| Controls | height 36 (dialogs), compact_height 28 (inside cards, dense tools, menu rows), menu_width 248 |
 | Shadows | window (0, 12, blur 32, 50% black), popup (0, 4, blur 12, 38% black), control (0, 1, blur 2, 40% black; under primary buttons) |
 
 ## Components: `crates/ui-egui/src/kit.rs`
@@ -57,6 +57,11 @@ Build redesigned windows from these, not from raw egui calls with styling:
   Both keep their order inside right-to-left layouts.
 - `kit::icon_button` (square, `on` lights the icon in `focus`), `kit::text_toggle` ("%"),
   `kit::round_button` (Play), `kit::switch` (a labelled on/off pill).
+- Menus: every menu body starts with `kit::menu_setup`, then `kit::menu_row` (label, and a
+  shortcut or hint at the right in tertiary), `kit::menu_row_detail` (a name over a quiet detail
+  line, with an optional warning tag), `kit::menu_heading`, `kit::menu_separator` and
+  `kit::submenu` (draws a chevron icon). The order and groups of a menu come from
+  `menus::LAYOUTS`, not from the drawing code. Menus are at least `control.menu_width` wide.
 - Panel headers are `panels::Title { label, name, meta, badge, focused }`: a small role label
   (Start, End, Preview), the main text, quiet details at the right and an optional badge.
 
@@ -89,6 +94,8 @@ Build redesigned windows from these, not from raw egui calls with styling:
 | Design tokens | built | `theme.rs`, `kit.rs` | https://claude.ai/artifact/5dr1MEfJBGfhfZce9xCFrp |
 | New From Two Images | built | `new_two.rs`, `app/new_two_ui.rs`, `tests/new_two.rs` | https://claude.ai/artifact/5dr1MEfJBGfhfZce9xCFrp |
 | Main window (top bar, tool bar, sequence list, panels, transport, status, start screen) | built | `app.rs` (top and status bars), `app/select_ui.rs` (tool bar), `seqlist.rs`, `panels.rs` (headers), `app/layout_ui.rs`, `app/transport_ui.rs`, `app/start_ui.rs` | https://claude.ai/artifact/D6vnDH6FEhorK1BQ9YkVnE |
+| File menu (and the menu style for all menus) | built | `menus.rs` (layout), `kit/menu.rs`, `app.rs` (`menu_items`, `recent_items`), `tests/file_menu.rs` | https://claude.ai/artifact/3gzPf88xayrF5vd7pvzTeL |
+| Other menus (Edit, Dots, Image, Sequence, View): regroup | todo (menu style applied) | | |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
 | Export dialogs and progress | todo | | |
 | Dot tools (select, crop, camera) | todo | | |

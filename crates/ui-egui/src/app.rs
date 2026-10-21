@@ -108,7 +108,13 @@ const LAYOUT_MODES: [(crate::state::ViewMode, &str, crate::kit::Icon, &str); 4] 
     ),
 ];
 
-pub const REPLACES_PROJECT: &[&str] = &["file.new", "project.new", "project.open", "file.wizard"];
+pub const REPLACES_PROJECT: &[&str] = &[
+    "file.new",
+    "project.new",
+    "project.open",
+    "file.wizard",
+    "file.close",
+];
 
 /// The id that stands for closing the window in a pending prompt.
 const QUIT: &str = "app.quit";
@@ -217,6 +223,9 @@ fn tri_points(t: &inbetween_geom::Triangle) -> [Pos2; 3] {
     [pos(t.a), pos(t.b), pos(t.c)]
 }
 
+/// Picks a file for a path parameter, or `None` when the person cancels.
+pub type FilePicker = Box<dyn FnMut(&inbetween_engine::ParamSpec) -> Option<String>>;
+
 pub struct InbetweenApp {
     registry: Registry,
     menus: Vec<MenuNode>,
@@ -246,8 +255,8 @@ pub struct InbetweenApp {
     open_visual: Option<OpenVisual>,
     /// A command (or quitting) waiting for the answer to "save your changes?".
     pending: Option<Pending>,
-    /// Waiting for Save As to finish before this goes ahead.
-    after_save: Option<Pending>,
+    /// Shows a file dialog for a path parameter: the native one, or a stand-in in tests.
+    file_picker: FilePicker,
     /// The person said to quit (or discard and quit): let the window close.
     allow_close: bool,
     close_now: bool,
@@ -329,7 +338,7 @@ impl InbetweenApp {
             curve_group_open: false,
             open_visual: None,
             pending: None,
-            after_save: None,
+            file_picker: Box::new(form_ui::browse),
             allow_close: false,
             close_now: false,
             grabs: Grabs::default(),
@@ -413,7 +422,7 @@ impl InbetweenApp {
             Ok(done) => {
                 if matches!(
                     id,
-                    "project.open" | "project.new" | "file.new" | "file.wizard"
+                    "project.open" | "project.new" | "file.new" | "file.wizard" | "file.close"
                 ) {
                     self.state.refit_all();
                     self.state.sequence = 0;
@@ -566,6 +575,12 @@ impl InbetweenApp {
             return;
         };
         if !self.registry.is_enabled(id, &self.session) {
+            return;
+        }
+        if matches!(id, "project.open" | "project.saveAs")
+            || (id == "project.save" && self.session.path().is_none())
+        {
+            self.pick_and_run(id);
             return;
         }
         if let Some(now) = self.toggle_state(id) {
@@ -747,14 +762,7 @@ impl InbetweenApp {
             return;
         }
         match self.run_command(form.id, &params) {
-            Ok(_) => {
-                self.form = None;
-                if form.id == "project.saveAs" {
-                    if let Some(p) = self.after_save.take() {
-                        self.run_pending(p);
-                    }
-                }
-            }
+            Ok(_) => self.form = None,
             Err(e) => {
                 if let Some(f) = self.form.as_mut() {
                     f.error = Some(e.to_string());
@@ -776,6 +784,36 @@ impl InbetweenApp {
             return true;
         }
         false
+    }
+
+    /// Use `picker` instead of the native file dialog (tests).
+    pub fn set_file_picker(&mut self, picker: FilePicker) {
+        self.file_picker = picker;
+    }
+
+    /// Open, Save As, and Save before the project has a file: the native file dialog, then the
+    /// command, with no form in between. Returns whether a file was picked and the command ran.
+    fn pick_and_run(&mut self, id: &str) -> bool {
+        let id = if id == "project.open" {
+            "project.open"
+        } else {
+            "project.saveAs"
+        };
+        let Some(spec) = self
+            .registry
+            .get(id)
+            .and_then(|s| s.params.iter().find(|p| p.name == "path"))
+        else {
+            return false;
+        };
+        let Some(path) = (self.file_picker)(spec) else {
+            return false;
+        };
+        if id == "project.open" {
+            self.open_project(&path);
+            return true;
+        }
+        self.run_command(id, &json!({ "path": path })).is_ok()
     }
 
     /// Open a project file (from Recent, Open Visually or a drop), asking first if there are
@@ -819,10 +857,9 @@ impl InbetweenApp {
                 }
             }
             PromptChoice::Save => {
-                // No file yet: ask for one, then carry on.
-                if let Some(spec) = self.registry.get("project.saveAs").copied() {
-                    self.after_save = Some(pending);
-                    self.form = Some(Form::for_spec(&spec));
+                // No file yet: pick one, then carry on. Cancelling the picker drops the action.
+                if self.pick_and_run("project.saveAs") {
+                    self.run_pending(pending);
                 }
             }
         }
@@ -1397,29 +1434,25 @@ impl InbetweenApp {
             )
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
+                    let menu = MenuContext {
+                        registry: &self.registry,
+                        session: &self.session,
+                        toggles: &toggles,
+                        recent: &recent,
+                    };
+                    let mut clicks = MenuClicks::default();
                     for node in &self.menus {
                         if let MenuNode::Menu { name, children } = node {
                             if name == "View" {
                                 continue;
                             }
                             ui.menu_button(name, |ui| {
-                                menu_items(
-                                    ui,
-                                    children,
-                                    &self.registry,
-                                    &self.session,
-                                    &toggles,
-                                    &mut clicked,
-                                );
-                                if name == "File" {
-                                    ui.separator();
-                                    recent_menu(ui, &recent, &mut recent_click);
-                                }
+                                crate::kit::menu_setup(ui);
+                                menu_items(ui, children, &menu, &mut clicks);
                                 if name == "Image" {
-                                    ui.separator();
+                                    crate::kit::menu_separator(ui);
                                     for (i, (label, ..)) in QUICK_IMAGE.iter().enumerate() {
-                                        if ui
-                                            .add_enabled(has_sequences, egui::Button::new(*label))
+                                        if crate::kit::menu_row(ui, label, None, has_sequences)
                                             .clicked()
                                         {
                                             quick = Some(i);
@@ -1431,38 +1464,32 @@ impl InbetweenApp {
                         }
                     }
                     ui.menu_button("View", |ui| {
+                        crate::kit::menu_setup(ui);
                         for (id, label, shortcut, gap) in &entries {
                             if *gap {
-                                ui.separator();
+                                crate::kit::menu_separator(ui);
                             }
                             if *id == "view.sequenceList" {
                                 // The engine's display commands sit between the layouts and the rest.
                                 for node in &self.menus {
                                     if let MenuNode::Menu { name, children } = node {
                                         if name == "View" {
-                                            menu_items(
-                                                ui,
-                                                children,
-                                                &self.registry,
-                                                &self.session,
-                                                &toggles,
-                                                &mut clicked,
-                                            );
+                                            menu_items(ui, children, &menu, &mut clicks);
                                         }
                                     }
                                 }
-                                ui.separator();
+                                crate::kit::menu_separator(ui);
                             }
-                            let mut button = egui::Button::new(label.as_str());
-                            if let Some(sc) = shortcut {
-                                button = button.shortcut_text(shortcuts::label(sc));
-                            }
-                            if ui.add(button).clicked() {
+                            let key = shortcut.map(shortcuts::label);
+                            if crate::kit::menu_row(ui, label, key.as_deref(), true).clicked() {
                                 view_action = Some(id);
                                 ui.close_menu();
                             }
                         }
                     });
+                    clicked = clicks.command;
+                    view_action = clicks.action.or(view_action);
+                    recent_click = clicks.recent;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let segments: Vec<crate::kit::Segment<'_>> = LAYOUT_MODES
                             .iter()
@@ -1888,71 +1915,104 @@ const TOGGLES: &[&str] = &[
     "face.option.smartDrag",
 ];
 
+/// What the menus read while they draw.
+struct MenuContext<'a> {
+    registry: &'a Registry,
+    session: &'a Session,
+    toggles: &'a [(&'static str, bool)],
+    recent: &'a [(String, bool)],
+}
+
+/// What was clicked in the menus this frame.
+#[derive(Default)]
+struct MenuClicks {
+    command: Option<&'static str>,
+    /// A shell action (Quit).
+    action: Option<&'static str>,
+    /// A recent project and whether its file still exists.
+    recent: Option<(String, bool)>,
+}
+
 fn menu_items(
     ui: &mut egui::Ui,
     nodes: &[MenuNode],
-    registry: &Registry,
-    session: &Session,
-    toggles: &[(&'static str, bool)],
-    clicked: &mut Option<&'static str>,
+    menu: &MenuContext<'_>,
+    clicks: &mut MenuClicks,
 ) {
     for node in nodes {
         match node {
             MenuNode::Menu { name, children } => {
-                ui.menu_button(name, |ui| {
-                    menu_items(ui, children, registry, session, toggles, clicked)
+                crate::kit::submenu(ui, name, |ui| {
+                    if name == "Open Recent" {
+                        recent_items(ui, menu.recent, &mut clicks.recent);
+                        if !children.is_empty() {
+                            crate::kit::menu_separator(ui);
+                        }
+                    }
+                    menu_items(ui, children, menu, clicks);
                 });
             }
-            MenuNode::Command { id, label } => {
-                let Some(spec) = registry.get(id) else {
+            MenuNode::Command { id, label, aside } => {
+                let Some(spec) = menu.registry.get(id) else {
                     continue;
                 };
-                let enabled = (spec.enabled)(session);
+                let enabled = (spec.enabled)(menu.session);
                 let mut text = label.clone();
-                if let Some((_, on)) = toggles.iter().find(|(t, _)| t == id) {
+                if let Some((_, on)) = menu.toggles.iter().find(|(t, _)| t == id) {
                     // An on/off option shows its state instead of opening a form.
                     let mark = if *on { "[x]" } else { "[  ]" };
-                    text = format!("{mark} {}", text.trim_end_matches("..."));
+                    text = format!("{mark} {}", text.trim_end_matches('\u{2026}'));
                 }
-                let mut button = egui::Button::new(text);
-                if let Some(sc) = spec.shortcut {
-                    button = button.shortcut_text(shortcuts::label(sc));
-                }
-                let response = ui
-                    .add_enabled(enabled, button)
-                    .on_hover_text(spec.description);
+                let key = spec.shortcut.map(shortcuts::label);
+                let hint = key.as_deref().or(*aside);
+                let response = crate::kit::menu_row(ui, &text, hint, enabled);
                 if !enabled {
-                    response.on_disabled_hover_text(spec.disabled_reason);
-                } else if response.clicked() {
-                    *clicked = Some(spec.id);
+                    response.on_hover_text(spec.disabled_reason);
+                } else if response.on_hover_text(spec.description).clicked() {
+                    clicks.command = Some(spec.id);
                     ui.close_menu();
                 }
             }
+            MenuNode::Action { id } => {
+                let Some(action) = crate::actions::find(id) else {
+                    continue;
+                };
+                let key = action.shortcut.map(shortcuts::label);
+                if crate::kit::menu_row(ui, action.label, key.as_deref(), true).clicked() {
+                    clicks.action = Some(action.id);
+                    ui.close_menu();
+                }
+            }
+            MenuNode::Heading(text) => crate::kit::menu_heading(ui, text),
+            MenuNode::Separator => crate::kit::menu_separator(ui),
         }
     }
 }
 
-/// The File > Open Recent submenu. A project that is gone is greyed; clicking it takes it off
-/// the list.
-fn recent_menu(ui: &mut egui::Ui, recent: &[(String, bool)], click: &mut Option<(String, bool)>) {
-    ui.menu_button("Open Recent", |ui| {
-        if recent.is_empty() {
-            ui.add_enabled(false, egui::Button::new("(none)"));
+/// The recent projects at the top of File > Open Recent: each name over its folder. A project
+/// that is gone is greyed and marked; clicking it takes it off the list.
+fn recent_items(ui: &mut egui::Ui, recent: &[(String, bool)], click: &mut Option<(String, bool)>) {
+    if recent.is_empty() {
+        crate::kit::menu_row(ui, "No recent projects", None, false);
+    }
+    for (path, exists) in recent {
+        let file = std::path::Path::new(path);
+        let name = file
+            .file_name()
+            .map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
+        let folder = file
+            .parent()
+            .map_or_else(String::new, |d| d.display().to_string());
+        let tag = (!exists).then_some("Missing");
+        let response = crate::kit::menu_row_detail(ui, &name, &folder, tag, !exists);
+        let tip = if *exists {
+            path.clone()
+        } else {
+            format!("{path} is gone. Click to remove it from the list.")
+        };
+        if response.on_hover_text(tip).clicked() {
+            *click = Some((path.clone(), *exists));
+            ui.close_menu();
         }
-        for (path, exists) in recent {
-            let name = std::path::Path::new(path)
-                .file_name()
-                .map_or_else(|| path.clone(), |n| n.to_string_lossy().into_owned());
-            let response = if *exists {
-                ui.button(name).on_hover_text(path)
-            } else {
-                ui.button(egui::RichText::new(format!("{name} (missing, click to remove)")).weak())
-                    .on_hover_text(path)
-            };
-            if response.clicked() {
-                *click = Some((path.clone(), *exists));
-                ui.close_menu();
-            }
-        }
-    });
+    }
 }

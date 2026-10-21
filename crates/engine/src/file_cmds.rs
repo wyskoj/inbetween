@@ -357,8 +357,8 @@ fn wizard(session: &mut Session, params: &Params) -> Result<Value, CommandError>
 pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec {
         id: "file.openVisual",
-        label: "Open Visually",
-        menu: "File/Open Visually...",
+        label: "Browse Projects",
+        menu: "File/Open Recent/Browse Projects...",
         shortcut: None,
         description: "List .inbetween projects (those in `folder` and the named `paths`) with their name, sequence count, kind and embedded thumbnail (base64 PNG). A project that cannot be read appears with an `error` instead.",
         params: OPEN_VISUAL_PARAMS,
@@ -369,8 +369,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     },
     CommandSpec {
         id: "file.wizard",
-        label: "New From Images (Wizard)",
-        menu: "File/New From Images...",
+        label: "New From Image List",
+        menu: "File/New From Image List...",
         shortcut: None,
         description: "Start a project that chains several images: each morphs into the next, optionally looping back to the first. Replaces the current project. Add dots afterwards.",
         params: WIZARD_PARAMS,
@@ -381,8 +381,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     },
     CommandSpec {
         id: "file.appendProject",
-        label: "Append Project",
-        menu: "File/Append Project...",
+        label: "Add Sequences From Project",
+        menu: "File/Add Sequences From Project...",
         shortcut: None,
         description: "Add the sequences of another .inbetween project to this one. Output size, project kind and face model stay this project's; appending a Sequence project to a Layer project (or the reverse) is refused.",
         params: APPEND_PARAMS,
