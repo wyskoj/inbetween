@@ -3,10 +3,9 @@
 
 use super::*;
 use crate::state::ViewMode;
-use egui::Color32;
 
 /// Space between panels, which is also the splitter handle.
-const GAP: f32 = 6.0;
+const GAP: f32 = 8.0;
 const MIN_PANEL: f32 = 60.0;
 
 /// Where each piece goes inside the central area for one layout.
@@ -94,6 +93,12 @@ pub(crate) fn compute_rects(mode: ViewMode, avail: Rect, top: f32, left: f32) ->
 
 impl InbetweenApp {
     pub(super) fn canvases(&mut self, ctx: &Context) {
+        if !self.session.has_sequences() && self.state.mode != ViewMode::Frames {
+            // Nothing to edit yet: the start screen takes the canvas area.
+            self.start_screen(ctx);
+            self.layout = Layout::default();
+            return;
+        }
         // Everything the panels need is copied out first, so drawing never borrows the session.
         let mut snapshot = self.snapshot(ctx);
         let mut crops = std::mem::take(&mut snapshot.crop);
@@ -112,109 +117,129 @@ impl InbetweenApp {
         let checker = self.state.checkerboard;
         let mut layout = Layout::default();
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let avail = ui.available_rect_before_wrap();
-            if mode == ViewMode::Frames {
-                self.frame_strip(ui);
-                return;
-            }
-            let rects = compute_rects(mode, avail, top_fraction, left_fraction);
-            let frame = snapshot.frame;
+        let t = crate::theme::get(ctx);
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::NONE
+                    .fill(t.color.app)
+                    .inner_margin(egui::Margin::same(t.space.sm as i8)),
+            )
+            .show(ctx, |ui| {
+                let avail = ui.available_rect_before_wrap();
+                if mode == ViewMode::Frames {
+                    self.frame_strip(ui);
+                    return;
+                }
+                let rects = compute_rects(mode, avail, top_fraction, left_fraction);
+                let frame = snapshot.frame;
 
-            for (index, slot) in [(0usize, rects.source1), (1, rects.source2)] {
-                let Some(rect) = slot else { continue };
-                let panel = SourcePanel {
-                    image: index as u8 + 1,
-                    title: snapshot.titles[index].clone(),
-                    frame,
-                    shown: snapshot.shown[index],
-                    dots: &snapshot.dots[index],
-                    lines: &snapshot.lines[index],
-                    mesh: &snapshot.mesh[index],
-                    selected: &selected,
-                    prefs,
-                    tool,
-                    show_numbers,
-                    partner_hover: snapshot.partner_hover[index],
-                    hot_group: &snapshot.hot_group,
-                    ghost: snapshot.ghost[index],
-                    chain_from: snapshot.chain_from[index],
-                    message: Some(snapshot.message.clone()),
-                    crop: crops[index].take(),
-                    caption: snapshot.caption[index],
-                    checker,
-                };
-                let out = ui
-                    .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                        panels::source_panel(ui, &panel, &mut views[index], &mut drag, &mut grabs)
-                    })
-                    .inner;
-                actions.extend(out.actions);
-                hover[index] = out.hover;
-                if index == 0 {
-                    layout.source1 = out.rect;
-                } else {
-                    layout.source2 = out.rect;
+                for (index, slot) in [(0usize, rects.source1), (1, rects.source2)] {
+                    let Some(rect) = slot else { continue };
+                    let mut title = snapshot.titles[index].clone();
+                    title.focused =
+                        rects.source2.is_some() && usize::from(self.state.focus_image) == index + 1;
+                    let panel = SourcePanel {
+                        image: index as u8 + 1,
+                        title,
+                        frame,
+                        shown: snapshot.shown[index],
+                        dots: &snapshot.dots[index],
+                        lines: &snapshot.lines[index],
+                        mesh: &snapshot.mesh[index],
+                        selected: &selected,
+                        prefs,
+                        tool,
+                        show_numbers,
+                        partner_hover: snapshot.partner_hover[index],
+                        hot_group: &snapshot.hot_group,
+                        ghost: snapshot.ghost[index],
+                        chain_from: snapshot.chain_from[index],
+                        message: Some(snapshot.message.clone()),
+                        crop: crops[index].take(),
+                        caption: snapshot.caption[index],
+                        checker,
+                    };
+                    let out = ui
+                        .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                            panels::source_panel(
+                                ui,
+                                &panel,
+                                &mut views[index],
+                                &mut drag,
+                                &mut grabs,
+                            )
+                        })
+                        .inner;
+                    actions.extend(out.actions);
+                    hover[index] = out.hover;
+                    if index == 0 {
+                        layout.source1 = out.rect;
+                    } else {
+                        layout.source2 = out.rect;
+                    }
                 }
-            }
-            if let (Some(rect), ViewMode::Full | ViewMode::Preview) = (rects.preview, mode) {
-                let preview = PreviewPanel {
-                    title: snapshot.titles[2].clone(),
-                    frame,
-                    shown: snapshot.shown[2],
-                    mesh: &snapshot.mesh[2],
-                    prefs,
-                    tracks: &snapshot.tracks,
-                    message: snapshot.preview_message.clone(),
-                    caption: snapshot.caption[2],
-                    camera: snapshot.camera,
-                    checker,
-                };
-                let out = ui
-                    .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                        panels::preview_panel(ui, &preview, &mut views[2], &mut grabs)
-                    })
-                    .inner;
-                layout.preview = out.rect;
-                actions.extend(out.actions);
-            }
+                if let (Some(rect), ViewMode::Full | ViewMode::Preview) = (rects.preview, mode) {
+                    let preview = PreviewPanel {
+                        title: snapshot.titles[2].clone(),
+                        frame,
+                        shown: snapshot.shown[2],
+                        mesh: &snapshot.mesh[2],
+                        prefs,
+                        tracks: &snapshot.tracks,
+                        message: snapshot.preview_message.clone(),
+                        caption: snapshot.caption[2],
+                        camera: snapshot.camera,
+                        checker,
+                    };
+                    let out = ui
+                        .scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                            panels::preview_panel(ui, &preview, &mut views[2], &mut grabs)
+                        })
+                        .inner;
+                    layout.preview = out.rect;
+                    actions.extend(out.actions);
+                }
 
-            // Splitters: drag to resize, double-click to reset.
-            if let Some(handle) = rects.split_rows {
-                let r = ui.interact(handle, egui::Id::new("split_rows"), egui::Sense::drag());
-                if r.hovered() || r.dragged() {
-                    ctx.set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                // Splitters: drag to resize, double-click to reset.
+                if let Some(handle) = rects.split_rows {
+                    let r = ui.interact(handle, egui::Id::new("split_rows"), egui::Sense::drag());
+                    if r.hovered() || r.dragged() {
+                        ctx.set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                    }
+                    if r.dragged() && avail.height() > 0.0 {
+                        top_fraction += r.drag_delta().y / avail.height();
+                    }
+                    if r.double_clicked() {
+                        top_fraction = 0.5;
+                    }
+                    if r.hovered() || r.dragged() {
+                        ui.painter().rect_filled(
+                            Rect::from_center_size(handle.center(), Vec2::new(32.0, 3.0)),
+                            2.0,
+                            t.color.tick,
+                        );
+                    }
                 }
-                if r.dragged() && avail.height() > 0.0 {
-                    top_fraction += r.drag_delta().y / avail.height();
+                if let Some(handle) = rects.split_cols {
+                    let r = ui.interact(handle, egui::Id::new("split_cols"), egui::Sense::drag());
+                    if r.hovered() || r.dragged() {
+                        ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                    }
+                    if r.dragged() && avail.width() > 0.0 {
+                        left_fraction += r.drag_delta().x / avail.width();
+                    }
+                    if r.double_clicked() {
+                        left_fraction = 0.5;
+                    }
+                    if r.hovered() || r.dragged() {
+                        ui.painter().rect_filled(
+                            Rect::from_center_size(handle.center(), Vec2::new(3.0, 32.0)),
+                            2.0,
+                            t.color.tick,
+                        );
+                    }
                 }
-                if r.double_clicked() {
-                    top_fraction = 0.5;
-                }
-                ui.painter().rect_filled(
-                    handle.shrink2(Vec2::new(0.0, 2.0)),
-                    1.0,
-                    Color32::from_gray(60),
-                );
-            }
-            if let Some(handle) = rects.split_cols {
-                let r = ui.interact(handle, egui::Id::new("split_cols"), egui::Sense::drag());
-                if r.hovered() || r.dragged() {
-                    ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-                }
-                if r.dragged() && avail.width() > 0.0 {
-                    left_fraction += r.drag_delta().x / avail.width();
-                }
-                if r.double_clicked() {
-                    left_fraction = 0.5;
-                }
-                ui.painter().rect_filled(
-                    handle.shrink2(Vec2::new(2.0, 0.0)),
-                    1.0,
-                    Color32::from_gray(60),
-                );
-            }
-        });
+            });
 
         // The dual layout shows the preview in a window of its own.
         let mut dual_closed = false;

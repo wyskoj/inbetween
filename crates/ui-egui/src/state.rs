@@ -47,10 +47,10 @@ impl Tool {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Edit => "Edit (E)",
-            Self::Add => "Add (A)",
-            Self::Delete => "Delete (D)",
-            Self::Line => "Line (L)",
+            Self::Edit => "Edit",
+            Self::Add => "Add",
+            Self::Delete => "Delete",
+            Self::Line => "Line",
         }
     }
 }

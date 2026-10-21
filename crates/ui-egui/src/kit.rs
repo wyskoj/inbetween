@@ -109,6 +109,18 @@ pub enum ButtonKind {
 
 /// A button from the tokens. `height` is a control height token.
 pub fn button(ui: &mut Ui, kind: ButtonKind, text: &str, enabled: bool, height: f32) -> Response {
+    icon_text_button(ui, kind, None, text, enabled, height)
+}
+
+/// A button from the tokens with an optional icon before its text.
+pub fn icon_text_button(
+    ui: &mut Ui,
+    kind: ButtonKind,
+    glyph: Option<Icon>,
+    text: &str,
+    enabled: bool,
+    height: f32,
+) -> Response {
     let t = theme::get(ui.ctx());
     let size = if height < t.control.height {
         t.text.label
@@ -123,7 +135,8 @@ pub fn button(ui: &mut Ui, kind: ButtonKind, text: &str, enabled: bool, height: 
     } else {
         t.space.lg
     };
-    let want = Vec2::new(galley.size().x + pad * 2.0, height);
+    let icon_w = if glyph.is_some() { 12.0 + 6.0 } else { 0.0 };
+    let want = Vec2::new(galley.size().x + icon_w + pad * 2.0, height);
     let sense = if enabled {
         Sense::click()
     } else {
@@ -164,7 +177,12 @@ pub fn button(ui: &mut Ui, kind: ButtonKind, text: &str, enabled: bool, height: 
                 StrokeKind::Outside,
             );
         }
-        let pos = rect.center() - galley.size() / 2.0;
+        let left = rect.center().x - (galley.size().x + icon_w) / 2.0;
+        if let Some(which) = glyph {
+            let r = Rect::from_min_size(Pos2::new(left, rect.center().y - 6.0), Vec2::splat(12.0));
+            icon(ui, r, which, fg, 2.0);
+        }
+        let pos = Pos2::new(left + icon_w, rect.center().y - galley.size().y / 2.0);
         ui.painter().galley(pos, galley, fg);
     }
     response
@@ -252,14 +270,44 @@ pub fn dashed_rect(ui: &Ui, rect: Rect, radius: f32, stroke: Stroke) {
 pub enum Icon {
     /// A framed picture.
     Image,
-    /// Two opposed arrows.
+    /// Two opposed arrows (also ping-pong playback).
     Swap,
     Close,
     /// An exclamation in a circle.
     Alert,
+    /// The Edit tool: a pointer.
+    Cursor,
+    /// The Add tool: a dot with ticks.
+    AddDot,
+    /// The Delete tool: a circle with a minus.
+    RemoveDot,
+    /// The Line tool: a joined path.
+    Polyline,
+    /// Show dots.
+    Dots,
+    /// Show lines.
+    Lines,
+    /// Show triangles.
+    Triangles,
+    LayoutFull,
+    LayoutImages,
+    LayoutPreview,
+    LayoutFrames,
+    First,
+    Previous,
+    Play,
+    Pause,
+    Next,
+    Last,
+    Loop,
+    Eye,
+    EyeOff,
+    Plus,
+    /// A circle becoming a square: the start screen.
+    Morph,
 }
 
-/// Draw an icon as strokes inside `rect` (drawn on a 24-unit grid).
+/// Draw an icon inside `rect` (drawn on a 24-unit grid), with strokes `width` wide.
 pub fn icon(ui: &Ui, rect: Rect, which: Icon, color: Color32, width: f32) {
     let p = ui.painter();
     let s = rect.width().min(rect.height()) / 24.0;
@@ -268,7 +316,164 @@ pub fn icon(ui: &Ui, rect: Rect, which: Icon, color: Color32, width: f32) {
     let stroke = Stroke::new(width, color);
     let line =
         |pts: &[(f32, f32)]| Shape::line(pts.iter().map(|&(x, y)| at(x, y)).collect(), stroke);
+    let closed = |pts: &[(f32, f32)]| {
+        Shape::closed_line(pts.iter().map(|&(x, y)| at(x, y)).collect(), stroke)
+    };
+    let fill = |pts: &[(f32, f32)]| {
+        Shape::convex_polygon(
+            pts.iter().map(|&(x, y)| at(x, y)).collect(),
+            color,
+            Stroke::NONE,
+        )
+    };
+    let frame = |x0: f32, y0: f32, x1: f32, y1: f32| {
+        p.rect_stroke(
+            Rect::from_min_max(at(x0, y0), at(x1, y1)),
+            CornerRadius::same((2.0 * s) as u8),
+            stroke,
+            StrokeKind::Middle,
+        );
+    };
+    let eye = || {
+        let mut pts = Vec::with_capacity(34);
+        for i in 0..=16 {
+            let t = i as f32 / 16.0;
+            pts.push((
+                2.0 + 20.0 * t,
+                12.0 - 7.0 * (t * std::f32::consts::PI).sin(),
+            ));
+        }
+        for i in 1..16 {
+            let t = 1.0 - i as f32 / 16.0;
+            pts.push((
+                2.0 + 20.0 * t,
+                12.0 + 7.0 * (t * std::f32::consts::PI).sin(),
+            ));
+        }
+        p.add(closed(&pts));
+        p.circle_stroke(at(12.0, 12.0), 3.0 * s, stroke);
+    };
     match which {
+        Icon::Cursor => {
+            p.add(closed(&[
+                (5.0, 3.0),
+                (19.0, 11.0),
+                (13.0, 13.0),
+                (10.0, 19.0),
+            ]));
+        }
+        Icon::AddDot => {
+            p.circle_stroke(at(12.0, 12.0), 3.0 * s, stroke);
+            for seg in [
+                [(12.0, 2.0), (12.0, 6.0)],
+                [(12.0, 18.0), (12.0, 22.0)],
+                [(2.0, 12.0), (6.0, 12.0)],
+                [(18.0, 12.0), (22.0, 12.0)],
+            ] {
+                p.add(line(&seg));
+            }
+        }
+        Icon::RemoveDot => {
+            p.circle_stroke(at(12.0, 12.0), 8.0 * s, stroke);
+            p.add(line(&[(8.0, 12.0), (16.0, 12.0)]));
+        }
+        Icon::Polyline => {
+            p.add(line(&[
+                (4.0, 18.0),
+                (10.0, 10.0),
+                (14.0, 15.0),
+                (20.0, 6.0),
+            ]));
+            p.circle_filled(at(4.0, 18.0), 1.8 * s, color);
+            p.circle_filled(at(20.0, 6.0), 1.8 * s, color);
+        }
+        Icon::Dots => {
+            for (x, y) in [(6.0, 7.0), (17.0, 9.0), (10.0, 17.0)] {
+                p.circle_filled(at(x, y), 2.4 * s, color);
+            }
+        }
+        Icon::Lines => {
+            p.add(line(&[(4.0, 17.0), (10.0, 8.0), (15.0, 14.0), (20.0, 6.0)]));
+        }
+        Icon::Triangles => {
+            p.add(closed(&[(3.0, 20.0), (12.0, 4.0), (21.0, 20.0)]));
+            p.add(line(&[(12.0, 4.0), (12.0, 20.0)]));
+            p.add(line(&[(7.5, 12.0), (16.5, 12.0)]));
+        }
+        Icon::LayoutFull => {
+            frame(3.0, 3.0, 21.0, 21.0);
+            p.add(line(&[(3.0, 11.0), (21.0, 11.0)]));
+            p.add(line(&[(12.0, 3.0), (12.0, 11.0)]));
+        }
+        Icon::LayoutImages => {
+            frame(3.0, 3.0, 21.0, 21.0);
+            p.add(line(&[(12.0, 3.0), (12.0, 21.0)]));
+        }
+        Icon::LayoutPreview => frame(3.0, 3.0, 21.0, 21.0),
+        Icon::LayoutFrames => {
+            for (x, y) in [(3.0, 3.0), (14.0, 3.0), (3.0, 14.0), (14.0, 14.0)] {
+                frame(x, y, x + 7.0, y + 7.0);
+            }
+        }
+        Icon::First => {
+            p.rect_filled(Rect::from_min_max(at(5.0, 5.0), at(7.4, 19.0)), 1.0, color);
+            p.add(fill(&[(19.0, 5.5), (19.0, 18.5), (9.0, 12.0)]));
+        }
+        Icon::Last => {
+            p.rect_filled(
+                Rect::from_min_max(at(16.6, 5.0), at(19.0, 19.0)),
+                1.0,
+                color,
+            );
+            p.add(fill(&[(5.0, 5.5), (15.0, 12.0), (5.0, 18.5)]));
+        }
+        Icon::Previous => {
+            p.add(line(&[(15.0, 5.0), (8.0, 12.0), (15.0, 19.0)]));
+        }
+        Icon::Next => {
+            p.add(line(&[(9.0, 5.0), (16.0, 12.0), (9.0, 19.0)]));
+        }
+        Icon::Play => {
+            p.add(fill(&[(7.0, 4.5), (20.0, 12.0), (7.0, 19.5)]));
+        }
+        Icon::Pause => {
+            p.rect_filled(Rect::from_min_max(at(6.0, 5.0), at(10.0, 19.0)), 1.0, color);
+            p.rect_filled(
+                Rect::from_min_max(at(14.0, 5.0), at(18.0, 19.0)),
+                1.0,
+                color,
+            );
+        }
+        Icon::Loop => {
+            p.add(line(&[(17.0, 2.0), (20.0, 5.0), (17.0, 8.0)]));
+            p.add(line(&[(4.0, 11.0), (4.0, 9.0), (8.0, 5.0), (20.0, 5.0)]));
+            p.add(line(&[(7.0, 22.0), (4.0, 19.0), (7.0, 16.0)]));
+            p.add(line(&[
+                (20.0, 13.0),
+                (20.0, 15.0),
+                (16.0, 19.0),
+                (4.0, 19.0),
+            ]));
+        }
+        Icon::Eye => eye(),
+        Icon::EyeOff => {
+            eye();
+            p.add(line(&[(3.0, 3.0), (21.0, 21.0)]));
+        }
+        Icon::Plus => {
+            p.add(line(&[(12.0, 5.0), (12.0, 19.0)]));
+            p.add(line(&[(5.0, 12.0), (19.0, 12.0)]));
+        }
+        Icon::Morph => {
+            p.circle_stroke(at(7.0, 12.0), 4.0 * s, stroke);
+            p.rect_stroke(
+                Rect::from_min_max(at(13.0, 8.0), at(21.0, 16.0)),
+                CornerRadius::same((2.0 * s) as u8),
+                stroke,
+                StrokeKind::Middle,
+            );
+            p.circle_filled(at(11.5, 12.0), width * 0.5, color);
+        }
         Icon::Image => {
             p.rect_stroke(
                 Rect::from_min_max(at(3.0, 4.0), at(21.0, 20.0)),
@@ -315,6 +520,385 @@ pub fn icon_badge(
 pub fn centred_text(ui: &Ui, at: Pos2, text: &str, font: egui::FontId, color: Color32) -> Rect {
     ui.painter()
         .text(at, Align2::CENTER_CENTER, text, font, color)
+}
+
+/// One part of a segmented control or toggle group.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Segment<'a> {
+    /// Shown text; empty for an icon-only segment.
+    pub label: &'a str,
+    pub icon: Option<Icon>,
+    /// A key shown after the label in tertiary text ("A").
+    pub key: Option<&'a str>,
+    /// Hover text, and the accessible name of an icon-only segment.
+    pub tip: &'a str,
+}
+
+impl<'a> Segment<'a> {
+    pub fn text(label: &'a str) -> Self {
+        Self {
+            label,
+            ..Self::default()
+        }
+    }
+
+    pub fn icon(icon: Icon, label: &'a str) -> Self {
+        Self {
+            label,
+            icon: Some(icon),
+            ..Self::default()
+        }
+    }
+
+    /// An icon with no visible text; `tip` names it.
+    pub fn icon_only(icon: Icon, tip: &'a str) -> Self {
+        Self {
+            icon: Some(icon),
+            tip,
+            ..Self::default()
+        }
+    }
+
+    pub fn key(mut self, key: &'a str) -> Self {
+        self.key = Some(key);
+        self
+    }
+
+    pub fn tip(mut self, tip: &'a str) -> Self {
+        self.tip = tip;
+        self
+    }
+}
+
+/// A row of segments on a recessed track; `is_on` says which are lit. Returns the index clicked.
+fn segment_row(
+    ui: &mut Ui,
+    segments: &[Segment<'_>],
+    is_on: impl Fn(usize) -> bool,
+    exclusive: bool,
+    enabled: bool,
+    height: f32,
+) -> Option<usize> {
+    let t = theme::get(ui.ctx());
+    let c = t.color;
+    let size = if height < t.control.compact_height {
+        t.text.small
+    } else {
+        t.text.label
+    };
+    let mut clicked = None;
+    Frame::NONE
+        .fill(c.app)
+        .corner_radius(CornerRadius::same(t.radius.card))
+        .inner_margin(Margin::same(2))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 2.0;
+                // Inside a right-to-left bar the row is laid out from the right, so walk the
+                // segments backwards to keep them reading left to right.
+                let rtl = ui.layout().main_dir() == egui::Direction::RightToLeft;
+                let order: Vec<usize> = if rtl {
+                    (0..segments.len()).rev().collect()
+                } else {
+                    (0..segments.len()).collect()
+                };
+                for (i, seg) in order
+                    .into_iter()
+                    .filter_map(|i| Some((i, segments.get(i)?)))
+                {
+                    let on = is_on(i);
+                    let font = t.regular(size);
+                    let text = (!seg.label.is_empty()).then(|| {
+                        ui.painter().layout_no_wrap(
+                            seg.label.to_string(),
+                            font.clone(),
+                            Color32::PLACEHOLDER,
+                        )
+                    });
+                    let key = seg.key.map(|k| {
+                        ui.painter().layout_no_wrap(
+                            k.to_string(),
+                            t.regular(t.text.small - 1.0),
+                            c.text_tertiary,
+                        )
+                    });
+                    let icon_w = if seg.icon.is_some() { 14.0 } else { 0.0 };
+                    let text_w = text.as_ref().map_or(0.0, |g| g.size().x);
+                    let key_w = key.as_ref().map_or(0.0, |g| g.size().x + 6.0);
+                    let gap = if seg.icon.is_some() && text.is_some() {
+                        6.0
+                    } else {
+                        0.0
+                    };
+                    let pad = if text.is_some() { 10.0 } else { 7.0 };
+                    let width = (icon_w + gap + text_w + key_w + pad * 2.0).max(height);
+                    let sense = if enabled {
+                        Sense::click()
+                    } else {
+                        Sense::hover()
+                    };
+                    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), sense);
+                    let name = if seg.label.is_empty() {
+                        seg.tip
+                    } else {
+                        seg.label
+                    };
+                    response.widget_info(|| {
+                        let kind = if exclusive {
+                            egui::WidgetType::RadioButton
+                        } else {
+                            egui::WidgetType::Checkbox
+                        };
+                        egui::WidgetInfo::selected(kind, enabled, on, name)
+                    });
+                    let hot = enabled && response.hovered();
+                    if on {
+                        ui.painter().rect_filled(
+                            rect,
+                            CornerRadius::same(t.radius.control),
+                            c.field_hover,
+                        );
+                    } else if hot {
+                        ui.painter().rect_filled(
+                            rect,
+                            CornerRadius::same(t.radius.control),
+                            c.field,
+                        );
+                    }
+                    let fg = if !enabled {
+                        c.text_disabled
+                    } else if on || hot {
+                        c.text
+                    } else {
+                        c.text_secondary
+                    };
+                    let mut x = rect.left() + pad;
+                    if text.is_none() && key.is_none() {
+                        x = rect.center().x - icon_w / 2.0;
+                    }
+                    if let Some(which) = seg.icon {
+                        let r = Rect::from_min_size(
+                            Pos2::new(x, rect.center().y - 7.0),
+                            Vec2::splat(14.0),
+                        );
+                        icon(ui, r, which, fg, 1.5);
+                        x += icon_w + gap;
+                    }
+                    if let Some(g) = text {
+                        let y = rect.center().y - g.size().y / 2.0;
+                        let w = g.size().x;
+                        ui.painter().galley(Pos2::new(x, y), g, fg);
+                        x += w + 6.0;
+                    }
+                    if let Some(g) = key {
+                        let y = rect.center().y - g.size().y / 2.0;
+                        ui.painter().galley(Pos2::new(x, y), g, c.text_tertiary);
+                    }
+                    let response = if seg.tip.is_empty() {
+                        response
+                    } else {
+                        response.on_hover_text(seg.tip)
+                    };
+                    if response.clicked() {
+                        clicked = Some(i);
+                    }
+                }
+            });
+        });
+    clicked
+}
+
+/// A segmented control: one choice of several. Returns the segment clicked.
+pub fn segmented(
+    ui: &mut Ui,
+    segments: &[Segment<'_>],
+    selected: usize,
+    enabled: bool,
+    height: f32,
+) -> Option<usize> {
+    segment_row(ui, segments, |i| i == selected, true, enabled, height)
+}
+
+/// Independent on/off toggles drawn as one group. Returns the toggle clicked.
+pub fn toggle_group(
+    ui: &mut Ui,
+    segments: &[Segment<'_>],
+    on: &[bool],
+    height: f32,
+) -> Option<usize> {
+    segment_row(
+        ui,
+        segments,
+        |i| on.get(i).copied().unwrap_or(false),
+        false,
+        true,
+        height,
+    )
+}
+
+/// A square icon button. `on` marks a toggle that is active (its icon in the focus colour).
+pub fn icon_button(
+    ui: &mut Ui,
+    which: Icon,
+    label: &str,
+    on: bool,
+    enabled: bool,
+    size: f32,
+) -> Response {
+    let t = theme::get(ui.ctx());
+    let c = t.color;
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), sense);
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, enabled, on, label));
+    let hot = enabled && (response.hovered() || response.has_focus());
+    let fill = if on || hot {
+        c.field
+    } else {
+        Color32::TRANSPARENT
+    };
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(t.radius.control), fill);
+    let fg = if !enabled {
+        c.text_disabled
+    } else if on {
+        c.focus
+    } else if hot {
+        c.text
+    } else {
+        c.text_secondary
+    };
+    let glyph = (size * 0.5).round();
+    icon(
+        ui,
+        Rect::from_center_size(rect.center(), Vec2::splat(glyph)),
+        which,
+        fg,
+        1.8,
+    );
+    response.on_hover_text(label)
+}
+
+/// A small text toggle the size of an icon button ("%").
+pub fn text_toggle(ui: &mut Ui, text: &str, label: &str, on: bool, size: f32) -> Response {
+    let t = theme::get(ui.ctx());
+    let c = t.color;
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, label));
+    let hot = response.hovered();
+    let fill = if on || hot {
+        c.field
+    } else {
+        Color32::TRANSPARENT
+    };
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(t.radius.control), fill);
+    let fg = if on {
+        c.focus
+    } else if hot {
+        c.text
+    } else {
+        c.text_secondary
+    };
+    centred_text(ui, rect.center(), text, t.medium(t.text.label), fg);
+    response.on_hover_text(label)
+}
+
+/// A round filled button with an icon: Play.
+pub fn round_button(
+    ui: &mut Ui,
+    which: Icon,
+    label: &str,
+    enabled: bool,
+    diameter: f32,
+) -> Response {
+    let t = theme::get(ui.ctx());
+    let c = t.color;
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(diameter), sense);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
+    let (fill, fg) = if !enabled {
+        (c.disabled, c.text_disabled)
+    } else if response.hovered() {
+        (c.accent_hover, c.on_accent)
+    } else {
+        (c.accent, c.on_accent)
+    };
+    if enabled {
+        ui.painter().add(
+            t.shadow
+                .control
+                .as_shape(rect, CornerRadius::same((diameter / 2.0) as u8)),
+        );
+    }
+    ui.painter()
+        .circle_filled(rect.center(), diameter / 2.0, fill);
+    icon(
+        ui,
+        Rect::from_center_size(
+            rect.center() + Vec2::new(diameter * 0.03, 0.0),
+            Vec2::splat(diameter * 0.4),
+        ),
+        which,
+        fg,
+        1.8,
+    );
+    response.on_hover_text(label)
+}
+
+/// An on/off switch with a label, as a pill that lights up when on. Returns the response; the
+/// caller flips its value when it is clicked.
+pub fn switch(ui: &mut Ui, label: &str, on: bool, height: f32) -> Response {
+    let t = theme::get(ui.ctx());
+    let c = t.color;
+    let galley = ui.painter().layout_no_wrap(
+        label.to_string(),
+        t.regular(t.text.label),
+        Color32::PLACEHOLDER,
+    );
+    let track = Vec2::new(26.0, 16.0);
+    let width = 6.0 + track.x + 8.0 + galley.size().x + 10.0;
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, label));
+    let hot = response.hovered();
+    let fill = if on {
+        c.field_hover
+    } else if hot {
+        c.field
+    } else {
+        Color32::TRANSPARENT
+    };
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(t.radius.control), fill);
+    let track_rect = Rect::from_min_size(
+        Pos2::new(rect.left() + 6.0, rect.center().y - track.y / 2.0),
+        track,
+    );
+    let (track_fill, knob, knob_x) = if on {
+        (c.accent, c.accent_text, track_rect.right() - 8.0)
+    } else {
+        (c.line, c.text_tertiary, track_rect.left() + 8.0)
+    };
+    ui.painter()
+        .rect_filled(track_rect, CornerRadius::same(8), track_fill);
+    ui.painter()
+        .circle_filled(Pos2::new(knob_x, track_rect.center().y), 6.0, knob);
+    let fg = if on || hot { c.text } else { c.text_secondary };
+    let pos = Pos2::new(
+        track_rect.right() + 8.0,
+        rect.center().y - galley.size().y / 2.0,
+    );
+    ui.painter().galley(pos, galley, fg);
+    response
 }
 
 #[cfg(test)]

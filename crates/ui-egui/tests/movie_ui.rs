@@ -320,17 +320,17 @@ fn the_movie_scope_plays_across_the_join_and_follows_the_playhead() {
     assert_eq!(app(&h).state.preview_scope, PreviewScope::Movie);
 
     // First frame of the movie is in sequence 0.
-    h.get_by_label("|<").click();
+    h.get_by_label("First frame").click();
     h.run();
     assert_eq!((app(&h).state.sequence, app(&h).state.frame), (0, 0));
     // Last frame is the last of sequence 1.
-    h.get_by_label(">|").click();
+    h.get_by_label("Last frame").click();
     h.run();
     let last = app(&h).session().project().sequences[1].total_frames() - 1;
     assert_eq!((app(&h).state.sequence, app(&h).state.frame), (1, last));
 
     // Playing from the start visits both sequences, in order, without stopping.
-    h.get_by_label("|<").click();
+    h.get_by_label("First frame").click();
     h.run();
     h.state_mut().state.looping = false;
     h.state_mut().state.playing = true;
@@ -374,7 +374,7 @@ fn a_layer_project_previews_the_stacked_movie() {
         .unwrap();
     h.state_mut().run_action("view.previewScope");
     h.run();
-    h.get_by_label(">|").click();
+    h.get_by_label("Last frame").click();
     h.run();
     let longest = app(&h)
         .session()
@@ -396,7 +396,7 @@ fn scrubbing_by_percent_and_the_wheel_over_the_bar() {
     h.run();
     shot(&mut h, "scrub_percent");
     // The wheel over the transport bar steps one frame.
-    let bar = centre(h.get_by_label(">|")) + Vec2::new(120.0, 0.0);
+    let bar = centre(h.get_by_label("Last frame")) + Vec2::new(120.0, 0.0);
     move_to(&mut h, bar);
     let before = app(&h).state.frame;
     frame(

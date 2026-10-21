@@ -117,18 +117,17 @@ impl InbetweenApp {
     }
 
     pub(super) fn transport_bar(&mut self, ctx: &Context) {
+        use crate::kit::{self, Icon, Segment};
+        let t = crate::theme::get(ctx);
+        let c = t.color;
         let frames = self.transport_frames();
         let enabled = frames > 1;
         let pos = self.transport_pos();
-        // Just the timing, so the closure below does not borrow the session.
-        let t = self
-            .prepared()
-            .map(|p| p.sequence.frame_time(self.state.frame));
         let movie_name = if self.movie_scope() {
             self.session
                 .sequence(self.state.sequence)
                 .ok()
-                .map(|s| format!("{}  ", s.name))
+                .map(|s| s.name.clone())
         } else {
             None
         };
@@ -136,47 +135,141 @@ impl InbetweenApp {
         let mut new_pos = pos;
         let mut fps = self.session.project().fps;
         let mut fps_commit = false;
-        let mut scope_toggle = false;
-        egui::TopBottomPanel::bottom("transport").show(ctx, |ui| {
-            let over_bar = ui.rect_contains_pointer(ui.max_rect());
-            ui.horizontal(|ui| {
-                ui.add_enabled_ui(enabled, |ui| {
-                    if ui.button("|<").on_hover_text("First frame").clicked() {
+        let mut scope_click = None;
+        let movie = self.movie_scope();
+        let has_sequences = self.session.has_sequences();
+        egui::TopBottomPanel::bottom("transport")
+            .frame(
+                egui::Frame::NONE
+                    .fill(c.surface)
+                    .inner_margin(egui::Margin::symmetric(12, 8)),
+            )
+            .show(ctx, |ui| {
+                let over_bar = ui.rect_contains_pointer(ui.max_rect());
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = t.space.xs;
+                    let small = t.control.height - 4.0;
+                    if kit::icon_button(ui, Icon::First, "First frame", false, enabled, small)
+                        .clicked()
+                    {
                         new_pos = 0;
                         self.play_forward = true;
                     }
-                    if ui.button("<").on_hover_text("Previous frame").clicked() {
+                    if kit::icon_button(ui, Icon::Previous, "Previous frame", false, enabled, small)
+                        .clicked()
+                    {
                         new_pos = pos.saturating_sub(1);
                     }
-                    let label = if self.state.playing { "Pause" } else { "Play" };
-                    if ui.button(label).clicked() {
+                    let (glyph, label) = if self.state.playing {
+                        (Icon::Pause, "Pause")
+                    } else {
+                        (Icon::Play, "Play")
+                    };
+                    if kit::round_button(ui, glyph, label, enabled, t.control.height + 4.0)
+                        .clicked()
+                    {
                         self.state.playing = !self.state.playing;
                         self.play_forward = true;
                     }
-                    if ui.button(">").on_hover_text("Next frame").clicked() {
+                    if kit::icon_button(ui, Icon::Next, "Next frame", false, enabled, small)
+                        .clicked()
+                    {
                         new_pos = (pos + 1).min(frames.saturating_sub(1));
                     }
-                    if ui.button(">|").on_hover_text("Last frame").clicked() {
+                    if kit::icon_button(ui, Icon::Last, "Last frame", false, enabled, small)
+                        .clicked()
+                    {
                         new_pos = frames.saturating_sub(1);
                     }
-                    ui.spacing_mut().slider_width = (ui.available_width() - 640.0).max(80.0);
-                    if self.state.scrub_percent {
-                        let mut percent = percent_for_frame(pos, frames);
-                        let before = percent;
-                        ui.add(egui::Slider::new(&mut percent, 0..=100).suffix("%"));
-                        if percent != before {
-                            new_pos = frame_for_percent(percent, frames);
-                        }
-                    } else {
-                        let mut frame = pos;
-                        ui.add(
-                            egui::Slider::new(&mut frame, 0..=frames.saturating_sub(1))
-                                .text("frame"),
+                    ui.add_space(t.space.md);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing.x = t.space.xs;
+                        let scopes = [
+                            Segment::text("Sequence").tip("Preview the selected sequence"),
+                            Segment::text("Movie").tip("Preview the whole movie"),
+                        ];
+                        scope_click = kit::segmented(
+                            ui,
+                            &scopes,
+                            usize::from(movie),
+                            has_sequences,
+                            t.control.compact_height,
                         );
-                        new_pos = if frame != pos { frame } else { new_pos };
-                    }
-                    // The wheel over the bar steps one frame.
-                    if over_bar {
+                        ui.add_space(t.space.sm);
+                        let response = ui
+                            .add_sized(
+                                [72.0, t.control.compact_height],
+                                egui::DragValue::new(&mut fps)
+                                    .range(1.0..=60.0)
+                                    .speed(0.1)
+                                    .max_decimals(2)
+                                    .suffix(" fps"),
+                            )
+                            .on_hover_text("Frames per second: drag or type");
+                        if response.changed() && !response.dragged() {
+                            fps_commit = true;
+                        }
+                        if response.drag_stopped() || response.lost_focus() {
+                            fps_commit = true;
+                        }
+                        ui.add_space(t.space.sm);
+                        if kit::text_toggle(
+                            ui,
+                            "%",
+                            "Scrub in 1% steps instead of frames",
+                            self.state.scrub_percent,
+                            small,
+                        )
+                        .clicked()
+                        {
+                            self.state.scrub_percent = !self.state.scrub_percent;
+                        }
+                        if kit::icon_button(
+                            ui,
+                            Icon::Swap,
+                            "Ping-pong: play forward, then back",
+                            self.state.ping_pong,
+                            true,
+                            small,
+                        )
+                        .clicked()
+                        {
+                            self.state.ping_pong = !self.state.ping_pong;
+                        }
+                        if kit::icon_button(ui, Icon::Loop, "Loop", self.state.looping, true, small)
+                            .clicked()
+                        {
+                            self.state.looping = !self.state.looping;
+                        }
+                        ui.add_space(t.space.md);
+                        // Right to left: the timecode, then the frame counter.
+                        ui.label(
+                            egui::RichText::new(timecode(seconds))
+                                .size(t.text.small)
+                                .color(c.text_tertiary),
+                        );
+                        ui.add_space(t.space.xs);
+                        let counter = if self.state.scrub_percent {
+                            format!("{}%", percent_for_frame(pos, frames))
+                        } else {
+                            format!("{} / {frames}", pos + 1)
+                        };
+                        let counter = ui.label(
+                            egui::RichText::new(counter)
+                                .size(t.text.body)
+                                .color(if enabled { c.text } else { c.text_tertiary }),
+                        );
+                        if let Some(name) = &movie_name {
+                            counter.on_hover_text(format!("In \u{201c}{name}\u{201d}"));
+                        }
+                        ui.add_space(t.space.md);
+                        if let Some(p) =
+                            scrubber(ui, pos, frames, enabled, self.state.scrub_percent)
+                        {
+                            new_pos = p;
+                        }
+                    });
+                    if over_bar && enabled {
                         let wheel = ui.input(|i| i.raw_scroll_delta.y);
                         if wheel > 0.0 {
                             new_pos = pos.saturating_sub(1);
@@ -185,57 +278,98 @@ impl InbetweenApp {
                         }
                     }
                 });
-                ui.label(format!(
-                    "{}{} / {frames}  {}%  {}{}",
-                    movie_name.clone().unwrap_or_default(),
-                    pos + 1,
-                    percent_for_frame(pos, frames),
-                    timecode(seconds),
-                    t.map_or(String::new(), |t| format!("  t = {t:.2}")),
-                ));
-                ui.checkbox(&mut self.state.scrub_percent, "%")
-                    .on_hover_text("Scrub in 1% steps instead of frames");
-                ui.checkbox(&mut self.state.looping, "Loop");
-                ui.checkbox(&mut self.state.ping_pong, "Ping-pong");
-                let response = ui.add(
-                    egui::DragValue::new(&mut fps)
-                        .range(1.0..=60.0)
-                        .speed(0.1)
-                        .max_decimals(2)
-                        .suffix(" fps"),
-                );
-                if response.changed() && !response.dragged() {
-                    fps_commit = true;
-                }
-                if response.drag_stopped() || response.lost_focus() {
-                    fps_commit = true;
-                }
-                let scope = if self.movie_scope() {
-                    "Movie"
-                } else {
-                    "Sequence"
-                };
-                if ui
-                    .button(scope)
-                    .on_hover_text(
-                        "What the preview plays: the selected sequence or the whole movie",
-                    )
-                    .clicked()
-                {
-                    scope_toggle = true;
-                }
             });
-        });
         if fps_commit && (fps - self.session.project().fps).abs() > f64::EPSILON {
             let _ = self.run_command("movie.fps", &json!({ "fps": fps }));
         }
-        if scope_toggle {
+        if scope_click.is_some_and(|i| i != usize::from(movie)) {
             self.run_action("view.previewScope");
         }
         if new_pos != pos {
             self.set_transport_pos(new_pos);
         }
     }
+}
+
+/// The frame a point `fraction` (0 to 1) along the scrubber stands for. In percent mode the
+/// position snaps to whole percents first.
+pub(crate) fn frame_at_fraction(fraction: f32, frames: u32, percent: bool) -> u32 {
+    let f = if fraction.is_finite() {
+        fraction.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    if percent {
+        return frame_for_percent((f * 100.0).round() as u32, frames);
+    }
+    let last = frames.saturating_sub(1);
+    ((f * last as f32).round() as u32).min(last)
+}
+
+/// The scrubber: a track with the played part in the focus colour, a tick per frame when they
+/// fit, and a knob at the playhead. Returns a new position when it was clicked or dragged.
+fn scrubber(ui: &mut egui::Ui, pos: u32, frames: u32, enabled: bool, percent: bool) -> Option<u32> {
+    let t = crate::theme::get(ui.ctx());
+    let c = t.color;
+    let width = ui.available_width().max(80.0);
+    let sense = if enabled {
+        egui::Sense::click_and_drag()
+    } else {
+        egui::Sense::hover()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 28.0), sense);
+    let last = frames.saturating_sub(1).max(1);
+    response.widget_info(|| {
+        let mut info = egui::WidgetInfo::labeled(egui::WidgetType::Slider, enabled, "Frame");
+        info.value = Some(f64::from(pos + 1));
+        info
+    });
+    let inner = rect.shrink2(Vec2::new(7.0, 0.0));
+    let track_y = rect.center().y - 3.0;
+    let track = Rect::from_min_max(
+        Pos2::new(inner.left(), track_y - 2.0),
+        Pos2::new(inner.right(), track_y + 2.0),
+    );
+    ui.painter()
+        .rect_filled(track, egui::CornerRadius::same(2), c.line);
+    let fraction = if enabled {
+        pos as f32 / last as f32
+    } else {
+        0.0
+    };
+    let knob_x = inner.left() + inner.width() * fraction;
+    if enabled {
+        let played = Rect::from_min_max(track.min, Pos2::new(knob_x, track.max.y));
+        ui.painter()
+            .rect_filled(played, egui::CornerRadius::same(2), c.focus);
+    }
+    if enabled && frames > 1 && inner.width() / frames as f32 >= 4.0 {
+        for i in 0..frames {
+            let x = inner.left() + inner.width() * i as f32 / last as f32;
+            ui.painter().vline(
+                x,
+                (track.bottom() + 4.0)..=(track.bottom() + 8.0),
+                egui::Stroke::new(1.0_f32, c.tick),
+            );
+        }
+    }
+    if enabled {
+        let hot = response.hovered() || response.dragged();
+        let knob = Pos2::new(knob_x, track.center().y);
+        ui.painter().circle_filled(
+            knob + Vec2::new(0.0, 1.0),
+            7.0,
+            egui::Color32::from_black_alpha(110),
+        );
+        ui.painter()
+            .circle_filled(knob, if hot { 8.0 } else { 7.0 }, c.text);
+    }
+    let pointer = response.interact_pointer_pos()?;
+    if !(response.clicked() || response.dragged()) || inner.width() <= 0.0 {
+        return None;
+    }
+    let f = (pointer.x - inner.left()) / inner.width();
+    Some(frame_at_fraction(f, frames, percent))
 }
 
 #[cfg(test)]
@@ -257,6 +391,19 @@ mod tests {
             assert_eq!(frame_for_percent(0, frames), 0);
             assert_eq!(frame_for_percent(100, frames), frames - 1);
         }
+    }
+
+    #[test]
+    fn the_scrubber_maps_its_width_onto_the_frames() {
+        assert_eq!(frame_at_fraction(0.0, 12, false), 0);
+        assert_eq!(frame_at_fraction(1.0, 12, false), 11);
+        assert_eq!(frame_at_fraction(0.5, 11, false), 5);
+        assert_eq!(frame_at_fraction(-3.0, 12, false), 0);
+        assert_eq!(frame_at_fraction(9.0, 12, false), 11);
+        assert_eq!(frame_at_fraction(f32::NAN, 12, false), 0);
+        assert_eq!(frame_at_fraction(0.7, 1, false), 0);
+        assert_eq!(frame_at_fraction(0.7, 0, false), 0);
+        assert_eq!(frame_at_fraction(0.504, 101, true), 50);
     }
 
     #[test]

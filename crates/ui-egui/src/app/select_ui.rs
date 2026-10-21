@@ -202,30 +202,125 @@ impl InbetweenApp {
 
     /// The tool strip above the canvases.
     pub(super) fn tool_strip(&mut self, ctx: &Context) {
+        use crate::kit::{self, Icon, Segment};
+        let t = crate::theme::get(ctx);
         let mut tool = self.state.tool;
         let prefs = *self.session.prefs();
         let mut auto_partner = prefs.auto_partner;
         let mut magnifier = prefs.magnifier;
         let mut power = i64::from(prefs.magnifier_power);
-        egui::TopBottomPanel::top("tools").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                for t in Tool::ALL {
-                    ui.selectable_value(&mut tool, t, t.label());
-                }
-                ui.separator();
-                ui.checkbox(&mut auto_partner, "Auto partner")
-                    .on_hover_text("Adding a dot also places its partner on the other image");
-                ui.checkbox(&mut magnifier, "Magnifier");
-                if magnifier {
-                    ui.add(egui::DragValue::new(&mut power).range(1..=4).prefix("x"));
-                }
-                let n = self.session.selection().len();
-                if n > 0 {
-                    ui.separator();
-                    ui.label(format!("{n} selected"));
-                }
+        let enabled = self.session.has_sequences();
+        let selected = self.session.selection().len();
+        let mut clear_selection = false;
+        let mut overlay_click = None;
+        let overlays = [prefs.show_dots, prefs.show_lines, prefs.show_triangles];
+        egui::TopBottomPanel::top("tools")
+            .frame(
+                egui::Frame::NONE
+                    .fill(t.color.surface)
+                    .inner_margin(egui::Margin::symmetric(12, 8)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = t.space.sm;
+                    let tools = [
+                        Segment::icon(Icon::Cursor, "Edit")
+                            .key("E")
+                            .tip("Select, drag and marquee dots and lines"),
+                        Segment::icon(Icon::AddDot, "Add")
+                            .key("A")
+                            .tip("Click to add a dot (Alt+click: partner at the same place)"),
+                        Segment::icon(Icon::RemoveDot, "Delete")
+                            .key("D")
+                            .tip("Click a dot to delete it"),
+                        Segment::icon(Icon::Polyline, "Line")
+                            .key("L")
+                            .tip("Each click drops a dot joined to the last one"),
+                    ];
+                    let current = Tool::ALL.iter().position(|x| *x == tool).unwrap_or(0);
+                    if let Some(i) =
+                        kit::segmented(ui, &tools, current, enabled, t.control.compact_height)
+                    {
+                        tool = Tool::ALL.get(i).copied().unwrap_or(tool);
+                    }
+                    ui.add_space(t.space.sm);
+                    if kit::switch(ui, "Auto partner", auto_partner, t.control.compact_height)
+                        .on_hover_text("Adding a dot also places its partner on the other image")
+                        .clicked()
+                    {
+                        auto_partner = !auto_partner;
+                    }
+                    if kit::switch(ui, "Magnifier", magnifier, t.control.compact_height).clicked() {
+                        magnifier = !magnifier;
+                    }
+                    if magnifier {
+                        ui.add(
+                            egui::DragValue::new(&mut power)
+                                .range(1..=4)
+                                .prefix("\u{d7}"),
+                        );
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let show = [
+                            Segment::icon_only(Icon::Dots, "Show dots"),
+                            Segment::icon_only(Icon::Lines, "Show lines"),
+                            Segment::icon_only(Icon::Triangles, "Show triangles"),
+                        ];
+                        overlay_click =
+                            kit::toggle_group(ui, &show, &overlays, t.control.compact_height);
+                        if selected > 0 {
+                            ui.add_space(t.space.sm);
+                            egui::Frame::NONE
+                                .fill(t.color.field)
+                                .corner_radius(egui::CornerRadius::same(t.radius.control))
+                                .inner_margin(egui::Margin {
+                                    left: 10,
+                                    right: 2,
+                                    top: 2,
+                                    bottom: 2,
+                                })
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.spacing_mut().item_spacing.x = t.space.xs;
+                                        let noun = if selected == 1 { "dot" } else { "dots" };
+                                        ui.label(
+                                            egui::RichText::new(format!(
+                                                "{selected} {noun} selected"
+                                            ))
+                                            .size(t.text.label)
+                                            .color(t.color.text),
+                                        );
+                                        if kit::icon_button(
+                                            ui,
+                                            Icon::Close,
+                                            "Clear selection",
+                                            false,
+                                            true,
+                                            t.control.compact_height - 4.0,
+                                        )
+                                        .clicked()
+                                        {
+                                            clear_selection = true;
+                                        }
+                                    });
+                                });
+                        }
+                    });
+                });
             });
-        });
+        if clear_selection {
+            let _ = self.run_command("dots.selectNone", &json!({}));
+        }
+        if let Some(i) = overlay_click {
+            let ids = [
+                "view.toggle.dots",
+                "view.toggle.lines",
+                "view.toggle.triangles",
+            ];
+            if let (Some(id), Some(on)) = (ids.get(i), overlays.get(i)) {
+                let _ = self.run_command(id, &json!({ "on": !on }));
+            }
+        }
         if tool != self.state.tool {
             self.state.tool = tool;
             self.chain = None;

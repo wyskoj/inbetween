@@ -149,10 +149,16 @@ fn the_demo_project_lays_out_three_canvases() {
 }
 
 #[test]
-fn empty_app_shows_a_hint_and_survives_everything() {
+fn empty_app_shows_the_start_screen_and_survives_everything() {
+    use egui_kittest::kittest::Queryable;
     let mut h = harness_with(empty_app());
     assert!(!app(&h).session().has_sequences());
-    let c = app(&h).layout.source1.center();
+    // The start screen offers the two ways in, and no panels are laid out yet.
+    h.get_by_label("New from two images\u{2026}");
+    h.get_by_label("Open project\u{2026}");
+    assert_eq!(app(&h).layout.source1.area(), 0.0);
+    shot(&mut h, "start_screen");
+    let c = Pos2::new(900.0, 760.0);
     click(&mut h, c, PointerButton::Primary);
     click(&mut h, c, PointerButton::Secondary);
     frame(
@@ -374,6 +380,7 @@ fn wheel_zoom_keeps_the_point_under_the_cursor_and_links_both_images() {
     let rect = app(&h).layout.source1;
     let cursor = rect.center() + Vec2::new(60.0, -20.0);
     let before = app(&h).state.view(Panel::Source1).to_frame(rect, cursor);
+    let fitted = app(&h).state.view(Panel::Source1).zoom();
     frame(&mut h, vec![mv(cursor)]);
     frame(
         &mut h,
@@ -386,7 +393,11 @@ fn wheel_zoom_keeps_the_point_under_the_cursor_and_links_both_images() {
     h.run_steps(12);
     let v1 = *app(&h).state.view(Panel::Source1);
     let v2 = *app(&h).state.view(Panel::Source2);
-    assert!(v1.zoom() > 1.2, "zoomed in to {}", v1.zoom());
+    assert!(
+        v1.zoom() > fitted * 1.2,
+        "zoomed in from {fitted} to {}",
+        v1.zoom()
+    );
     assert!(!v1.auto_fit);
     assert_eq!(v1, v2, "the two image views are linked");
     let after = v1.to_frame(rect, cursor);

@@ -186,12 +186,15 @@ impl InbetweenApp {
         });
         snap.dots[i].clear();
         snap.mesh[i].clear();
-        snap.titles[i] = format!(
-            "Image {}: cropping  ({} x {})  - drag the box; Enter applies, Esc cancels",
-            tool.image,
-            image.width(),
-            image.height()
-        );
+        snap.titles[i] = crate::panels::Title {
+            name: "Cropping".into(),
+            meta: format!(
+                "{} \u{d7} {} \u{b7} drag the box, Enter applies, Esc cancels",
+                image.width(),
+                image.height()
+            ),
+            ..crate::panels::Title::new(if tool.image == 1 { "Start" } else { "End" })
+        };
         snap.crop[i] = Some(CropView { tool, fit });
     }
 

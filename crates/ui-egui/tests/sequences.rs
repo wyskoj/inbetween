@@ -379,8 +379,9 @@ fn list_actions_move_to_copy_frame_and_switch_the_project_type() {
         app(&h).session().project().kind,
         inbetween_doc::ProjectType::Layer
     );
-    let _ = h.get_by_label("b  (layer 1, top)");
-    let _ = h.get_by_label("a  (layer 3, below)");
+    let _ = h.get_by_label("b");
+    let _ = h.get_by_label_contains("Layer 1, top");
+    let _ = h.get_by_label_contains("Layer 3, below");
     shot(&mut h, "sequence_list_layers");
     app_mut(&mut h).apply_list(ListAction::ProjectType("sequence"));
     h.run();

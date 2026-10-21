@@ -52,6 +52,7 @@ mod layout_ui;
 mod new_two_ui;
 mod prompt_ui;
 mod select_ui;
+mod start_ui;
 mod track_ui;
 mod transport_ui;
 mod visual_ui;
@@ -76,6 +77,37 @@ impl Default for Layout {
 
 /// Commands that throw the open project away. When it has unsaved changes the shell asks first.
 /// Recent, Open Visually and dropped files all dispatch `project.open`, so they are covered.
+/// What each panel's header calls it: the start and end images, and the preview.
+const ROLES: [&str; 3] = ["Start", "End", "Preview"];
+
+/// The layouts offered in the top bar (Dual opens a second window, so it stays in View).
+const LAYOUT_MODES: [(crate::state::ViewMode, &str, crate::kit::Icon, &str); 4] = [
+    (
+        crate::state::ViewMode::Full,
+        "Full",
+        crate::kit::Icon::LayoutFull,
+        "Both images over the preview (F5)",
+    ),
+    (
+        crate::state::ViewMode::Edit,
+        "Images",
+        crate::kit::Icon::LayoutImages,
+        "Both images, full height (F6)",
+    ),
+    (
+        crate::state::ViewMode::Preview,
+        "Preview",
+        crate::kit::Icon::LayoutPreview,
+        "The preview alone (F7)",
+    ),
+    (
+        crate::state::ViewMode::Frames,
+        "Frames",
+        crate::kit::Icon::LayoutFrames,
+        "Every frame as a thumbnail (F8)",
+    ),
+];
+
 pub const REPLACES_PROJECT: &[&str] = &["file.new", "project.new", "project.open", "file.wizard"];
 
 /// The id that stands for closing the window in a pending prompt.
@@ -1219,11 +1251,14 @@ impl InbetweenApp {
         let movie = self.session.project().total_frames();
         let layers = self.session.project().kind == inbetween_doc::ProjectType::Layer;
         let mut actions = Vec::new();
+        let fps = self.session.project().fps;
+        let t = crate::theme::get(ctx);
         egui::SidePanel::left("sequences")
-            .default_width(220.0)
-            .width_range(160.0..=420.0)
+            .default_width(272.0)
+            .width_range(220.0..=420.0)
+            .frame(egui::Frame::NONE.fill(t.color.surface))
             .show(ctx, |ui| {
-                actions = seqlist::sequence_list(ui, &rows, movie, layers);
+                actions = seqlist::sequence_list(ui, &rows, movie, layers, fps);
             });
         for action in actions {
             self.apply_list(action);
@@ -1343,78 +1378,127 @@ impl InbetweenApp {
         let mut recent_click: Option<(String, bool)> = None;
         let mut quick: Option<usize> = None;
         let has_sequences = self.session.has_sequences();
-        egui::TopBottomPanel::top("menu").show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                for node in &self.menus {
-                    if let MenuNode::Menu { name, children } = node {
-                        if name == "View" {
-                            continue;
-                        }
-                        ui.menu_button(name, |ui| {
-                            menu_items(
-                                ui,
-                                children,
-                                &self.registry,
-                                &self.session,
-                                &toggles,
-                                &mut clicked,
-                            );
-                            if name == "File" {
-                                ui.separator();
-                                recent_menu(ui, &recent, &mut recent_click);
+        let t = crate::theme::get(ctx);
+        let project_name = self.session.path().and_then(|p| p.file_name()).map_or_else(
+            || "Untitled".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+        let dirty = self.session.is_dirty();
+        let mode_index = LAYOUT_MODES
+            .iter()
+            .position(|(m, ..)| *m == self.state.mode)
+            .unwrap_or(usize::MAX);
+        let mut mode_click: Option<usize> = None;
+        egui::TopBottomPanel::top("menu")
+            .frame(
+                egui::Frame::NONE
+                    .fill(t.color.app)
+                    .inner_margin(egui::Margin::symmetric(8, 6)),
+            )
+            .show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    for node in &self.menus {
+                        if let MenuNode::Menu { name, children } = node {
+                            if name == "View" {
+                                continue;
                             }
-                            if name == "Image" {
-                                ui.separator();
-                                for (i, (label, ..)) in QUICK_IMAGE.iter().enumerate() {
-                                    if ui
-                                        .add_enabled(has_sequences, egui::Button::new(*label))
-                                        .clicked()
-                                    {
-                                        quick = Some(i);
-                                        ui.close_menu();
+                            ui.menu_button(name, |ui| {
+                                menu_items(
+                                    ui,
+                                    children,
+                                    &self.registry,
+                                    &self.session,
+                                    &toggles,
+                                    &mut clicked,
+                                );
+                                if name == "File" {
+                                    ui.separator();
+                                    recent_menu(ui, &recent, &mut recent_click);
+                                }
+                                if name == "Image" {
+                                    ui.separator();
+                                    for (i, (label, ..)) in QUICK_IMAGE.iter().enumerate() {
+                                        if ui
+                                            .add_enabled(has_sequences, egui::Button::new(*label))
+                                            .clicked()
+                                        {
+                                            quick = Some(i);
+                                            ui.close_menu();
+                                        }
                                     }
                                 }
-                            }
-                        });
-                    }
-                }
-                ui.menu_button("View", |ui| {
-                    for (id, label, shortcut, gap) in &entries {
-                        if *gap {
-                            ui.separator();
+                            });
                         }
-                        if *id == "view.sequenceList" {
-                            // The engine's display commands sit between the layouts and the rest.
-                            for node in &self.menus {
-                                if let MenuNode::Menu { name, children } = node {
-                                    if name == "View" {
-                                        menu_items(
-                                            ui,
-                                            children,
-                                            &self.registry,
-                                            &self.session,
-                                            &toggles,
-                                            &mut clicked,
-                                        );
+                    }
+                    ui.menu_button("View", |ui| {
+                        for (id, label, shortcut, gap) in &entries {
+                            if *gap {
+                                ui.separator();
+                            }
+                            if *id == "view.sequenceList" {
+                                // The engine's display commands sit between the layouts and the rest.
+                                for node in &self.menus {
+                                    if let MenuNode::Menu { name, children } = node {
+                                        if name == "View" {
+                                            menu_items(
+                                                ui,
+                                                children,
+                                                &self.registry,
+                                                &self.session,
+                                                &toggles,
+                                                &mut clicked,
+                                            );
+                                        }
                                     }
                                 }
+                                ui.separator();
                             }
-                            ui.separator();
+                            let mut button = egui::Button::new(label.as_str());
+                            if let Some(sc) = shortcut {
+                                button = button.shortcut_text(shortcuts::label(sc));
+                            }
+                            if ui.add(button).clicked() {
+                                view_action = Some(id);
+                                ui.close_menu();
+                            }
                         }
-                        let mut button = egui::Button::new(label.as_str());
-                        if let Some(sc) = shortcut {
-                            button = button.shortcut_text(shortcuts::label(sc));
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let segments: Vec<crate::kit::Segment<'_>> = LAYOUT_MODES
+                            .iter()
+                            .map(|(_, label, icon, tip)| {
+                                crate::kit::Segment::icon(*icon, label).tip(tip)
+                            })
+                            .collect();
+                        mode_click = crate::kit::segmented(
+                            ui,
+                            &segments,
+                            mode_index,
+                            true,
+                            t.control.compact_height,
+                        );
+                        ui.add_space(t.space.lg);
+                        if dirty {
+                            ui.label(
+                                egui::RichText::new("\u{25cf}")
+                                    .size(t.text.small)
+                                    .color(t.color.focus),
+                            )
+                            .on_hover_text("Unsaved changes");
                         }
-                        if ui.add(button).clicked() {
-                            view_action = Some(id);
-                            ui.close_menu();
-                        }
-                    }
+                        ui.label(
+                            egui::RichText::new(&project_name)
+                                .size(t.text.label)
+                                .color(t.color.text_tertiary),
+                        );
+                    });
                 });
             });
-        });
         if let Some(id) = view_action {
             self.run_action(id);
+        }
+        if let Some((mode, ..)) = mode_click.and_then(|i| LAYOUT_MODES.get(i)) {
+            self.set_mode(*mode);
         }
         if let Some((path, exists)) = recent_click {
             if exists {
@@ -1454,32 +1538,52 @@ impl InbetweenApp {
     }
 
     fn status_bar(&mut self, ctx: &Context) {
-        egui::TopBottomPanel::bottom("status").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                match &self.status {
-                    Some(s) if s.is_error => {
-                        ui.colored_label(crate::theme::get(ui.ctx()).color.danger_text, &s.text);
-                    }
-                    Some(s) => {
-                        ui.label(&s.text);
-                    }
-                    None => {
-                        ui.label("Ready");
-                    }
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let dots = self.prepared().map_or(0, |p| p.sequence.dots.len());
-                    let zoom = self.state.view(Panel::Source1).zoom() * 100.0;
-                    let backend = match &self.gpu {
-                        Some(g) if self.preview.backend_name() == "GPU" => {
-                            format!("GPU preview ({})", g.ctx.adapter_name())
-                        }
-                        _ => "CPU preview".to_string(),
+        let t = crate::theme::get(ctx);
+        egui::TopBottomPanel::bottom("status")
+            .show_separator_line(false)
+            .frame(
+                egui::Frame::NONE
+                    .fill(t.color.app)
+                    .inner_margin(egui::Margin::symmetric(12, 6)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = t.space.lg;
+                    let small = |text: &str, color| {
+                        egui::RichText::new(text).size(t.text.small).color(color)
                     };
-                    ui.label(format!("{dots} dots  |  zoom {zoom:.0}%  |  {backend}"));
+                    match &self.status {
+                        Some(s) if s.is_error => {
+                            ui.label(small(&s.text, t.color.danger_text));
+                        }
+                        Some(s) => {
+                            ui.label(small(&s.text, t.color.text_secondary));
+                        }
+                        None => {
+                            ui.label(small("Ready", t.color.text_secondary));
+                        }
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let (backend, adapter) = match &self.gpu {
+                            Some(g) if self.preview.backend_name() == "GPU" => {
+                                ("GPU preview", g.ctx.adapter_name())
+                            }
+                            _ => ("CPU preview", ""),
+                        };
+                        let r = ui.label(small(backend, t.color.text_tertiary));
+                        if !adapter.is_empty() {
+                            r.on_hover_text(adapter);
+                        }
+                        if self.session.has_sequences() {
+                            let zoom = self.state.view(Panel::Source1).zoom() * 100.0;
+                            ui.label(small(&format!("Zoom {zoom:.0}%"), t.color.text_tertiary));
+                            let dots = self.prepared().map_or(0, |p| p.sequence.dots.len());
+                            let noun = if dots == 1 { "dot" } else { "dots" };
+                            ui.label(small(&format!("{dots} {noun}"), t.color.text_tertiary));
+                        }
+                    });
                 });
             });
-        });
     }
 
     fn snapshot(&mut self, ctx: &Context) -> Snapshot {
@@ -1527,15 +1631,16 @@ impl InbetweenApp {
                 }
             }
             snap.titles[i] = if sizes[i].0 > 0 {
-                format!(
-                    "Image {}: {}  ({} x {})",
-                    i + 1,
-                    name(refs[i]),
-                    sizes[i].0,
-                    sizes[i].1
-                )
+                crate::panels::Title {
+                    name: name(refs[i]),
+                    meta: format!("{} \u{d7} {}", sizes[i].0, sizes[i].1),
+                    ..crate::panels::Title::new(ROLES[i])
+                }
             } else {
-                format!("Image {}: not used by this morph type", i + 1)
+                crate::panels::Title {
+                    name: "Not used by this morph type".into(),
+                    ..crate::panels::Title::new(ROLES[i])
+                }
             };
             let img = i as u8 + 1;
             snap.dots[i] = seq
@@ -1623,16 +1728,17 @@ impl InbetweenApp {
         }
         let t = seq.frame_time(frames_now);
         let hold = if frames_now < seq.hold_start || frames_now >= seq.hold_start + seq.frames {
-            ", hold"
+            " (hold)"
         } else {
             ""
         };
-        snap.titles[2] = format!(
-            "Preview: frame {} of {}  (t = {t:.2}{hold})  [{}]",
-            frames_now + 1,
-            seq.total_frames(),
-            self.preview.backend_name()
-        );
+        let backend = self.preview.backend_name();
+        snap.titles[2] = crate::panels::Title {
+            name: format!("Frame {} of {}{hold}", frames_now + 1, seq.total_frames()),
+            meta: format!("t {t:.2}"),
+            badge: Some((backend.to_string(), format!("Rendered on the {backend}"))),
+            ..crate::panels::Title::new(ROLES[2])
+        };
         snap.preview_message = self.preview.error.clone();
         for i in 0..2 {
             self.crop_snapshot(ctx, i, &mut snap);
@@ -1711,7 +1817,7 @@ const STATE_KEY: &str = "inbetween.view_state";
 /// What the canvases draw this frame, copied out of the session.
 struct Snapshot {
     frame: Vec2,
-    titles: [String; 3],
+    titles: [crate::panels::Title; 3],
     shown: [Option<Shown>; 3],
     dots: [Vec<PanelDot>; 2],
     lines: [Vec<PanelLine>; 2],
@@ -1735,7 +1841,7 @@ impl Snapshot {
     fn empty() -> Self {
         Self {
             frame: Vec2::new(640.0, 480.0),
-            titles: ["Image 1".into(), "Image 2".into(), "Preview".into()],
+            titles: ROLES.map(crate::panels::Title::new),
             shown: [None; 3],
             dots: [Vec::new(), Vec::new()],
             lines: [Vec::new(), Vec::new()],

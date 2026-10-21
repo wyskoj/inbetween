@@ -71,3 +71,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - Video sources (spec section 11): drop an .mp4 on Image 1 and another on Image 2 in the real window and scrub the preview; export a video and play it to see clip, morph, clip. Try a clip with odd dimensions and a variable frame rate.
 
 - New From Two Images: in a real window, open File > New From Two Images, drop a file from the desktop onto each slot (the slot under the pointer lights up), drop two files at once onto the dialog, click a slot and pick with the real file dialog, and check Tab reaches the buttons and the name field.
+
+- Main window: in a real window, resize the sequence list narrow and wide (rows truncate, the footer summary wraps), drag the splitters (a handle shows on hover), click Recent entries on the start screen (a missing file is removed from the list), and check every segmented control and toggle with the keyboard (Tab and Space).

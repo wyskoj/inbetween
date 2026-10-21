@@ -49,6 +49,16 @@ Build redesigned windows from these, not from raw egui calls with styling:
   ("Optional") at the right. Mark optional fields, not required ones.
 - `kit::text_field`, `kit::text_line` (truncating), `kit::icon` and `kit::icon_badge` (stroke icons
   on a 24-unit grid), `kit::dashed_rect`.
+- `kit::icon_text_button`: a `button` with an icon before its text ("+ Blank").
+- `kit::segmented(ui, segments, selected, enabled, height)`: one choice of several on a recessed
+  track (tools, layouts, In order / Layers, Sequence / Movie). `kit::toggle_group` is the same
+  look for independent on/off toggles (show dots, lines, triangles). Build segments with
+  `Segment::text`, `Segment::icon`, `Segment::icon_only` (needs a `tip`, which is its name), `.key("A")`.
+  Both keep their order inside right-to-left layouts.
+- `kit::icon_button` (square, `on` lights the icon in `focus`), `kit::text_toggle` ("%"),
+  `kit::round_button` (Play), `kit::switch` (a labelled on/off pill).
+- Panel headers are `panels::Title { label, name, meta, badge, focused }`: a small role label
+  (Start, End, Preview), the main text, quiet details at the right and an optional badge.
 
 ## Patterns
 
@@ -78,7 +88,7 @@ Build redesigned windows from these, not from raw egui calls with styling:
 |---|---|---|---|
 | Design tokens | built | `theme.rs`, `kit.rs` | https://claude.ai/artifact/5dr1MEfJBGfhfZce9xCFrp |
 | New From Two Images | built | `new_two.rs`, `app/new_two_ui.rs`, `tests/new_two.rs` | https://claude.ai/artifact/5dr1MEfJBGfhfZce9xCFrp |
-| Main window (menus, tool strip, sequence list, panels, transport) | todo (global theme applied; sequence rows are cramped at the default sidebar width) | | |
+| Main window (top bar, tool bar, sequence list, panels, transport, status, start screen) | built | `app.rs` (top and status bars), `app/select_ui.rs` (tool bar), `seqlist.rs`, `panels.rs` (headers), `app/layout_ui.rs`, `app/transport_ui.rs`, `app/start_ui.rs` | https://claude.ai/artifact/D6vnDH6FEhorK1BQ9YkVnE |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
 | Export dialogs and progress | todo | | |
 | Dot tools (select, crop, camera) | todo | | |

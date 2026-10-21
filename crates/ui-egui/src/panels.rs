@@ -208,11 +208,33 @@ pub struct Hover {
     pub line: Option<usize>,
 }
 
+/// A panel's header: a small role label ("Start"), the main text, quiet details at the
+/// right, and an optional badge with a tooltip.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Title {
+    pub label: String,
+    pub name: String,
+    pub meta: String,
+    /// Badge text and its hover text.
+    pub badge: Option<(String, String)>,
+    /// The panel the Image menu's quick items act on: drawn with an outline.
+    pub focused: bool,
+}
+
+impl Title {
+    pub fn new(label: &str) -> Self {
+        Self {
+            label: label.to_string(),
+            ..Self::default()
+        }
+    }
+}
+
 /// Everything a source panel draws.
 pub struct SourcePanel<'a> {
     /// 1 or 2.
     pub image: u8,
-    pub title: String,
+    pub title: Title,
     /// Output size in pixels.
     pub frame: Vec2,
     pub shown: Option<Shown>,
@@ -260,14 +282,105 @@ pub struct PanelOutput {
     pub hover: Hover,
 }
 
-const BACKDROP: Color32 = Color32::from_gray(24);
 const FRAME_BG: Color32 = Color32::from_gray(40);
+/// Height of a panel's header strip.
+pub const HEADER: f32 = 36.0;
 
-/// Allocate a canvas that fills the remaining space under a one-line header.
-fn canvas(ui: &mut Ui, title: &str) -> (Rect, egui::Response) {
-    ui.label(egui::RichText::new(title).strong());
-    let size = ui.available_size().max(Vec2::splat(20.0));
-    ui.allocate_exact_size(size, Sense::click_and_drag())
+/// Draw a panel's card and header, and allocate the canvas under the header.
+fn canvas(ui: &mut Ui, title: &Title) -> (Rect, egui::Response) {
+    let t = crate::theme::get(ui.ctx());
+    let c = t.color;
+    let full = ui.available_rect_before_wrap();
+    let card = egui::CornerRadius::same(t.radius.card);
+    ui.painter().rect_filled(full, card, c.well);
+    if title.focused {
+        ui.painter()
+            .rect_stroke(full, card, Stroke::new(1.0_f32, c.line), StrokeKind::Inside);
+    }
+    let header = Rect::from_min_size(full.min, Vec2::new(full.width(), HEADER));
+    let pad = t.space.md;
+    let mut right = header.right() - pad;
+    if let Some((text, tip)) = &title.badge {
+        let galley = ui.painter().layout_no_wrap(
+            text.clone(),
+            t.medium(t.text.small - 1.0),
+            c.text_secondary,
+        );
+        let size = Vec2::new(galley.size().x + 16.0, 20.0);
+        let pill = Rect::from_min_size(
+            Pos2::new(right - size.x, header.center().y - size.y / 2.0),
+            size,
+        );
+        ui.painter()
+            .rect_filled(pill, egui::CornerRadius::same(10), c.field);
+        ui.painter().galley(
+            pill.center() - galley.size() / 2.0,
+            galley,
+            c.text_secondary,
+        );
+        ui.interact(pill, ui.id().with("badge"), Sense::hover())
+            .on_hover_text(tip);
+        right = pill.left() - t.space.sm;
+    }
+    if !title.meta.is_empty() {
+        let galley = ui.painter().layout_no_wrap(
+            title.meta.clone(),
+            t.regular(t.text.small),
+            c.text_tertiary,
+        );
+        let pos = Pos2::new(
+            right - galley.size().x,
+            header.center().y - galley.size().y / 2.0,
+        );
+        right = pos.x - t.space.md;
+        ui.painter().galley(pos, galley, c.text_tertiary);
+    }
+    let mut x = header.left() + pad;
+    if !title.label.is_empty() {
+        let galley = ui.painter().layout_no_wrap(
+            title.label.clone(),
+            t.medium(t.text.small),
+            c.text_tertiary,
+        );
+        let w = galley.size().x;
+        ui.painter().galley(
+            Pos2::new(x, header.center().y - galley.size().y / 2.0),
+            galley,
+            c.text_tertiary,
+        );
+        x += w + t.space.sm;
+    }
+    if !title.name.is_empty() && right > x {
+        let mut job = egui::text::LayoutJob::simple_singleline(
+            title.name.clone(),
+            t.regular(t.text.label),
+            c.text,
+        );
+        job.wrap = egui::text::TextWrapping::truncate_at_width(right - x);
+        let galley = ui.painter().layout_job(job);
+        ui.painter().galley(
+            Pos2::new(x, header.center().y - galley.size().y / 2.0),
+            galley,
+            c.text,
+        );
+    }
+    let inset = t.space.xs;
+    let area = Rect::from_min_max(
+        Pos2::new(full.left() + inset, header.bottom()),
+        Pos2::new(full.right() - inset, full.bottom() - inset),
+    );
+    let area = if area.width() < 20.0 || area.height() < 20.0 {
+        Rect::from_min_size(area.min, area.size().max(Vec2::splat(20.0)))
+    } else {
+        area
+    };
+    let response = ui.allocate_rect(area, Sense::click_and_drag());
+    (area, response)
+}
+
+/// Where the pointer was at the last step of a line drag on `image`.
+fn line_last_id(image: u8) -> egui::Id {
+    egui::Id::new(("line drag last", image))
 }
 
 /// Wheel and pinch zoom about the cursor, and drag-to-pan with the given buttons.
@@ -334,7 +447,6 @@ fn draw_background(
     checker: bool,
 ) -> (egui::Painter, Rect) {
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, BACKDROP);
     let frame_rect = view.frame_rect(rect, frame);
     painter.rect_filled(frame_rect, 0.0, FRAME_BG);
     let visible = frame_rect.intersect(rect);
@@ -492,6 +604,8 @@ pub fn source_panel(
                 });
             } else if let (Some(line), Tool::Edit) = (line_at(p), tool) {
                 grabs.line = Some(line);
+                // Measure the move from the press, so the pixels before egui saw a drag count.
+                ui.data_mut(|d| d.insert_temp(line_last_id(panel.image), p));
                 actions.push(Action::SelectLine {
                     index: line,
                     mode: SelMode::Set,
@@ -524,9 +638,13 @@ pub fn source_panel(
                 });
             }
             (None, Some(line), Some(p)) => {
-                let delta = resp.drag_delta();
+                let id = line_last_id(panel.image);
+                let last = ui
+                    .data(|d| d.get_temp::<Pos2>(id))
+                    .unwrap_or(p - resp.drag_delta());
+                ui.data_mut(|d| d.insert_temp(id, p));
                 let now = view.to_frame(rect, p);
-                let before = view.to_frame(rect, p - delta);
+                let before = view.to_frame(rect, last);
                 actions.push(Action::LineDrag {
                     line,
                     image: panel.image,
@@ -728,7 +846,7 @@ pub fn source_panel(
 
 /// Everything the preview draws.
 pub struct PreviewPanel<'a> {
-    pub title: String,
+    pub title: Title,
     pub frame: Vec2,
     pub shown: Option<Shown>,
     /// Mesh triangles at the current frame, frame coordinates.

@@ -32,8 +32,10 @@ pub struct Theme {
 pub struct Colors {
     /// Behind a modal window.
     pub backdrop: Color32,
-    /// The image canvases.
+    /// Behind the panels: the app's ground.
     pub app: Color32,
+    /// Inside an image panel, around the picture (a step below `app`).
+    pub well: Color32,
     /// Window footers: one step darker than the window.
     pub footer: Color32,
     /// Windows and panels.
@@ -44,6 +46,8 @@ pub struct Colors {
     pub field_active: Color32,
     /// The edge of a window against the backdrop.
     pub edge: Color32,
+    /// Frame ticks on the scrubber and other marks that must show on `field`.
+    pub tick: Color32,
     /// Hairlines and input edges.
     pub line: Color32,
     /// The dashed edge of an empty drop target.
@@ -64,6 +68,8 @@ pub struct Colors {
     /// Focus rings, drop targets, the current item's outline and active edges (sage).
     pub focus: Color32,
     pub on_accent: Color32,
+    /// Secondary text on an accent fill (5.5:1 on `accent`).
+    pub on_accent_secondary: Color32,
     /// Danger: a tinted fill with light same-hue text, never grey text on red.
     pub danger_fill: Color32,
     pub danger_soft: Color32,
@@ -133,12 +139,14 @@ impl Theme {
             color: Colors {
                 backdrop: Color32::from_black_alpha(140),
                 app: grey(0x15, 0x17, 0x1c),
+                well: grey(0x0f, 0x11, 0x15),
                 footer: grey(0x1a, 0x1d, 0x23),
                 surface: grey(0x1e, 0x21, 0x28),
                 field: grey(0x26, 0x2a, 0x33),
                 field_hover: grey(0x2f, 0x34, 0x40),
                 field_active: grey(0x36, 0x3c, 0x4a),
                 edge: grey(0x2c, 0x31, 0x3b),
+                tick: grey(0x4a, 0x50, 0x60),
                 line: grey(0x33, 0x38, 0x44),
                 dash: grey(0x6a, 0x72, 0x82),
                 disabled: grey(0x2a, 0x2e, 0x37),
@@ -151,6 +159,7 @@ impl Theme {
                 accent_text: grey(0xb5, 0xd3, 0x90),
                 focus: grey(0xa5, 0xc5, 0x7f),
                 on_accent: Color32::WHITE,
+                on_accent_secondary: grey(0xd4, 0xdc, 0xc6),
                 danger_fill: grey(0x2e, 0x21, 0x27),
                 danger_soft: grey(0x47, 0x26, 0x2c),
                 danger_line: grey(0xb4, 0x54, 0x5a),
@@ -362,6 +371,11 @@ mod tests {
             ("white on accent", c.on_accent, c.accent),
             ("white on accent hover", c.on_accent, c.accent_hover),
             ("text on a selected row", c.text, c.accent),
+            (
+                "metadata on a selected row",
+                c.on_accent_secondary,
+                c.accent,
+            ),
             ("focus ring on field", c.focus, c.field),
             ("danger text on danger fill", c.danger_text, c.danger_fill),
         ] {
