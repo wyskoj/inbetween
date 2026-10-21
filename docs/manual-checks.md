@@ -69,3 +69,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - Face tools (spec section 10): in a real window, fit a located face with Face > Smart Drag on (and Alt held for plain drags); drag a landmark in the Face Model window; drag a library tile onto Image 2 with the mouse (the test sends the drop as synthetic events); Save recipe and Load recipe in the Mix window with the real file dialogs.
 
 - Video sources (spec section 11): drop an .mp4 on Image 1 and another on Image 2 in the real window and scrub the preview; export a video and play it to see clip, morph, clip. Try a clip with odd dimensions and a variable frame rate.
+
+- New From Two Images: in a real window, open File > New From Two Images, drop a file from the desktop onto each slot (the slot under the pointer lights up), drop two files at once onto the dialog, click a slot and pick with the real file dialog, and check Tab reaches the buttons and the name field.

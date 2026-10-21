@@ -8,6 +8,7 @@ use crate::dragdrop::{self, DropAction, DropZone, Dropped};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
+use crate::new_two::NewTwo;
 use crate::open_visual::{OpenVisual, Outcome as VisualOutcome, Tab as VisualTab};
 use crate::panels::{
     self, Action, CropView, DotDrag, Grabs, Hover, PanelDot, PanelLine, PreviewPanel, Shown,
@@ -48,6 +49,7 @@ mod face_model_ui;
 mod form_ui;
 mod frames_ui;
 mod layout_ui;
+mod new_two_ui;
 mod prompt_ui;
 mod select_ui;
 mod track_ui;
@@ -257,6 +259,9 @@ pub struct InbetweenApp {
     fullscreen: bool,
     fullscreen_request: Option<bool>,
     strip: frames_ui::StripCache,
+    /// The New From Two Images dialog, when open.
+    new_two: Option<NewTwo>,
+    new_two_ui: new_two_ui::NewTwoUi,
 }
 
 impl InbetweenApp {
@@ -323,6 +328,8 @@ impl InbetweenApp {
             fullscreen: false,
             fullscreen_request: None,
             strip: frames_ui::StripCache::default(),
+            new_two: None,
+            new_two_ui: new_two_ui::NewTwoUi::default(),
         }
     }
 
@@ -575,6 +582,10 @@ impl InbetweenApp {
                 self.open_track();
                 return;
             }
+            "project.new" => {
+                self.open_new_two();
+                return;
+            }
             "face.model" => {
                 self.open_face_model();
                 return;
@@ -791,10 +802,13 @@ impl InbetweenApp {
             self.close_now = true;
             return;
         }
-        if self.run_command(&pending.id, &pending.params).is_ok()
-            && self.form.as_ref().is_some_and(|f| f.id == pending.id)
-        {
-            self.form = None;
+        if self.run_command(&pending.id, &pending.params).is_ok() {
+            if self.form.as_ref().is_some_and(|f| f.id == pending.id) {
+                self.form = None;
+            }
+            if pending.id == "project.new" {
+                self.new_two = None;
+            }
         }
     }
 
@@ -954,7 +968,11 @@ impl InbetweenApp {
     }
 
     fn handle_keys(&mut self, ctx: &Context) {
-        if self.form.is_some() || self.pending.is_some() || ctx.wants_keyboard_input() {
+        if self.form.is_some()
+            || self.new_two.is_some()
+            || self.pending.is_some()
+            || ctx.wants_keyboard_input()
+        {
             return;
         }
         if self.state.crop.is_some() {
@@ -1061,9 +1079,7 @@ impl InbetweenApp {
         let ready = egui::Id::new("inbetween_ready");
         if !ctx.data(|d| d.get_temp::<bool>(ready).unwrap_or(false)) {
             crate::fonts::install(ctx);
-            let mut visuals = egui::Visuals::dark();
-            visuals.window_shadow = egui::epaint::Shadow::NONE;
-            ctx.set_visuals(visuals);
+            crate::theme::install(ctx, crate::theme::Theme::default());
             // Ctrl+= and Ctrl+- zoom the image panels, not the whole interface.
             ctx.options_mut(|o| o.zoom_with_keyboard = false);
             ctx.data_mut(|d| d.insert_temp(ready, true));
@@ -1107,6 +1123,7 @@ impl InbetweenApp {
         self.face_library_window(ctx);
         self.track_window(ctx);
         self.form_window(ctx);
+        self.new_two_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);
         self.prompt_window(ctx);
@@ -1441,7 +1458,7 @@ impl InbetweenApp {
             ui.horizontal(|ui| {
                 match &self.status {
                     Some(s) if s.is_error => {
-                        ui.colored_label(egui::Color32::from_rgb(255, 120, 110), &s.text);
+                        ui.colored_label(crate::theme::get(ui.ctx()).color.danger_text, &s.text);
                     }
                     Some(s) => {
                         ui.label(&s.text);

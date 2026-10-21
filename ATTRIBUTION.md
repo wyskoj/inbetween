@@ -5,7 +5,8 @@ licences only). This file lists non-code assets bundled with Inbetween.
 
 | Asset | Used for | Source | Licence |
 |---|---|---|---|
-| Roboto Regular (`crates/render-cpu/assets/Roboto-Regular.ttf`) | The app's user-interface font and the default caption font | Roboto v2.138, https://github.com/googlefonts/roboto | Apache-2.0 (`crates/render-cpu/assets/Roboto-LICENSE.txt`) |
+| Roboto Regular (`crates/render-cpu/assets/Roboto-Regular.ttf`) | The default caption font, and the interface's fallback for characters Geist lacks | Roboto v2.138, https://github.com/googlefonts/roboto | Apache-2.0 (`crates/render-cpu/assets/Roboto-LICENSE.txt`) |
+| Geist Regular and Medium (`crates/ui-egui/assets/Geist-Regular.ttf`, `Geist-Medium.ttf`) | The interface font (Medium for window titles, field labels and buttons) | Geist v1.8.1 (`geist-font-v1.8.1.zip`, static TTFs), https://github.com/vercel/geist-font | SIL OFL 1.1 (`crates/ui-egui/assets/Geist-OFL.txt`) |
 | Face detector model (`crates/detect/models/blazeface.onnx`) | Finding faces (`face.detect`, `face.locate`) | MediaPipe short-range face detector, converted from TFLite to ONNX (`crates/detect/models/README.md`) | Apache-2.0 (`crates/detect/models/LICENSE-models.txt`) |
 | Face landmark model (`crates/detect/models/face_landmarks.onnx`) | Placing 468 mesh points on a found face | MediaPipe face landmark model, converted from TFLite to ONNX | Apache-2.0 (`crates/detect/models/LICENSE-models.txt`) |
 | Portrait test image (`crates/detect/tests/data/portrait_a.png`) | Detector and engine tests | Official NASA portrait of Neil Armstrong, https://commons.wikimedia.org/wiki/File:Neil_Armstrong_pose.jpg, downscaled | Public domain (work of the US government) |

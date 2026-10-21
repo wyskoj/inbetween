@@ -22,7 +22,9 @@ pub mod fonts;
 pub mod form;
 pub mod hit;
 pub mod imaging;
+pub mod kit;
 pub mod menus;
+pub mod new_two;
 pub mod open_visual;
 pub mod panels;
 pub mod playback;
@@ -30,6 +32,7 @@ pub mod preview;
 pub mod seqlist;
 pub mod shortcuts;
 pub mod state;
+pub mod theme;
 pub mod view;
 
 pub use app::{InbetweenApp, Layout, PromptChoice, ScreenshotPlan, Status, REPLACES_PROJECT};

@@ -165,14 +165,15 @@ pub fn sequence_list(
     let last = rows.len().saturating_sub(1);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
-        .max_height((ui.available_height() - 70.0).max(60.0))
+        .max_height((ui.available_height() - 80.0).max(60.0))
         .show(ui, |ui| {
             for (index, row) in rows.iter().enumerate() {
+                let t = crate::theme::get(ui.ctx());
                 let frame = egui::Frame::new()
                     .inner_margin(4.0)
-                    .corner_radius(3.0)
+                    .corner_radius(t.radius.small)
                     .fill(if row.selected {
-                        Color32::from_rgb(40, 62, 92)
+                        t.color.accent
                     } else {
                         Color32::TRANSPARENT
                     });
@@ -199,7 +200,7 @@ pub fn sequence_list(
                                     ui.painter().rect_stroke(
                                         response.rect,
                                         2.0,
-                                        Stroke::new(2.0_f32, Color32::from_rgb(120, 200, 255)),
+                                        Stroke::new(2.0_f32, t.color.focus),
                                         egui::StrokeKind::Outside,
                                     );
                                 }
@@ -222,13 +223,20 @@ pub fn sequence_list(
                             ));
                         }
                         let title = ui.vertical(|ui| {
-                            let text = egui::RichText::new(row_title(&row.label, index, layers));
-                            ui.label(if row.visible {
+                            let title = row_title(&row.label, index, layers);
+                            let text = egui::RichText::new(&title);
+                            let text = if row.visible {
                                 text
                             } else {
                                 text.weak().strikethrough()
-                            });
-                            ui.weak(format!("{} frames", row.frames));
+                            };
+                            ui.add(egui::Label::new(text).truncate().selectable(false))
+                                .on_hover_text(title);
+                            ui.add(
+                                egui::Label::new(meta(ui, format!("{} frames", row.frames)))
+                                    .truncate()
+                                    .selectable(false),
+                            );
                         });
                         // The title is the row's drag handle; the thumbnails drag images.
                         let handle = ui.interact(
@@ -314,8 +322,16 @@ pub fn sequence_list(
         }
     });
     let shown = rows.iter().filter(|r| r.visible).count();
-    ui.weak(summary(layers, movie_frames, shown, rows.len()));
+    ui.label(meta(ui, summary(layers, movie_frames, shown, rows.len())));
     actions
+}
+
+/// Metadata text: the theme's small size in tertiary grey.
+fn meta(ui: &Ui, text: String) -> egui::RichText {
+    let t = crate::theme::get(ui.ctx());
+    egui::RichText::new(text)
+        .size(t.text.small)
+        .color(t.color.text_tertiary)
 }
 
 #[cfg(test)]

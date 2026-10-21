@@ -120,7 +120,7 @@ impl InbetweenApp {
                     });
                 if let Some(e) = &form.error {
                     ui.add_space(4.0);
-                    ui.colored_label(egui::Color32::from_rgb(255, 120, 110), e);
+                    ui.colored_label(crate::theme::get(ui.ctx()).color.danger_text, e);
                 }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {

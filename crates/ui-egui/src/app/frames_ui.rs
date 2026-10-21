@@ -148,7 +148,7 @@ impl InbetweenApp {
                                         2.0_f32,
                                         egui::Stroke::new(
                                             2.0_f32,
-                                            egui::Color32::from_rgb(90, 170, 255),
+                                            crate::theme::get(ui.ctx()).color.focus,
                                         ),
                                         egui::StrokeKind::Inside,
                                     );

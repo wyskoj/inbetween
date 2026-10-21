@@ -14,6 +14,7 @@ The goal is a complete, fast, professional morphing tool where every feature is 
 | `docs/feature-spec.md` | Every feature Inbetween should have, with status, priority and command id. The work list. |
 | `docs/architecture.md` | Crate map, layers, the engine/UI seam, the document model (write it in M0) |
 | `docs/decisions.md` | Recorded design decisions and why. Append, never silently change. |
+| `docs/ui-design.md` | The UI design system: tokens in `ui-egui/src/theme.rs`, components in `kit.rs`, screen status. Read before any shell UI work; never hard-code colours or sizes. |
 | `log/devlog.md` (local) | What the last session landed and what is still open |
 
 ## 2. Workspace map
@@ -64,7 +65,7 @@ A malformed file, bad params, a degenerate dot set or a full disk produces an ac
 5. **Verify UI changes visually.** Render offscreen and look at the PNG. Demo and test images are public-domain or generated, never personal photos.
 6. **Keep L0 to L5 wasm-clean.** `cargo xtask wasm` must pass. File-system code sits behind `cfg(not(target_arch = "wasm32"))` or a platform service.
 7. **Performance is a feature.** Parallelise per tile or per triangle with rayon, never recompute what a revision cache can hold, and record before/after timings in the dev log.
-8. **Dependencies are permissive only** (MIT, Apache-2.0, BSD, zlib, ISC). `cargo deny check` enforces it.
+8. **Dependencies are permissive only** (MIT, Apache-2.0, BSD, zlib, ISC). `cargo deny check` enforces it. Font files may also be SIL OFL 1.1 (bundled unmodified, with their licence text).
 
 ### Morph invariants (must always pass)
 
@@ -82,7 +83,7 @@ Inbetween is its own product. It is designed from its own spec, public algorithm
 - Never copy code, shaders, assets, dot models or file formats from other software. Inbetween's file formats are its own.
 - Never decompile, disassemble or inspect the binaries of other software.
 - Research notes live in `plan/` (gitignored, local only) and never get committed or quoted.
-- Third-party assets must be permissively licensed and get a row in `ATTRIBUTION.md` in the same change.
+- Third-party assets must be permissively licensed (fonts: OFL 1.1 is also allowed) and get a row in `ATTRIBUTION.md` in the same change.
 
 ## 5. Picking work
 

@@ -55,6 +55,14 @@ impl InbetweenApp {
         if files.is_empty() {
             return;
         }
+        if self.new_two.is_some() {
+            let paths = files
+                .iter()
+                .filter_map(|f| f.path.as_ref().map(|p| p.display().to_string()))
+                .collect();
+            self.drop_into_new_two(paths, ctx.input(|i| i.pointer.latest_pos()));
+            return;
+        }
         let over = self.zone_at(ctx.input(|i| i.pointer.latest_pos()));
         let actions = dragdrop::route_drop(&Self::to_dropped(&files), over, self.image1_is_empty());
         self.apply_drops(actions);
@@ -112,8 +120,8 @@ impl InbetweenApp {
     /// While files hover over the window, shade where they would land and say what happens.
     pub(super) fn drop_overlay(&self, ctx: &Context) {
         let hovered = ctx.input(|i| i.raw.hovered_files.clone());
-        if hovered.is_empty() {
-            return;
+        if hovered.is_empty() || self.new_two.is_some() {
+            return; // the New From Two Images dialog shows its own drop targets
         }
         let files: Vec<Dropped> = hovered
             .iter()
@@ -161,7 +169,7 @@ impl InbetweenApp {
             egui::Order::Foreground,
             egui::Id::new("drop_overlay"),
         ));
-        let accent = egui::Color32::from_rgb(90, 170, 255);
+        let accent = crate::theme::get(ctx).color.focus;
         painter.rect_filled(target, 6.0, accent.gamma_multiply(0.18));
         painter.rect_stroke(
             target,

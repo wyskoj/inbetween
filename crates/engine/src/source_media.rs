@@ -40,7 +40,7 @@ pub(crate) fn video_frame(path: &Path, which: u8) -> Result<Rgba8Image, CommandE
 
 /// Read a picture source: an image file, or the first frame of a video (for checking that a
 /// file can be used and for its size).
-pub(crate) fn read_any(path: &Path) -> Result<Rgba8Image, CommandError> {
+pub fn read_any(path: &Path) -> Result<Rgba8Image, CommandError> {
     if source::is_video_source(&path.display().to_string()) {
         video_frame(path, 2)
     } else {

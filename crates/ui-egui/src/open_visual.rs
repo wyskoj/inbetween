@@ -246,8 +246,11 @@ impl OpenVisual {
                     ui.label(egui::RichText::new(&entry.name).strong());
                     match (&entry.error, entry.sequences) {
                         (Some(e), _) => {
-                            ui.colored_label(egui::Color32::from_rgb(255, 120, 110), "cannot open")
-                                .on_hover_text(e);
+                            ui.colored_label(
+                                crate::theme::get(ui.ctx()).color.danger_text,
+                                "cannot open",
+                            )
+                            .on_hover_text(e);
                         }
                         (None, Some(n)) => {
                             let s = if n == 1 { "sequence" } else { "sequences" };
