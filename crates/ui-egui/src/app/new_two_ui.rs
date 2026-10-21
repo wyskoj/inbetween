@@ -482,7 +482,7 @@ fn slot(
 
 /// The part of a `source`-sized image that covers a `frame`-sized box without distortion, as
 /// texture coordinates.
-fn cover_uv(source: Vec2, frame: Vec2) -> Rect {
+pub(super) fn cover_uv(source: Vec2, frame: Vec2) -> Rect {
     let full = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
     if source.x <= 0.0 || source.y <= 0.0 || frame.x <= 0.0 || frame.y <= 0.0 {
         return full;

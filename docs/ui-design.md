@@ -49,6 +49,8 @@ Build redesigned windows from these, not from raw egui calls with styling:
   ("Optional") at the right. Mark optional fields, not required ones.
 - `kit::text_field`, `kit::text_line` (truncating), `kit::icon` and `kit::icon_badge` (stroke icons
   on a 24-unit grid), `kit::dashed_rect`.
+- Reorderable lists (New From Image List): rows with a `Grip` handle at the left, actions
+  (`ArrowUp`, `ArrowDown`, `Close`) shown on hover, and an insertion line in `focus` while dragging.
 - `kit::icon_text_button`: a `button` with an icon before its text ("+ Blank").
 - `kit::segmented(ui, segments, selected, enabled, height)`: one choice of several on a recessed
   track (tools, layouts, In order / Layers, Sequence / Movie). `kit::toggle_group` is the same
@@ -93,6 +95,7 @@ Build redesigned windows from these, not from raw egui calls with styling:
 |---|---|---|---|
 | Design tokens | built | `theme.rs`, `kit.rs` | https://claude.ai/artifact/5dr1MEfJBGfhfZce9xCFrp |
 | New From Two Images | built | `new_two.rs`, `app/new_two_ui.rs`, `tests/new_two.rs` | https://claude.ai/artifact/5dr1MEfJBGfhfZce9xCFrp |
+| New From Image List | built | `new_list.rs`, `app/new_list_ui.rs`, `tests/new_list.rs` | https://claude.ai/artifact/53TA3P2Qb4qwJHCNt31A6Y |
 | Main window (top bar, tool bar, sequence list, panels, transport, status, start screen) | built | `app.rs` (top and status bars), `app/select_ui.rs` (tool bar), `seqlist.rs`, `panels.rs` (headers), `app/layout_ui.rs`, `app/transport_ui.rs`, `app/start_ui.rs` | https://claude.ai/artifact/D6vnDH6FEhorK1BQ9YkVnE |
 | File menu (and the menu style for all menus) | built | `menus.rs` (layout), `kit/menu.rs`, `app.rs` (`menu_items`, `recent_items`), `tests/file_menu.rs` | https://claude.ai/artifact/3gzPf88xayrF5vd7pvzTeL |
 | Other menus (Edit, Dots, Image, Sequence, View): regroup | todo (menu style applied) | | |

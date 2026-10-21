@@ -745,25 +745,20 @@ fn file_new_and_the_wizard_replace_the_project_through_the_menu_path() {
     let demo = format!("{}/../../demo", env!("CARGO_MANIFEST_DIR"));
     h.state_mut().invoke("file.wizard");
     h.run();
-    let form = h.state().form().expect("the wizard needs images");
-    assert_eq!(form.id, "file.wizard");
-    h.state_mut().submit_form();
-    assert!(h
-        .state()
-        .form()
-        .unwrap()
-        .error
-        .as_deref()
-        .unwrap()
-        .contains("required"));
-    h.state_mut().form_mut().unwrap().set_list(
-        "images",
-        vec![format!("{demo}/sun.png"), format!("{demo}/moon.png")],
-    );
-    shot(&mut h, "wizard_form");
-    h.state_mut().submit_form();
+    assert!(h.state().form().is_none(), "the wizard has its own dialog");
+    h.state_mut().submit_new_list();
     h.run();
-    assert!(h.state().form().is_none());
+    assert!(
+        h.state().new_list().is_some(),
+        "nothing runs without images"
+    );
+    h.state_mut()
+        .new_list_mut()
+        .unwrap()
+        .add(vec![format!("{demo}/sun.png"), format!("{demo}/moon.png")]);
+    h.state_mut().submit_new_list();
+    h.run();
+    assert!(h.state().new_list().is_none());
     let seqs = &h.state().session().project().sequences;
     assert_eq!(seqs.len(), 1);
     assert!(seqs[0].image1.0.ends_with("sun.png"));
@@ -842,12 +837,12 @@ fn replacing_a_dirty_project_asks_first_and_cancel_keeps_everything() {
         dir.join("sun.png").display().to_string(),
         dir.join("moon.png").display().to_string(),
     ];
-    h.state_mut().form_mut().unwrap().set_list("images", images);
-    h.state_mut().submit_form();
+    h.state_mut().new_list_mut().unwrap().add(images);
+    h.state_mut().submit_new_list();
     assert!(h.state().prompt_open());
     assert!(
-        h.state().form().is_some(),
-        "the form stays until the prompt is answered"
+        h.state().new_list().is_some(),
+        "the dialog stays until the prompt is answered"
     );
     h.state_mut().answer_prompt(PromptChoice::Cancel);
     assert_eq!(h.state().session().project(), &before);
@@ -1148,12 +1143,11 @@ fn dropping_several_images_opens_the_wizard_filled_in_drop_order() {
         Pos2::new(700.0, 450.0),
         vec![dropped(&moon), dropped(&sun), dropped(&moon)],
     );
-    let form = h.state().form().expect("the wizard form opens");
-    assert_eq!(form.id, "file.wizard");
-    let params = form.to_params().unwrap();
+    let list = h.state().new_list().expect("the image list dialog opens");
+    let params = list.to_params().unwrap();
     assert_eq!(params["images"], json!([moon, sun, moon]));
     // Running it builds the chain.
-    h.state_mut().submit_form();
+    h.state_mut().submit_new_list();
     h.run();
     assert_eq!(h.state().session().project().sequences.len(), 2);
     let _ = std::fs::remove_dir_all(&dir);

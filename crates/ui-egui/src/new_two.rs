@@ -41,12 +41,17 @@ pub struct Slot {
 impl Slot {
     /// Read the file at `path` (an image, or a video's first frame).
     pub fn load(path: String) -> Self {
+        Self::load_sized(path, THUMB_SIDE)
+    }
+
+    /// [`Slot::load`] with a thumbnail whose longer side is at most `thumb_side`.
+    pub fn load_sized(path: String, thumb_side: usize) -> Self {
         let read = match inbetween_engine::source_media::read_any(Path::new(&path)) {
             Ok(image) => Ok(Picked {
                 width: image.width,
                 height: image.height,
                 format: format_name(&path),
-                thumb: thumbnail(&image, THUMB_SIDE),
+                thumb: thumbnail(&image, thumb_side),
             }),
             Err(e) => Err(unreadable(&e)),
         };

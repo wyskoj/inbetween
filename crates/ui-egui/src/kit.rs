@@ -306,6 +306,12 @@ pub enum Icon {
     Eye,
     EyeOff,
     Plus,
+    /// Six dots: a drag handle.
+    Grip,
+    ArrowUp,
+    ArrowDown,
+    /// A hooked arrow back to the left: a chain that loops to its start.
+    Return,
     /// A circle becoming a square: the start screen.
     Morph,
 }
@@ -466,6 +472,39 @@ pub fn icon(ui: &Ui, rect: Rect, which: Icon, color: Color32, width: f32) {
         Icon::Plus => {
             p.add(line(&[(12.0, 5.0), (12.0, 19.0)]));
             p.add(line(&[(5.0, 12.0), (19.0, 12.0)]));
+        }
+        Icon::Grip => {
+            for (x, y) in [
+                (9.0, 6.0),
+                (15.0, 6.0),
+                (9.0, 12.0),
+                (15.0, 12.0),
+                (9.0, 18.0),
+                (15.0, 18.0),
+            ] {
+                p.circle_filled(at(x, y), 1.5 * s, color);
+            }
+        }
+        Icon::ArrowUp => {
+            p.add(line(&[(12.0, 19.0), (12.0, 5.0)]));
+            p.add(line(&[(6.0, 11.0), (12.0, 5.0), (18.0, 11.0)]));
+        }
+        Icon::ArrowDown => {
+            p.add(line(&[(12.0, 5.0), (12.0, 19.0)]));
+            p.add(line(&[(6.0, 13.0), (12.0, 19.0), (18.0, 13.0)]));
+        }
+        Icon::Return => {
+            p.add(line(&[(9.0, 14.0), (4.0, 9.0), (9.0, 4.0)]));
+            let arc: Vec<(f32, f32)> = (0..=8)
+                .map(|k| {
+                    let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::PI * k as f32 / 8.0;
+                    (15.0 + 5.0 * a.cos(), 14.0 + 5.0 * a.sin())
+                })
+                .collect();
+            let mut pts = vec![(4.0, 9.0), (15.0, 9.0)];
+            pts.extend(arc);
+            pts.push((12.0, 19.0));
+            p.add(line(&pts));
         }
         Icon::Morph => {
             p.circle_stroke(at(7.0, 12.0), 4.0 * s, stroke);

@@ -75,3 +75,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - New From Two Images: in a real window, open File > New From Two Images, drop a file from the desktop onto each slot (the slot under the pointer lights up), drop two files at once onto the dialog, click a slot and pick with the real file dialog, and check Tab reaches the buttons and the name field.
 
 - Main window: in a real window, resize the sequence list narrow and wide (rows truncate, the footer summary wraps), drag the splitters (a handle shows on hover), click Recent entries on the start screen (a missing file is removed from the list), and check every segmented control and toggle with the keyboard (Tab and Space).
+
+- New From Image List: in a real window, drop several files from the desktop onto the main window (the dialog opens in drop order) and onto the open dialog (they join the end); drag a row by its handle above and below others and past the last row; scroll a list of 20 or more; pick several files at once with Add images; open the Morph type list.

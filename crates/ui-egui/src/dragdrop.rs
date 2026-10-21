@@ -207,7 +207,7 @@ pub fn hover_hint(files: &[Dropped], over: impl Into<DropZone>, image1_empty: bo
         DropAction::OpenProject(_) => "Drop to open the project".into(),
         DropAction::ImportDots(_) => "Drop to import the dots".into(),
         DropAction::Wizard(paths) => {
-            format!("Drop to start the wizard with {} images", paths.len())
+            format!("Drop to chain {} images into a new project", paths.len())
         }
         DropAction::Unsupported(m) => m.clone(),
     }
@@ -351,7 +351,7 @@ mod tests {
         );
         assert_eq!(
             hover_hint(&drop(&["a.png", "b.png"]), None, true),
-            "Drop to start the wizard with 2 images"
+            "Drop to chain 2 images into a new project"
         );
         assert_eq!(hover_hint(&[], None, true), "Drop files here");
     }

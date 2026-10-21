@@ -24,6 +24,7 @@ pub mod hit;
 pub mod imaging;
 pub mod kit;
 pub mod menus;
+pub mod new_list;
 pub mod new_two;
 pub mod open_visual;
 pub mod panels;

@@ -63,6 +63,14 @@ impl InbetweenApp {
             self.drop_into_new_two(paths, ctx.input(|i| i.pointer.latest_pos()));
             return;
         }
+        if self.new_list.is_some() {
+            let paths = files
+                .iter()
+                .filter_map(|f| f.path.as_ref().map(|p| p.display().to_string()))
+                .collect();
+            self.drop_into_new_list(paths);
+            return;
+        }
         let over = self.zone_at(ctx.input(|i| i.pointer.latest_pos()));
         let actions = dragdrop::route_drop(&Self::to_dropped(&files), over, self.image1_is_empty());
         self.apply_drops(actions);
@@ -106,13 +114,7 @@ impl InbetweenApp {
                 DropAction::SetSound(path) => {
                     let _ = self.run_command("effect.sound", &json!({ "path": path }));
                 }
-                DropAction::Wizard(paths) => {
-                    if let Some(spec) = self.registry.get("file.wizard").copied() {
-                        let mut form = Form::for_spec(&spec);
-                        form.set_list("images", paths);
-                        self.form = Some(form);
-                    }
-                }
+                DropAction::Wizard(paths) => self.open_new_list(paths),
             }
         }
     }
@@ -120,8 +122,8 @@ impl InbetweenApp {
     /// While files hover over the window, shade where they would land and say what happens.
     pub(super) fn drop_overlay(&self, ctx: &Context) {
         let hovered = ctx.input(|i| i.raw.hovered_files.clone());
-        if hovered.is_empty() || self.new_two.is_some() {
-            return; // the New From Two Images dialog shows its own drop targets
+        if hovered.is_empty() || self.new_two.is_some() || self.new_list.is_some() {
+            return; // the New From dialogs show their own drop targets
         }
         let files: Vec<Dropped> = hovered
             .iter()

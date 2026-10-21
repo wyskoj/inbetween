@@ -8,6 +8,7 @@ use crate::dragdrop::{self, DropAction, DropZone, Dropped};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::menus::{self, MenuNode};
+use crate::new_list::NewList;
 use crate::new_two::NewTwo;
 use crate::open_visual::{OpenVisual, Outcome as VisualOutcome, Tab as VisualTab};
 use crate::panels::{
@@ -49,6 +50,7 @@ mod face_model_ui;
 mod form_ui;
 mod frames_ui;
 mod layout_ui;
+mod new_list_ui;
 mod new_two_ui;
 mod prompt_ui;
 mod select_ui;
@@ -303,6 +305,9 @@ pub struct InbetweenApp {
     /// The New From Two Images dialog, when open.
     new_two: Option<NewTwo>,
     new_two_ui: new_two_ui::NewTwoUi,
+    /// The New From Image List dialog, when open.
+    new_list: Option<NewList>,
+    new_list_ui: new_list_ui::NewListUi,
 }
 
 impl InbetweenApp {
@@ -371,6 +376,8 @@ impl InbetweenApp {
             strip: frames_ui::StripCache::default(),
             new_two: None,
             new_two_ui: new_two_ui::NewTwoUi::default(),
+            new_list: None,
+            new_list_ui: new_list_ui::NewListUi::default(),
         }
     }
 
@@ -633,6 +640,10 @@ impl InbetweenApp {
                 self.open_new_two();
                 return;
             }
+            "file.wizard" => {
+                self.open_new_list(Vec::new());
+                return;
+            }
             "face.model" => {
                 self.open_face_model();
                 return;
@@ -878,6 +889,9 @@ impl InbetweenApp {
             if pending.id == "project.new" {
                 self.new_two = None;
             }
+            if pending.id == "file.wizard" {
+                self.new_list = None;
+            }
         }
     }
 
@@ -1039,6 +1053,7 @@ impl InbetweenApp {
     fn handle_keys(&mut self, ctx: &Context) {
         if self.form.is_some()
             || self.new_two.is_some()
+            || self.new_list.is_some()
             || self.pending.is_some()
             || ctx.wants_keyboard_input()
         {
@@ -1193,6 +1208,7 @@ impl InbetweenApp {
         self.track_window(ctx);
         self.form_window(ctx);
         self.new_two_window(ctx);
+        self.new_list_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);
         self.prompt_window(ctx);
