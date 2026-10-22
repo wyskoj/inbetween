@@ -279,7 +279,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         spec(
             "dots.option.autoPartner",
             "Auto-Create Partner Dot",
-            "Dots/Auto Partner",
+            "Dots/Auto-Create Partner Dot",
             None,
             "When on, adding a dot also places its partner on the other image; when off, dots are added per image and stay unpaired until matched.",
             OPTION_PARAMS,
@@ -288,7 +288,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         spec(
             "dots.option.autoJump",
             "Jump To Partner",
-            "Dots/Auto Jump",
+            "Dots/Jump to Partner",
             None,
             "When on, the cursor jumps to the partner position after a dot is added.",
             OPTION_PARAMS,

@@ -50,6 +50,27 @@ const LAYOUTS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "Dots",
+        &[
+            "dots.autoMatch",
+            "dots.autoLandmarks",
+            "-",
+            "dots.scale",
+            "dots.rotate",
+            "dots.skew",
+            "dots.flipH",
+            "dots.flipV",
+            "-",
+            "dots.option.autoPartner",
+            "dots.option.autoJump",
+            "-",
+            "dots.import",
+            "dots.export",
+            "-",
+            "dots.clearAll",
+        ],
+    ),
+    (
         "File/Export",
         &[
             "# Whole movie",
@@ -284,6 +305,32 @@ mod tests {
                 "-",
                 "Select All Dots",
                 "Deselect All",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_dots_menu_follows_its_layout() {
+        let menus = build(Registry::standard().specs());
+        assert_eq!(
+            names(submenu(&menus, "Dots")),
+            [
+                "Auto-Match",
+                "Auto-Landmarks\u{2026}",
+                "-",
+                "Scale\u{2026}",
+                "Rotate\u{2026}",
+                "Skew\u{2026}",
+                "Flip Horizontally",
+                "Flip Vertically",
+                "-",
+                "Auto-Create Partner Dot",
+                "Jump to Partner",
+                "-",
+                "Import Dots\u{2026}",
+                "Export Dots\u{2026}",
+                "-",
+                "Clear All Dots",
             ]
         );
     }

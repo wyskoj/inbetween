@@ -1959,6 +1959,10 @@ fn menu_items(
     menu: &MenuContext<'_>,
     clicks: &mut MenuClicks,
 ) {
+    // A menu with any on/off option gives every row a check gutter so the labels line up.
+    let gutter = nodes.iter().any(
+        |n| matches!(n, MenuNode::Command { id, .. } if menu.toggles.iter().any(|(t, _)| t == id)),
+    );
     for node in nodes {
         match node {
             MenuNode::Menu { name, children } => {
@@ -1977,15 +1981,20 @@ fn menu_items(
                     continue;
                 };
                 let enabled = (spec.enabled)(menu.session);
-                let mut text = label.clone();
-                if let Some((_, on)) = menu.toggles.iter().find(|(t, _)| t == id) {
-                    // An on/off option shows its state instead of opening a form.
-                    let mark = if *on { "[x]" } else { "[  ]" };
-                    text = format!("{mark} {}", text.trim_end_matches('\u{2026}'));
-                }
+                // An on/off option shows its state as a check instead of opening a form.
+                let on = menu
+                    .toggles
+                    .iter()
+                    .find(|(t, _)| t == id)
+                    .map(|(_, on)| *on);
+                let text = match on {
+                    Some(_) => label.trim_end_matches('\u{2026}'),
+                    None => label.as_str(),
+                };
                 let key = spec.shortcut.map(shortcuts::label);
                 let hint = key.as_deref().or(*aside);
-                let response = crate::kit::menu_row(ui, &text, hint, enabled);
+                let check = gutter.then_some(on == Some(true));
+                let response = crate::kit::menu_row_check(ui, text, hint, enabled, check);
                 if !enabled {
                     response.on_hover_text(spec.disabled_reason);
                 } else if response.on_hover_text(spec.description).clicked() {
@@ -1998,7 +2007,10 @@ fn menu_items(
                     continue;
                 };
                 let key = action.shortcut.map(shortcuts::label);
-                if crate::kit::menu_row(ui, action.label, key.as_deref(), true).clicked() {
+                let check = gutter.then_some(false);
+                if crate::kit::menu_row_check(ui, action.label, key.as_deref(), true, check)
+                    .clicked()
+                {
                     clicks.action = Some(action.id);
                     ui.close_menu();
                 }

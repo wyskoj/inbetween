@@ -207,6 +207,7 @@ impl InbetweenApp {
         let mut tool = self.state.tool;
         let prefs = *self.session.prefs();
         let mut auto_partner = prefs.auto_partner;
+        let mut auto_jump = prefs.auto_jump;
         let mut magnifier = prefs.magnifier;
         let mut power = i64::from(prefs.magnifier_power);
         let enabled = self.session.has_sequences();
@@ -249,6 +250,12 @@ impl InbetweenApp {
                         .clicked()
                     {
                         auto_partner = !auto_partner;
+                    }
+                    if kit::switch(ui, "Jump to partner", auto_jump, t.control.compact_height)
+                        .on_hover_text("After adding a dot, the cursor moves to its partner")
+                        .clicked()
+                    {
+                        auto_jump = !auto_jump;
                     }
                     if kit::switch(ui, "Magnifier", magnifier, t.control.compact_height).clicked() {
                         magnifier = !magnifier;
@@ -327,6 +334,9 @@ impl InbetweenApp {
         }
         if auto_partner != prefs.auto_partner {
             let _ = self.run_command("dots.option.autoPartner", &json!({ "on": auto_partner }));
+        }
+        if auto_jump != prefs.auto_jump {
+            let _ = self.run_command("dots.option.autoJump", &json!({ "on": auto_jump }));
         }
         if magnifier != prefs.magnifier || power != i64::from(prefs.magnifier_power) {
             let _ = self.run_command(

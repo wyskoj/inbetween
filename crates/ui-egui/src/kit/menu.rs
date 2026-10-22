@@ -23,6 +23,19 @@ pub fn menu_setup(ui: &mut Ui) {
 /// One command row: the label at the left, a shortcut or hint (`hint`) at the right in a
 /// quieter colour.
 pub fn menu_row(ui: &mut Ui, label: &str, hint: Option<&str>, enabled: bool) -> Response {
+    menu_row_check(ui, label, hint, enabled, None)
+}
+
+/// A row in a menu that has on/off options. Every row of such a menu gets a check gutter at
+/// the left so the labels line up; `check` is `Some(true)` for an option that is on, `Some(false)`
+/// for one that is off or a plain command, and `None` for no gutter at all.
+pub fn menu_row_check(
+    ui: &mut Ui,
+    label: &str,
+    hint: Option<&str>,
+    enabled: bool,
+    check: Option<bool>,
+) -> Response {
     let t = theme::get(ui.ctx());
     let c = &t.color;
     let painter = ui.painter();
@@ -35,8 +48,14 @@ pub fn menu_row(ui: &mut Ui, label: &str, hint: Option<&str>, enabled: bool) -> 
         painter.layout_no_wrap(h.to_string(), t.regular(t.text.small), Color32::PLACEHOLDER)
     });
     let hint_w = hint.as_ref().map_or(0.0, |g| t.space.xl + g.size().x);
+    // The gutter replaces part of the left padding: the check sits at the usual inset.
+    let gutter = if check.is_some() {
+        t.space.xl - t.space.xs
+    } else {
+        0.0
+    };
     let want = Vec2::new(
-        text.size().x + hint_w + t.space.md * 2.0,
+        text.size().x + hint_w + gutter + t.space.md * 2.0,
         t.control.compact_height,
     );
     let (rect, response) = allocate(ui, want, enabled, label);
@@ -49,9 +68,20 @@ pub fn menu_row(ui: &mut Ui, label: &str, hint: Option<&str>, enabled: bool) -> 
             (true, true) => (c.text, c.text_secondary),
             (true, false) => (c.text, c.text_tertiary),
         };
+        if check == Some(true) {
+            let size = t.text.body;
+            let mark = Rect::from_center_size(
+                Pos2::new(inner.left() - t.space.xs + size / 2.0, inner.center().y),
+                Vec2::splat(size),
+            );
+            icon(ui, mark, Icon::Check, fg, 1.75);
+        }
         let p = ui.painter();
         p.galley(
-            Pos2::new(inner.left(), inner.center().y - text.size().y / 2.0),
+            Pos2::new(
+                inner.left() + gutter,
+                inner.center().y - text.size().y / 2.0,
+            ),
             text,
             fg,
         );

@@ -369,7 +369,7 @@ mod files {
             CommandSpec {
                 id: "dots.import",
                 label: "Import Dots",
-                menu: "Dots/Import...",
+                menu: "Dots/Import Dots...",
                 shortcut: None,
                 description: "Replace a sequence's dots with those from a .inbetweendots file.",
                 params: IMPORT_PARAMS,
@@ -381,7 +381,7 @@ mod files {
             CommandSpec {
                 id: "dots.export",
                 label: "Export Dots",
-                menu: "Dots/Export...",
+                menu: "Dots/Export Dots...",
                 shortcut: None,
                 description: "Write a sequence's dots to a .inbetweendots file.",
                 params: EXPORT_PARAMS,

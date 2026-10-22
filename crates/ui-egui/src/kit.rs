@@ -314,6 +314,8 @@ pub enum Icon {
     Return,
     /// A circle becoming a square: the start screen.
     Morph,
+    /// A check mark: an option that is on.
+    Check,
 }
 
 /// Draw an icon inside `rect` (drawn on a 24-unit grid), with strokes `width` wide.
@@ -531,6 +533,9 @@ pub fn icon(ui: &Ui, rect: Rect, which: Icon, color: Color32, width: f32) {
             p.add(line(&[(14.0, 5.0), (18.0, 9.0), (14.0, 13.0)]));
             p.add(line(&[(20.0, 15.0), (6.0, 15.0)]));
             p.add(line(&[(10.0, 11.0), (6.0, 15.0), (10.0, 19.0)]));
+        }
+        Icon::Check => {
+            p.add(line(&[(5.0, 12.5), (10.0, 17.0), (19.0, 7.0)]));
         }
         Icon::Close => {
             p.add(line(&[(6.0, 6.0), (18.0, 18.0)]));

@@ -62,7 +62,7 @@ Build redesigned windows from these, not from raw egui calls with styling:
 - Menus: every menu body starts with `kit::menu_setup`, then `kit::menu_row` (label, and a
   shortcut or hint at the right in tertiary), `kit::menu_row_detail` (a name over a quiet detail
   line, with an optional warning tag), `kit::menu_heading`, `kit::menu_separator` and
-  `kit::submenu` (draws a chevron icon). The order and groups of a menu come from
+  `kit::submenu` (draws a chevron icon). On/off options: a menu with any toggle draws every row with `kit::menu_row_check`, which adds a 24 px check gutter so labels line up; an option that is on shows `Icon::Check` there, one that is off shows nothing (no empty box). Clicking an option flips it and closes the menu; options never get an ellipsis, and their labels name what is on ("Show Lines", never "Toggle Lines"). Pick-one groups will use a filled dot in the same gutter. The order and groups of a menu come from
   `menus::LAYOUTS`, not from the drawing code. Menus are at least `control.menu_width` wide.
 - Panel headers are `panels::Title { label, name, meta, badge, focused }`: a small role label
   (Start, End, Preview), the main text, quiet details at the right and an optional badge.
@@ -99,7 +99,8 @@ Build redesigned windows from these, not from raw egui calls with styling:
 | Main window (top bar, tool bar, sequence list, panels, transport, status, start screen) | built | `app.rs` (top and status bars), `app/select_ui.rs` (tool bar), `seqlist.rs`, `panels.rs` (headers), `app/layout_ui.rs`, `app/transport_ui.rs`, `app/start_ui.rs` | https://claude.ai/artifact/D6vnDH6FEhorK1BQ9YkVnE |
 | File menu (and the menu style for all menus) | built | `menus.rs` (layout), `kit/menu.rs`, `app.rs` (`menu_items`, `recent_items`), `tests/file_menu.rs` | https://claude.ai/artifact/3gzPf88xayrF5vd7pvzTeL |
 | Edit menu | built | `menus.rs` (layout), `shortcuts.rs` (`label`), `tests/edit_menu.rs` | https://claude.ai/artifact/LRgkaqEyBs6qiz4F6q3RXn |
-| Other menus (Dots, Image, Sequence, View): regroup | todo (menu style applied) | | |
+| Dots menu (and the on/off check pattern for all menus) | built | `menus.rs` (layout), `kit/menu.rs` (`menu_row_check`), `app.rs` (`menu_items`), `app/select_ui.rs` (toolbar switches) | https://claude.ai/artifact/2MmAZ5Ue4WgqK38p3tA9VT |
+| Other menus (Image, Sequence, View): regroup | todo (menu style applied) | | |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
 | Export dialogs and progress | todo | | |
 | Dot tools (select, crop, camera) | todo | | |

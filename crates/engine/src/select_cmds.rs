@@ -51,6 +51,14 @@ fn has_selection(session: &Session) -> bool {
     !session.selection().is_empty()
 }
 
+fn has_dots(session: &Session) -> bool {
+    session
+        .project()
+        .sequences
+        .iter()
+        .any(|s| !s.dots.is_empty())
+}
+
 fn has_clip(session: &Session) -> bool {
     session.has_sequences() && session.clipboard().is_some()
 }
@@ -652,8 +660,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             shortcut: Some("Ctrl+H"),
             description: "Scale the selected dots on one image about a pivot.",
             params: SCALE_PARAMS,
-            enabled: has_sequence,
-            disabled_reason: "the project has no sequence",
+            enabled: has_selection,
+            disabled_reason: "no dots are selected",
             edits: true,
             run: scale,
         },
@@ -664,8 +672,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             shortcut: Some("Ctrl+R"),
             description: "Rotate the selected dots on one image about a pivot.",
             params: ROTATE_PARAMS,
-            enabled: has_sequence,
-            disabled_reason: "the project has no sequence",
+            enabled: has_selection,
+            disabled_reason: "no dots are selected",
             edits: true,
             run: rotate,
         },
@@ -676,8 +684,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             shortcut: Some("Ctrl+K"),
             description: "Shear the selected dots on one image about a pivot.",
             params: SKEW_PARAMS,
-            enabled: has_sequence,
-            disabled_reason: "the project has no sequence",
+            enabled: has_selection,
+            disabled_reason: "no dots are selected",
             edits: true,
             run: skew,
         },
@@ -685,11 +693,11 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             id: "dots.flipH",
             label: "Flip Dots Horizontally",
             menu: "Dots/Flip Horizontally",
-            shortcut: None,
+            shortcut: Some("Shift+H"),
             description: "Mirror the selected dots left to right on one image.",
             params: FLIP_PARAMS,
-            enabled: has_sequence,
-            disabled_reason: "the project has no sequence",
+            enabled: has_selection,
+            disabled_reason: "no dots are selected",
             edits: true,
             run: flip_h,
         },
@@ -697,11 +705,11 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             id: "dots.flipV",
             label: "Flip Dots Vertically",
             menu: "Dots/Flip Vertically",
-            shortcut: None,
+            shortcut: Some("Shift+V"),
             description: "Mirror the selected dots top to bottom on one image.",
             params: FLIP_PARAMS,
-            enabled: has_sequence,
-            disabled_reason: "the project has no sequence",
+            enabled: has_selection,
+            disabled_reason: "no dots are selected",
             edits: true,
             run: flip_v,
         },
@@ -720,12 +728,12 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "dots.clearAll",
             label: "Clear All Dots",
-            menu: "Dots/Clear All",
+            menu: "Dots/Clear All Dots",
             shortcut: None,
             description: "Delete every dot and line of a sequence.",
             params: SEQ_ONLY,
-            enabled: has_sequence,
-            disabled_reason: "the project has no sequence",
+            enabled: has_dots,
+            disabled_reason: "there are no dots",
             edits: true,
             run: clear_all,
         },
@@ -823,6 +831,30 @@ mod tests {
             .iter()
             .map(|p| (p.first.x, p.first.y))
             .collect()
+    }
+
+    #[test]
+    fn transforms_need_a_selection_and_clear_all_needs_dots() {
+        let registry = Registry::standard();
+        let enabled = |s: &Session, id: &str| (registry.get(id).unwrap().enabled)(s);
+        let transforms = [
+            "dots.scale",
+            "dots.rotate",
+            "dots.skew",
+            "dots.flipH",
+            "dots.flipV",
+        ];
+        let empty = session();
+        assert!(!enabled(&empty, "dots.clearAll"));
+        let mut s = with_dots(3);
+        assert!(enabled(&s, "dots.clearAll"));
+        for id in transforms {
+            assert!(!enabled(&s, id), "{id}");
+        }
+        run(&mut s, "dots.selectAll", json!({})).unwrap();
+        for id in transforms {
+            assert!(enabled(&s, id), "{id}");
+        }
     }
 
     #[test]
