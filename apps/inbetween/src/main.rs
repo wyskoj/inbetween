@@ -93,7 +93,9 @@ fn main() -> ExitCode {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_inner_size([args.size.0, args.size.1])
             .with_min_inner_size([760.0, 520.0])
-            .with_title("Inbetween"),
+            .with_title("Inbetween")
+            // Hidden until the first real frame is painted, so startup never flashes white.
+            .with_visible(false),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };

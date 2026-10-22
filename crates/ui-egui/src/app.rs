@@ -1174,6 +1174,12 @@ impl InbetweenApp {
             ctx.request_repaint();
             return;
         }
+        // The desktop window starts hidden; show it once this first real frame is painted.
+        let shown = egui::Id::new("inbetween_shown");
+        if !ctx.data(|d| d.get_temp::<bool>(shown).unwrap_or(false)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.data_mut(|d| d.insert_temp(shown, true));
+        }
         if self.export_busy(ctx) {
             return;
         }
