@@ -35,6 +35,21 @@ const LAYOUTS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "Edit",
+        &[
+            "edit.undo",
+            "edit.redo",
+            "-",
+            "edit.cut",
+            "edit.copy",
+            "edit.paste",
+            "edit.delete",
+            "-",
+            "dots.selectAll",
+            "dots.selectNone",
+        ],
+    ),
+    (
         "File/Export",
         &[
             "# Whole movie",
@@ -251,6 +266,26 @@ mod tests {
         let menus = build(Registry::standard().specs());
         assert_eq!(&names(&menus)[..2], ["File", "Edit"]);
         assert!(names(&menus).contains(&"Dots") && names(&menus).contains(&"Sequence"));
+    }
+
+    #[test]
+    fn the_edit_menu_follows_its_layout() {
+        let menus = build(Registry::standard().specs());
+        assert_eq!(
+            names(submenu(&menus, "Edit")),
+            [
+                "Undo",
+                "Redo",
+                "-",
+                "Cut",
+                "Copy",
+                "Paste",
+                "Delete",
+                "-",
+                "Select All Dots",
+                "Deselect All",
+            ]
+        );
     }
 
     #[test]

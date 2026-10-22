@@ -98,7 +98,8 @@ Build redesigned windows from these, not from raw egui calls with styling:
 | New From Image List | built | `new_list.rs`, `app/new_list_ui.rs`, `tests/new_list.rs` | https://claude.ai/artifact/53TA3P2Qb4qwJHCNt31A6Y |
 | Main window (top bar, tool bar, sequence list, panels, transport, status, start screen) | built | `app.rs` (top and status bars), `app/select_ui.rs` (tool bar), `seqlist.rs`, `panels.rs` (headers), `app/layout_ui.rs`, `app/transport_ui.rs`, `app/start_ui.rs` | https://claude.ai/artifact/D6vnDH6FEhorK1BQ9YkVnE |
 | File menu (and the menu style for all menus) | built | `menus.rs` (layout), `kit/menu.rs`, `app.rs` (`menu_items`, `recent_items`), `tests/file_menu.rs` | https://claude.ai/artifact/3gzPf88xayrF5vd7pvzTeL |
-| Other menus (Edit, Dots, Image, Sequence, View): regroup | todo (menu style applied) | | |
+| Edit menu | built | `menus.rs` (layout), `shortcuts.rs` (`label`), `tests/edit_menu.rs` | https://claude.ai/artifact/LRgkaqEyBs6qiz4F6q3RXn |
+| Other menus (Dots, Image, Sequence, View): regroup | todo (menu style applied) | | |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
 | Export dialogs and progress | todo | | |
 | Dot tools (select, crop, camera) | todo | | |

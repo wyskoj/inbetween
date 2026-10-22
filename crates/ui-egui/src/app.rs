@@ -505,8 +505,12 @@ impl InbetweenApp {
                 }
             }
             Err(e) => {
-                // A blocked drag onto another dot is not worth shouting about.
-                if !matches!(id, "dots.move" | "dots.nudge" | "lines.drag") {
+                // A blocked drag onto another dot, or clearing an empty selection, is not worth
+                // shouting about.
+                if !matches!(
+                    id,
+                    "dots.move" | "dots.nudge" | "lines.drag" | "dots.selectNone"
+                ) {
                     self.status = Some(Status {
                         text: e.to_string(),
                         is_error: true,

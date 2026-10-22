@@ -31,9 +31,12 @@ fn capitalise(s: &str) -> String {
     }
 }
 
-/// How to show a shortcut in a menu.
+/// How to show a shortcut in a menu: short key names, so "Delete" does not read like a label.
 pub fn label(text: &str) -> String {
-    text.to_string()
+    match text {
+        "Delete" => "Del".to_string(),
+        other => other.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -55,6 +58,12 @@ mod tests {
         );
         assert_eq!(parse("Ctrl+S").unwrap().logical_key, Key::S);
         assert_eq!(parse("ctrl+n").unwrap().logical_key, Key::N);
+    }
+
+    #[test]
+    fn menus_show_short_key_names() {
+        assert_eq!(label("Delete"), "Del");
+        assert_eq!(label("Ctrl+Shift+A"), "Ctrl+Shift+A");
     }
 
     #[test]
