@@ -1434,7 +1434,6 @@ impl InbetweenApp {
             .collect();
         let mut recent_click: Option<(String, bool)> = None;
         let mut quick: Option<usize> = None;
-        let has_sequences = self.session.has_sequences();
         let t = crate::theme::get(ctx);
         let project_name = self.session.path().and_then(|p| p.file_name()).map_or_else(
             || "Untitled".to_string(),
@@ -1469,17 +1468,6 @@ impl InbetweenApp {
                             ui.menu_button(name, |ui| {
                                 crate::kit::menu_setup(ui);
                                 menu_items(ui, children, &menu, &mut clicks);
-                                if name == "Image" {
-                                    crate::kit::menu_separator(ui);
-                                    for (i, (label, ..)) in QUICK_IMAGE.iter().enumerate() {
-                                        if crate::kit::menu_row(ui, label, None, has_sequences)
-                                            .clicked()
-                                        {
-                                            quick = Some(i);
-                                            ui.close_menu();
-                                        }
-                                    }
-                                }
                             });
                         }
                     }
@@ -1510,6 +1498,7 @@ impl InbetweenApp {
                     clicked = clicks.command;
                     view_action = clicks.action.or(view_action);
                     recent_click = clicks.recent;
+                    quick = clicks.quick;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let segments: Vec<crate::kit::Segment<'_>> = LAYOUT_MODES
                             .iter()
@@ -1949,6 +1938,8 @@ struct MenuClicks {
     command: Option<&'static str>,
     /// A shell action (Quit).
     action: Option<&'static str>,
+    /// An item of the Image menu's quick list.
+    quick: Option<usize>,
     /// A recent project and whether its file still exists.
     recent: Option<(String, bool)>,
 }
@@ -2012,6 +2003,18 @@ fn menu_items(
                     .clicked()
                 {
                     clicks.action = Some(action.id);
+                    ui.close_menu();
+                }
+            }
+            MenuNode::Quick(i) => {
+                let Some((label, ..)) = QUICK_IMAGE.get(*i) else {
+                    continue;
+                };
+                let enabled = menu.session.has_sequences();
+                if crate::kit::menu_row_check(ui, label, None, enabled, gutter.then_some(false))
+                    .clicked()
+                {
+                    clicks.quick = Some(*i);
                     ui.close_menu();
                 }
             }

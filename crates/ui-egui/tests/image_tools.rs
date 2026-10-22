@@ -119,7 +119,7 @@ fn the_image_menu_lists_the_generated_commands_and_the_quick_items() {
     h.run();
     for label in [
         "Crop\u{2026}",
-        "Adjust\u{2026}",
+        "Adjust Color\u{2026}",
         "Swap Images",
         "Caption\u{2026}",
         "Rotate\u{2026}",

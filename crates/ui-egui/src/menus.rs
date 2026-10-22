@@ -10,9 +10,11 @@ use inbetween_engine::CommandSpec;
 const MENU_ORDER: &[&str] = &["File", "Edit", "Dots", "Image", "Sequence", "Effects"];
 
 /// The order of a menu's entries, by menu path. `-` is a separator, `# Text` a small heading,
-/// `> Name` a submenu, `!id` a shell action ([`crate::actions`]), anything else a command id,
-/// optionally `id = Label` to show it under another name than its menu path. Commands of the
-/// menu the layout leaves out follow at the end, so none can go missing.
+/// `> Name` a submenu, `!id` a shell action ([`crate::actions`]), `@n` item `n` of the Image
+/// menu's quick list (`app::QUICK_IMAGE`), `~id` a command kept out of the menu on purpose,
+/// anything else a command id, optionally `id = Label` to show it under another name than its
+/// menu path. Other commands of the menu the layout leaves out follow at the end, so none can go
+/// missing.
 const LAYOUTS: &[(&str, &[&str])] = &[
     (
         "File",
@@ -47,6 +49,54 @@ const LAYOUTS: &[(&str, &[&str])] = &[
             "-",
             "dots.selectAll",
             "dots.selectNone",
+        ],
+    ),
+    (
+        "Image",
+        &[
+            "sequence.image",
+            "image.swap",
+            "-",
+            "@0",
+            "@1",
+            "@2",
+            "image.rotate",
+            "@3",
+            "@4",
+            "image.crop",
+            "~image.flip",
+            "-",
+            "image.adjust",
+            "> Filters",
+            "image.caption",
+            "-",
+            "image.reset",
+        ],
+    ),
+    (
+        "Image/Filters",
+        &[
+            "# Blur",
+            "image.filter.smooth",
+            "image.filter.blur",
+            "image.filter.gaussian",
+            "image.filter.zoomBlur",
+            "image.filter.radialBlur",
+            "-",
+            "image.filter.sharpen",
+            "-",
+            "# Stylize",
+            "image.filter.emboss",
+            "image.filter.mosaic",
+            "image.filter.oilPaint",
+            "image.filter.splash",
+            "-",
+            "# Distort",
+            "image.filter.cylinder",
+            "image.filter.whirl",
+            "image.filter.pinch",
+            "-",
+            "image.filter.clear",
         ],
     ),
     (
@@ -113,6 +163,8 @@ pub enum MenuNode {
     Action {
         id: &'static str,
     },
+    /// An item of the Image menu's quick list, by index.
+    Quick(usize),
     Heading(&'static str),
     Separator,
 }
@@ -198,6 +250,10 @@ fn arrange(nodes: Vec<MenuNode>, path: &str) -> Vec<MenuNode> {
             out.push(MenuNode::Heading(text));
         } else if let Some(id) = entry.strip_prefix('!') {
             out.push(MenuNode::Action { id });
+        } else if let Some(n) = entry.strip_prefix('@').and_then(|n| n.parse().ok()) {
+            out.push(MenuNode::Quick(n));
+        } else if let Some(id) = entry.strip_prefix('~') {
+            pool.retain(|n| !matches!(n, MenuNode::Command { id: i, .. } if *i == id));
         } else if let Some(want) = entry.strip_prefix("> ") {
             let at = pool
                 .iter()
@@ -266,6 +322,7 @@ mod tests {
                 MenuNode::Menu { name, .. } => name.as_str(),
                 MenuNode::Command { label, .. } => label.as_str(),
                 MenuNode::Action { id } => id,
+                MenuNode::Quick(_) => "@",
                 MenuNode::Heading(text) => text,
                 MenuNode::Separator => "-",
             })
@@ -307,6 +364,37 @@ mod tests {
                 "Deselect All",
             ]
         );
+    }
+
+    #[test]
+    fn the_image_menu_follows_its_layout() {
+        let menus = build(Registry::standard().specs());
+        let image = submenu(&menus, "Image");
+        assert_eq!(
+            names(image),
+            [
+                "Replace Image\u{2026}",
+                "Swap Images",
+                "-",
+                "@",
+                "@",
+                "@",
+                "Rotate\u{2026}",
+                "@",
+                "@",
+                "Crop\u{2026}",
+                "-",
+                "Adjust Color\u{2026}",
+                "Filters",
+                "Caption\u{2026}",
+                "-",
+                "Reset Edits\u{2026}",
+            ]
+        );
+        let filters = names(submenu(image, "Filters"));
+        assert_eq!(filters.first(), Some(&"Blur"));
+        assert_eq!(filters.last(), Some(&"Remove All Filters"));
+        assert_eq!(filters.iter().filter(|n| **n == "-").count(), 4);
     }
 
     #[test]

@@ -600,6 +600,14 @@ fn spec(
     }
 }
 
+fn has_edits(session: &Session) -> bool {
+    session
+        .project()
+        .sequences
+        .iter()
+        .any(|s| !s.edit1.is_identity() || !s.edit2.is_identity())
+}
+
 pub(crate) fn specs() -> Vec<CommandSpec> {
     let mut swap_spec = spec(
         "image.swap",
@@ -610,6 +618,16 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         swap,
     );
     swap_spec.shortcut = Some("F3");
+    let mut reset_spec = spec(
+        "image.reset",
+        "Reset Edits",
+        "Image/Reset Edits...",
+        "Remove all of an image's edits, or just one part of them.",
+        RESET_PARAMS,
+        reset,
+    );
+    reset_spec.enabled = has_edits;
+    reset_spec.disabled_reason = "no image has edits";
     vec![
         spec(
             "image.rotate",
@@ -637,20 +655,13 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         ),
         spec(
             "image.adjust",
-            "Adjust",
-            "Image/Adjust...",
+            "Adjust Color",
+            "Image/Adjust Color...",
             "Brightness, contrast, red/green/blue balance, hue, saturation, negative and grayscale.",
             ADJUST_PARAMS,
             adjust,
         ),
-        spec(
-            "image.reset",
-            "Reset Edits",
-            "Image/Reset Edits...",
-            "Remove all of an image's edits, or just one part of them.",
-            RESET_PARAMS,
-            reset,
-        ),
+        reset_spec,
         swap_spec,
     ]
 }
@@ -676,6 +687,24 @@ mod tests {
             None,
         );
         s
+    }
+
+    #[test]
+    fn reset_and_remove_all_filters_need_something_to_remove() {
+        let registry = crate::Registry::standard();
+        let enabled = |s: &Session, id: &str| (registry.get(id).unwrap().enabled)(s);
+        let mut s = session();
+        assert!(!enabled(&s, "image.reset"));
+        assert!(!enabled(&s, "image.filter.clear"));
+        s.sequence_mut(0).unwrap().edit2.flip_h = true;
+        assert!(enabled(&s, "image.reset"));
+        assert!(!enabled(&s, "image.filter.clear"));
+        s.sequence_mut(0)
+            .unwrap()
+            .edit2
+            .filters
+            .push(inbetween_doc::Filter::Blur { radius: 2 });
+        assert!(enabled(&s, "image.filter.clear"));
     }
 
     #[test]

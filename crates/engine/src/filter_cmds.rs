@@ -608,6 +608,14 @@ pub(crate) fn clear_list(
     })
 }
 
+fn has_filters(session: &Session) -> bool {
+    session
+        .project()
+        .sequences
+        .iter()
+        .any(|s| !s.edit1.filters.is_empty() || !s.edit2.filters.is_empty())
+}
+
 type Run = fn(&mut Session, &Params) -> Result<Value, CommandError>;
 
 fn spec(
@@ -633,6 +641,16 @@ fn spec(
 }
 
 pub(crate) fn specs() -> Vec<CommandSpec> {
+    let mut clear_spec = spec(
+        "image.filter.clear",
+        "Remove All Filters",
+        "Image/Filters/Remove All Filters",
+        "Remove every filter from an image.",
+        CLEAR_PARAMS,
+        clear,
+    );
+    clear_spec.enabled = has_filters;
+    clear_spec.disabled_reason = "no image has filters";
     vec![
         spec(
             "image.filter.smooth",
@@ -754,13 +772,6 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             MOVE_PARAMS,
             move_filter,
         ),
-        spec(
-            "image.filter.clear",
-            "Remove All Filters",
-            "Image/Filters/Remove All",
-            "Remove every filter from an image.",
-            CLEAR_PARAMS,
-            clear,
-        ),
+        clear_spec,
     ]
 }

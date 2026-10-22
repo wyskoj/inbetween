@@ -366,8 +366,8 @@ mod files {
     pub(super) fn specs() -> Vec<CommandSpec> {
         vec![CommandSpec {
             id: "sequence.image",
-            label: "Set Image",
-            menu: "Sequence/Set Image...",
+            label: "Replace Image",
+            menu: "Image/Replace Image...",
             shortcut: None,
             description: "Replace Image 1 or Image 2 of a sequence with another image file.",
             params: IMAGE_PARAMS,

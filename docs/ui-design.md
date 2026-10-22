@@ -100,7 +100,8 @@ Build redesigned windows from these, not from raw egui calls with styling:
 | File menu (and the menu style for all menus) | built | `menus.rs` (layout), `kit/menu.rs`, `app.rs` (`menu_items`, `recent_items`), `tests/file_menu.rs` | https://claude.ai/artifact/3gzPf88xayrF5vd7pvzTeL |
 | Edit menu | built | `menus.rs` (layout), `shortcuts.rs` (`label`), `tests/edit_menu.rs` | https://claude.ai/artifact/LRgkaqEyBs6qiz4F6q3RXn |
 | Dots menu (and the on/off check pattern for all menus) | built | `menus.rs` (layout), `kit/menu.rs` (`menu_row_check`), `app.rs` (`menu_items`), `app/select_ui.rs` (toolbar switches) | https://claude.ai/artifact/2MmAZ5Ue4WgqK38p3tA9VT |
-| Other menus (Image, Sequence, View): regroup | todo (menu style applied) | | |
+| Image menu (Filters submenu with headings, quick rotate and flip in the geometry group) | built | `menus.rs` (layout, `@n` quick items, `~id` to leave a command out), `app.rs` (`menu_items`), `tests/image_menu.rs` | https://claude.ai/artifact/RMvetQQYcj3noyAC3YHxzs |
+| Other menus (Sequence, View): regroup | todo (menu style applied) | | |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
 | Export dialogs and progress | todo | | |
 | Dot tools (select, crop, camera) | todo | | |
