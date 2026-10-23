@@ -173,6 +173,13 @@ impl InbetweenApp {
         self.adjust_group_open = self.run_command("edit.beginGroup", &json!({})).is_ok();
     }
 
+    /// Open the Adjust window on the movie-wide colour and filters.
+    pub fn open_adjust_movie(&mut self) {
+        let image = self.state.focus_image;
+        self.open_adjust(image);
+        self.adjust_scope = AdjustScope::Movie;
+    }
+
     /// Close the window: keep its changes as one undo step, or (`keep` false) undo them.
     pub fn close_adjust(&mut self, keep: bool) {
         if self.adjust_group_open {

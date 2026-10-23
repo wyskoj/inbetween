@@ -112,6 +112,44 @@ pub fn describe(id: &str, result: &Value) -> Option<Feedback> {
                 ),
             )
         }
+        "face.detect" => {
+            let images = result.get("images").and_then(Value::as_array)?;
+            let per_image: Vec<u64> = images
+                .iter()
+                .map(|i| {
+                    i.get("faces")
+                        .and_then(Value::as_array)
+                        .map_or(0, |f| f.len() as u64)
+                })
+                .collect();
+            let total: u64 = per_image.iter().sum();
+            if total == 0 {
+                return note(Warning, "Found no faces in this sequence".into());
+            }
+            let detail = per_image
+                .iter()
+                .enumerate()
+                .map(|(n, c)| format!("Image {}: {c}", n + 1))
+                .collect::<Vec<_>>()
+                .join(", ");
+            note(
+                Info,
+                format!("Found {} ({detail})", plural(total, "face", "faces")),
+            )
+        }
+        "tools.benchmark" => {
+            let fps = |key: &str| {
+                result
+                    .get(key)
+                    .and_then(|v| v.get("fps"))
+                    .and_then(Value::as_f64)
+            };
+            let (preview, export) = (fps("preview")?, fps("export")?);
+            note(
+                Info,
+                format!("Rendering: {preview:.1} fps in the preview, {export:.1} fps exporting"),
+            )
+        }
         "face.locate.smartDrag" => match count(result, "moved")? {
             0 => note(Info, "No dots moved".into()),
             n => note(Success, format!("Moved {}", dots(n))),
@@ -238,6 +276,26 @@ mod tests {
     }
 
     #[test]
+    fn detecting_faces_says_how_many_and_where() {
+        let none = json!({"images": [{"image": 1, "faces": []}, {"image": 2, "faces": []}]});
+        assert_eq!(msg("face.detect", none).1, Tone::Warning);
+        let some = json!({"images": [{"faces": [{}, {}]}, {"faces": [{}]}]});
+        assert_eq!(
+            msg("face.detect", some).0,
+            "Found 3 faces (Image 1: 2, Image 2: 1)"
+        );
+    }
+
+    #[test]
+    fn the_benchmark_reports_both_speeds() {
+        let r = json!({"preview": {"fps": 61.0}, "export": {"fps": 12.0}});
+        assert_eq!(
+            msg("tools.benchmark", r).0,
+            "Rendering: 61.0 fps in the preview, 12.0 fps exporting"
+        );
+    }
+
+    #[test]
     fn counts_agree_in_number() {
         assert_eq!(msg("edit.paste", json!({"pasted": 1})).0, "Pasted 1 dot");
         assert_eq!(msg("edit.paste", json!({"pasted": 2})).0, "Pasted 2 dots");
@@ -302,6 +360,8 @@ mod tests {
             "dots.autoMatch",
             "dots.autoLandmarks",
             "face.locate",
+            "face.detect",
+            "tools.benchmark",
             "face.locate.smartDrag",
             "edit.copy",
             "edit.cut",

@@ -640,6 +640,10 @@ impl InbetweenApp {
                 self.open_adjust(focus);
                 return;
             }
+            "movie.adjust" => {
+                self.open_adjust_movie();
+                return;
+            }
             "image.caption" => {
                 self.open_caption(if focus == 2 {
                     CaptionScope::Image2
@@ -705,10 +709,15 @@ impl InbetweenApp {
         // `sequence` alone does not need a form: the sequence being edited is used. Image tools
         // whose settings all have defaults still ask first, so a click never adds a surprise.
         let form_first = FORM_FIRST.contains(&id)
-            || (id.starts_with("image.filter.")
+            || ((id.starts_with("image.filter.") || id.starts_with("movie.filter."))
                 && !matches!(
                     id,
-                    "image.filter.remove" | "image.filter.move" | "image.filter.clear"
+                    "image.filter.remove"
+                        | "image.filter.move"
+                        | "image.filter.clear"
+                        | "movie.filter.remove"
+                        | "movie.filter.move"
+                        | "movie.filter.clear"
                 ));
         if form_first
             || spec
@@ -1903,7 +1912,18 @@ impl Snapshot {
 }
 
 /// Image commands that always ask (they would otherwise run at once with their defaults).
-const FORM_FIRST: &[&str] = &["image.rotate", "image.reset"];
+const FORM_FIRST: &[&str] = &[
+    "image.rotate",
+    "image.reset",
+    // Set-or-report commands: with no value they only report, which looks like a dead click.
+    "sequence.length",
+    "sequence.reorder",
+    "sequence.morphType",
+    "sequence.fit",
+    "project.type",
+    "movie.size",
+    "movie.fps",
+];
 
 /// The Image menu's quick items: label, command, parameter name and value. Each acts on the
 /// source panel last used.
