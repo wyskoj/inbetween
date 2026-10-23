@@ -97,18 +97,34 @@ pub fn describe(id: &str, result: &Value) -> Option<Feedback> {
                 ),
             }
         }
-        "face.locate" => {
+        "face.locate" | "face.locateAll" | "face.locateSequences" => {
             let per = count(result, "dots_per_face")?;
-            let seqs = result
+            let done = result
                 .get("sequences")
                 .and_then(Value::as_array)
                 .map_or(0, |a| a.len() as u64);
+            let skipped = result
+                .get("skipped")
+                .and_then(Value::as_array)
+                .map_or(&[][..], |a| a.as_slice());
+            if let Some(first) = skipped.first() {
+                let total = done + skipped.len() as u64;
+                let reason = first
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .and_then(|r| r.split(';').next())
+                    .unwrap_or("");
+                return note(
+                    Warning,
+                    format!("Marked the face in {done} of {total} sequences; {reason}"),
+                );
+            }
             note(
                 Success,
                 format!(
-                    "Placed {} per face on {}",
+                    "Marked {} per face on {}",
                     per,
-                    plural(seqs, "sequence", "sequences")
+                    plural(done, "sequence", "sequences")
                 ),
             )
         }
@@ -333,6 +349,33 @@ mod tests {
     }
 
     #[test]
+    fn marking_faces_says_what_was_marked_and_what_was_skipped() {
+        for id in ["face.locate", "face.locateAll", "face.locateSequences"] {
+            let (m, t) = msg(id, json!({"sequences": [0, 1], "dots_per_face": 38}));
+            assert_eq!(
+                (m.as_str(), t),
+                ("Marked 38 per face on 2 sequences", Tone::Success)
+            );
+        }
+        let (m, t) = msg(
+            "face.locateSequences",
+            json!({
+                "sequences": [0, 1, 3, 4],
+                "dots_per_face": 38,
+                "skipped": [
+                    {"sequence": 2, "reason": "no face found in image 2 of sequence 2; give a box"},
+                    {"sequence": 5, "reason": "no face found in image 1 of sequence 5; give a box"},
+                ],
+            }),
+        );
+        assert_eq!(t, Tone::Warning);
+        assert_eq!(
+            m,
+            "Marked the face in 4 of 6 sequences; no face found in image 2 of sequence 2"
+        );
+    }
+
+    #[test]
     fn hostile_results_never_panic() {
         for id in [
             "dots.autoMatch",
@@ -360,6 +403,8 @@ mod tests {
             "dots.autoMatch",
             "dots.autoLandmarks",
             "face.locate",
+            "face.locateAll",
+            "face.locateSequences",
             "face.detect",
             "tools.benchmark",
             "face.locate.smartDrag",

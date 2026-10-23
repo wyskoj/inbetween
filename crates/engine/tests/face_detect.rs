@@ -307,3 +307,69 @@ fn locate_all_is_locate_with_all_faces() {
     assert!(try_run(&mut s, "face.locateAll", json!({"mode": "append"})).is_err());
     assert_eq!(count(&s), 38);
 }
+
+fn flat_image(d: &Dir, name: &str) -> String {
+    let mut img = Image::new(200, 200).unwrap();
+    for y in 0..200 {
+        for x in 0..200 {
+            let g = x as f32 / 200.0;
+            img.set(x, y, [g, 0.3, 1.0 - g, 1.0]);
+        }
+    }
+    d.write(name, &img)
+}
+
+#[test]
+fn all_sequences_skips_a_sequence_without_a_face_and_reports_it() {
+    let d = Dir::new("skip");
+    let mut s = portraits();
+    // The second sequence continues from portrait_b to a picture with no face.
+    run(
+        &mut s,
+        "sequence.add",
+        json!({"image2": flat_image(&d, "flat.png")}),
+    );
+    let out = run(&mut s, "face.locateSequences", json!({}));
+    assert_eq!(out["sequences"], json!([0]));
+    assert_eq!(out["skipped"][0]["sequence"], 1);
+    let reason = out["skipped"][0]["reason"].as_str().unwrap();
+    assert!(
+        reason.contains("no face found in image 2 of sequence 1"),
+        "{reason}"
+    );
+    assert_eq!(s.project().sequences[0].dots.len(), 38);
+    assert!(s.project().sequences[1].dots.is_empty());
+    // One undo step for the whole run.
+    run(&mut s, "edit.undo", json!({}));
+    assert!(s.project().sequences[0].dots.is_empty());
+}
+
+#[test]
+fn all_sequences_is_an_error_only_when_every_sequence_fails() {
+    let d = Dir::new("allfail");
+    let mut s = Session::new();
+    run(
+        &mut s,
+        "project.new",
+        json!({"image1": flat_image(&d, "a.png"), "image2": flat_image(&d, "b.png")}),
+    );
+    run(
+        &mut s,
+        "sequence.add",
+        json!({"image2": flat_image(&d, "c.png")}),
+    );
+    let before = s.project().clone();
+    let err = try_run(&mut s, "face.locateSequences", json!({})).unwrap_err();
+    assert!(err.to_string().contains("no face found"), "{err}");
+    assert_eq!(*s.project(), before);
+}
+
+#[test]
+fn locate_sequences_is_locate_with_all_sequences() {
+    let mut a = portraits();
+    let mut b = portraits();
+    let x = run(&mut a, "face.locateSequences", json!({}));
+    let y = run(&mut b, "face.locate", json!({"all_sequences": true}));
+    assert_eq!(x["sequences"], y["sequences"]);
+    assert_eq!(a.project().sequences[0].dots, b.project().sequences[0].dots);
+}

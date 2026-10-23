@@ -226,7 +226,7 @@ const LAYOUTS: &[(&str, &[&str])] = &[
         &[
             "face.locate",
             "face.locateAll",
-            "face.detect",
+            "face.locateSequences",
             "-",
             "face.model",
             "face.option.smartDrag",
@@ -597,9 +597,9 @@ mod tests {
         assert_eq!(
             names(submenu(&menus, "Face")),
             [
-                "Locate Face\u{2026}",
-                "Locate All Faces",
-                "Detect Faces\u{2026}",
+                "Mark Face",
+                "Mark Several Faces",
+                "Mark Face in All Sequences",
                 "-",
                 "Face Model\u{2026}",
                 "Smart Drag",

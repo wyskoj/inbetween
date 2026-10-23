@@ -58,6 +58,7 @@ mod layout_ui;
 mod new_list_ui;
 mod new_two_ui;
 mod prompt_ui;
+mod replace_dots_ui;
 mod select_ui;
 mod start_ui;
 mod toast_ui;
@@ -123,6 +124,16 @@ pub const REPLACES_PROJECT: &[&str] = &[
     "file.wizard",
     "file.close",
 ];
+
+/// The first sentence of a command description: what a menu tooltip shows. The rest is detail
+/// for the CLI and MCP.
+pub fn first_sentence(text: &str) -> &str {
+    let end = text
+        .char_indices()
+        .find(|&(i, c)| c == '.' && text[i + 1..].chars().next().is_none_or(char::is_whitespace))
+        .map_or(text.len(), |(i, _)| i + 1);
+    &text[..end]
+}
 
 /// The id that stands for closing the window in a pending prompt.
 const QUIT: &str = "app.quit";
@@ -264,6 +275,8 @@ pub struct InbetweenApp {
     open_visual: Option<OpenVisual>,
     /// A command (or quitting) waiting for the answer to "save your changes?".
     pending: Option<Pending>,
+    /// The Replace-the-dots question for a Face menu item, while it waits for an answer.
+    replace_dots: Option<replace_dots_ui::ReplaceDots>,
     /// Shows a file dialog for a path parameter: the native one, or a stand-in in tests.
     file_picker: FilePicker,
     /// The person said to quit (or discard and quit): let the window close.
@@ -356,6 +369,7 @@ impl InbetweenApp {
             curve_group_open: false,
             open_visual: None,
             pending: None,
+            replace_dots: None,
             file_picker: Box::new(form_ui::browse),
             allow_close: false,
             close_now: false,
@@ -838,6 +852,10 @@ impl InbetweenApp {
             });
             return true;
         }
+        if let Some(ask) = self.replace_dots_question(id) {
+            self.replace_dots = Some(ask);
+            return true;
+        }
         false
     }
 
@@ -1265,6 +1283,7 @@ impl InbetweenApp {
         self.visual_window(ctx);
         self.drop_overlay(ctx);
         self.prompt_window(ctx);
+        self.replace_dots_window(ctx);
         self.help_window(ctx);
         self.handle_close(ctx);
         self.screenshot_step(ctx);
@@ -2037,7 +2056,10 @@ fn menu_items(
                 let response = crate::kit::menu_row_check(ui, text, hint, enabled, mark);
                 if !enabled {
                     response.on_hover_text(spec.disabled_reason);
-                } else if response.on_hover_text(spec.description).clicked() {
+                } else if response
+                    .on_hover_text(first_sentence(spec.description))
+                    .clicked()
+                {
                     clicks.command = Some(spec.id);
                     ui.close_menu();
                 }

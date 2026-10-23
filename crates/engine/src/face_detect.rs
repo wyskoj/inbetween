@@ -334,6 +334,37 @@ fn locate_all(session: &mut Session, params: &Params) -> Result<Value, CommandEr
     crate::face_cmds::locate(session, &params)
 }
 
+const LOCATE_SEQUENCES_PARAMS: &[ParamSpec] = &[
+    ParamSpec::new(
+        "mode",
+        ParamKind::String,
+        false,
+        "replace: each sequence's dots become the face found; append: add it after the existing dots",
+    )
+    .one_of(crate::face_cmds::LOCATE_MODES)
+    .default_is("replace"),
+    ParamSpec::new(
+        "all_faces",
+        ParamKind::Bool,
+        false,
+        "Place every face found, left to right, instead of the best one (both images need the same number of faces)",
+    ),
+];
+
+fn locate_sequences(session: &mut Session, params: &Params) -> Result<Value, CommandError> {
+    let mut p = serde_json::Map::new();
+    p.insert("source".into(), json!("detect"));
+    p.insert("all_sequences".into(), json!(true));
+    if let Some(m) = params.string("mode") {
+        p.insert("mode".into(), json!(m));
+    }
+    if let Some(a) = params.boolean("all_faces") {
+        p.insert("all_faces".into(), json!(a));
+    }
+    let params = Params::parse(crate::face_cmds::LOCATE_PARAMS, &Value::Object(p))?;
+    crate::face_cmds::locate(session, &params)
+}
+
 fn has_sequence(session: &Session) -> bool {
     session.has_sequences()
 }
@@ -341,11 +372,23 @@ fn has_sequence(session: &Session) -> bool {
 pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![
         CommandSpec {
-            id: "face.locateAll",
-            label: "Locate All Faces",
-            menu: "Face/Locate All Faces",
+            id: "face.locateSequences",
+            label: "Mark Face in All Sequences",
+            menu: "Face/Mark Face in All Sequences",
             shortcut: None,
-            description: "Find every face in both images with the bundled detector and place the face model on each, one after another from left to right (face.locate with all_faces). Both images must show the same number of faces.",
+            description: "Put dots on the face in both images of every sequence. A sequence without a usable face is skipped and listed under `skipped`; it is an error only if every sequence fails (face.locate with all_sequences).",
+            params: LOCATE_SEQUENCES_PARAMS,
+            enabled: has_sequence,
+            disabled_reason: "the project has no sequence to put a face in",
+            edits: true,
+            run: locate_sequences,
+        },
+        CommandSpec {
+            id: "face.locateAll",
+            label: "Mark Several Faces",
+            menu: "Face/Mark Several Faces",
+            shortcut: None,
+            description: "Put dots on every face in both images, left to right; both images need the same number of faces. Uses the bundled detector and places the face model on each (face.locate with all_faces).",
             params: LOCATE_ALL_PARAMS,
             enabled: has_sequence,
             disabled_reason: "the project has no sequence to put faces in",
@@ -355,9 +398,9 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
         id: "face.detect",
         label: "Detect Faces",
-        menu: "Face/Detect Faces...",
+        menu: "",
         shortcut: None,
-        description: "Report the faces Inbetween's bundled detector finds in a sequence's images: a score, the face box and the face model's landmark positions for each face, in output pixels (so they are the positions face.locate would place dots at). `mesh` adds the full 468-point mesh. Nothing is changed.",
+        description: "Report the faces (command line and MCP only; not in the menu). Inbetween's bundled detector finds in a sequence's images: a score, the face box and the face model's landmark positions for each face, in output pixels (so they are the positions face.locate would place dots at). `mesh` adds the full 468-point mesh. Nothing is changed.",
         params: DETECT_PARAMS,
         enabled: has_sequence,
         disabled_reason: "the project has no sequence to look at",

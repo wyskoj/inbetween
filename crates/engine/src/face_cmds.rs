@@ -536,13 +536,24 @@ pub(crate) fn locate(session: &mut Session, params: &Params) -> Result<Value, Co
         .and_then(|n| usize::try_from(n).ok())
         .unwrap_or(0);
     let all_faces = params.boolean("all_faces").unwrap_or(false);
+    let several = params.boolean("all_sequences").unwrap_or(false);
+    let mut done: Vec<usize> = Vec::new();
+    let mut skipped: Vec<Value> = Vec::new();
+    let mut first_failure: Option<CommandError> = None;
     for &index in &targets {
         let (first, second) = match &shared {
             Some(p) => (p.clone(), p.clone()),
-            None => {
-                let [a, b] = detected_runs(session, index, image, face_number, all_faces)?;
-                (a.concat(), b.concat())
-            }
+            None => match detected_runs(session, index, image, face_number, all_faces) {
+                Ok([a, b]) => (a.concat(), b.concat()),
+                // With all_sequences a sequence without a usable face is skipped and
+                // reported; the rest are still marked.
+                Err(e) if several => {
+                    skipped.push(json!({ "sequence": index, "reason": e.to_string() }));
+                    first_failure.get_or_insert(e);
+                    continue;
+                }
+                Err(e) => return Err(e),
+            },
         };
         let seq = session.sequence_mut(index)?;
         let both = |k: usize| {
@@ -573,12 +584,19 @@ pub(crate) fn locate(session: &mut Session, params: &Params) -> Result<Value, Co
         }
         seq.validate()?;
         check_distinct(seq)?;
+        done.push(index);
+    }
+    if done.is_empty() {
+        if let Some(e) = first_failure {
+            return Err(e);
+        }
     }
     Ok(json!({
-        "sequences": targets,
+        "sequences": done,
+        "skipped": skipped,
         "source": source,
         "dots_per_face": count,
-        "dots": targets.iter().map(|&i| session.project().sequences.get(i).map_or(0, |s| s.dots.len())).collect::<Vec<_>>(),
+        "dots": done.iter().map(|&i| session.project().sequences.get(i).map_or(0, |s| s.dots.len())).collect::<Vec<_>>(),
     }))
 }
 
@@ -674,10 +692,10 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         },
         CommandSpec {
             id: "face.locate",
-            label: "Locate Face",
-            menu: "Face/Locate Face...",
+            label: "Mark Face",
+            menu: "Face/Mark Face",
             shortcut: None,
-            description: "Place the face model's dots on a face. By default Inbetween's bundled detector finds the face in each image and places the model on each image separately; or give a face box (or use a centred starting box), or landmark positions another tool wrote to a .inbetweenlandmarks file (as the model's landmarks, or as a 468/478 point mesh). Replace the sequence's dots or append another face (all_faces places every face found); apply to one sequence or all.",
+            description: "Put dots on the face in both images. By default Inbetween's bundled detector finds the face in each image and places the model on each image separately; or give a face box (or use a centred starting box), or landmark positions another tool wrote to a .inbetweenlandmarks file (as the model's landmarks, or as a 468/478 point mesh). Replace the sequence's dots or append another face (all_faces places every face found); apply to one sequence or all.",
             params: LOCATE_PARAMS,
             enabled: has_sequence,
             disabled_reason: "the project has no sequence to put a face in",

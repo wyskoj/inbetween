@@ -38,7 +38,8 @@ pub mod theme;
 pub mod view;
 
 pub use app::{
-    FilePicker, InbetweenApp, Layout, PromptChoice, ScreenshotPlan, Status, REPLACES_PROJECT,
+    first_sentence, FilePicker, InbetweenApp, Layout, PromptChoice, ScreenshotPlan, Status,
+    REPLACES_PROJECT,
 };
 pub use preview::GpuHandle;
 pub use serde_json::json;

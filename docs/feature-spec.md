@@ -212,10 +212,11 @@ Movie-level effects cover the whole frame; sequence-level effects apply only ins
 | | Id | Behaviour | Pri |
 |---|---|---|---|
 | [x] | `face.extract` | Auto-detect the face in every source, crop to a shared template for consistent framing; adjustable template box; manual fallback; apply to all or one | P2 |
-| [x] | `face.locate` | Auto-place Inbetween's standard face dot set; apply/append to all or one; multiple faces per image by appending | P2 |
+| [x] | `face.locate` | Menu: Mark Face. Auto-place Inbetween's standard face dot set; apply/append to all or one; multiple faces per image by appending | P2 |
 | [x] | `face.locate.smartDrag` | "Intelligent" drag: moving one landmark re-fits the rest; modifier toggles plain drag | P2 |
-| [x] | `face.detect` | Report the faces found in each source (score, box, standard-model landmarks; optional full mesh); read-only | P2 |
-| [x] | `face.locateAll` | Place the model on every face found in both images, left to right (`face.locate` with `all_faces`) | P2 |
+| [x] | `face.detect` | Report the faces found in each source (score, box, standard-model landmarks; optional full mesh); read-only; CLI and MCP only, not in the menu | P2 |
+| [x] | `face.locateAll` | Menu: Mark Several Faces. Place the model on every face found in both images, left to right (`face.locate` with `all_faces`) | P2 |
+| [x] | `face.locateSequences` | Menu: Mark Face in All Sequences. Mark the face in every sequence (`face.locate` with `all_sequences`); a sequence with no usable face is skipped and listed under `skipped`, an error only if all fail. The desktop app asks before replacing existing dots | P2 |
 | [x] | `face.model` | Edit which landmark dots are used, highlight important ones, edit guide lines; presets; save/load | P2 |
 | [x] | `face.mix` | Blend N faces into one still; per-image feature % and shape % with locks, shape-follows-feature lock, average, random, candidate gallery, save/load | P2 |
 | [x] | `face.library` | Folder-organized store of images with dots; drag into a project to reuse | P2 |
