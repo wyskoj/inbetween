@@ -9,9 +9,8 @@ cargo +nightly fuzz run project fuzz/seeds/project -- -max_total_time=120
 cargo +nightly fuzz run dots fuzz/seeds/dots -- -max_total_time=120
 ```
 
-`fuzz/seeds/` holds small valid files to start from. CI (`.github/workflows/fuzz.yml`)
-runs both targets for a few minutes on pull requests that touch the parsers or the model
-they read, and for longer on a weekly schedule. A crash prints a reproducer under
+`fuzz/seeds/` holds small valid files to start from. CI does not run these targets; run
+them by hand after changing the parsers or the model they read. A crash prints a reproducer under
 `fuzz/artifacts/`; turn it into a regression test in `crates/format` before fixing.
 
 `libfuzzer-sys` is licensed `(MIT OR Apache-2.0) AND NCSA`. NCSA is permissive, but it is
