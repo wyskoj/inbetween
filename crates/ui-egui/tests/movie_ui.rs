@@ -537,3 +537,23 @@ fn undo_inside_the_adjust_window_keeps_the_rest_of_the_session_one_step() {
         .adjust
         .is_identity());
 }
+
+#[test]
+fn the_scrubber_keeps_its_width_as_the_counters_change() {
+    let mut h = demo_harness();
+    let last = 40;
+    let mut widths = Vec::new();
+    for f in 0..last {
+        h.state_mut().state.frame = f;
+        h.run();
+        let r = h
+            .get_by_role_and_label(egui::accesskit::Role::Slider, "Frame")
+            .bounding_box()
+            .unwrap();
+        widths.push((r.x1 - r.x0) as f32);
+    }
+    assert!(
+        widths.windows(2).all(|w| (w[0] - w[1]).abs() < 0.01),
+        "scrubber width changed: {widths:?}"
+    );
+}

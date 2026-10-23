@@ -242,22 +242,34 @@ impl InbetweenApp {
                             self.state.looping = !self.state.looping;
                         }
                         ui.add_space(t.space.md);
-                        // Right to left: the timecode, then the frame counter.
-                        ui.label(
-                            egui::RichText::new(timecode(seconds))
-                                .size(t.text.small)
-                                .color(c.text_tertiary),
+                        // Right to left: the timecode, then the frame counter. Each reserves the
+                        // width of its widest text, so the scrubber does not resize as they change.
+                        let total_seconds = f64::from(frames) / fps.max(1.0);
+                        fixed_width_label(
+                            ui,
+                            timecode(seconds),
+                            &timecode(total_seconds),
+                            t.text.small,
+                            c.text_tertiary,
                         );
                         ui.add_space(t.space.xs);
-                        let counter = if self.state.scrub_percent {
-                            format!("{}%", percent_for_frame(pos, frames))
+                        let (counter, widest) = if self.state.scrub_percent {
+                            (
+                                format!("{}%", percent_for_frame(pos, frames)),
+                                "100%".to_owned(),
+                            )
                         } else {
-                            format!("{} / {frames}", pos + 1)
+                            (
+                                format!("{} / {frames}", pos + 1),
+                                format!("{frames} / {frames}"),
+                            )
                         };
-                        let counter = ui.label(
-                            egui::RichText::new(counter)
-                                .size(t.text.body)
-                                .color(if enabled { c.text } else { c.text_tertiary }),
+                        let counter = fixed_width_label(
+                            ui,
+                            counter,
+                            &widest,
+                            t.text.body,
+                            if enabled { c.text } else { c.text_tertiary },
                         );
                         if let Some(name) = &movie_name {
                             counter.on_hover_text(format!("In \u{201c}{name}\u{201d}"));
@@ -289,6 +301,47 @@ impl InbetweenApp {
             self.set_transport_pos(new_pos);
         }
     }
+}
+
+/// A label that always takes the width of `widest`, so text that changes width inside it does
+/// not move the widgets laid out after it. Digits are measured as the widest digit, because the
+/// font is proportional. The text is right-aligned inside the reserved width.
+fn fixed_width_label(
+    ui: &mut egui::Ui,
+    text: String,
+    widest: &str,
+    size: f32,
+    color: egui::Color32,
+) -> egui::Response {
+    let font = egui::FontId::proportional(size);
+    let width = ui.fonts(|f| {
+        let measure = |s: String| f.layout_no_wrap(s, font.clone(), color).size().x;
+        let digit = ('0'..='9')
+            .map(|d| (d, measure(d.to_string())))
+            .fold(('0', 0.0_f32), |a, b| if b.1 > a.1 { b } else { a })
+            .0;
+        let widest: String = widest
+            .chars()
+            .map(|ch| if ch.is_ascii_digit() { digit } else { ch })
+            .collect();
+        measure(widest).max(measure(
+            text.chars()
+                .map(|ch| if ch.is_ascii_digit() { digit } else { ch })
+                .collect(),
+        ))
+    });
+    let height = ui.spacing().interact_size.y;
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(width.ceil() + 1.0, height), egui::Sense::hover());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, text.clone()));
+    ui.painter().text(
+        egui::pos2(rect.right(), rect.center().y),
+        egui::Align2::RIGHT_CENTER,
+        text,
+        font,
+        color,
+    );
+    response
 }
 
 /// The frame a point `fraction` (0 to 1) along the scrubber stands for. In percent mode the
