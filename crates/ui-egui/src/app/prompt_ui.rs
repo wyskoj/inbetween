@@ -1,6 +1,8 @@
 //! The unsaved-changes prompt and the window close request.
 
 use super::*;
+use crate::theme;
+use egui::{Frame, Margin};
 
 impl InbetweenApp {
     pub(super) fn handle_close(&mut self, ctx: &Context) {
@@ -33,21 +35,27 @@ impl InbetweenApp {
         let mut choice = None;
         // A modal rather than a window: it is drawn after the other dialogs, so it stacks above
         // them. A plain window sat underneath an open dialog such as New from two images.
+        let t = theme::get(ctx);
         egui::Modal::new(egui::Id::new("unsaved_changes")).show(ctx, |ui| {
-            ui.heading("Unsaved changes");
-            ui.label(format!("Save the changes to {name} {what}?"));
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if ui.button("Save").clicked() {
-                    choice = Some(PromptChoice::Save);
-                }
-                if ui.button("Don't Save").clicked() {
-                    choice = Some(PromptChoice::DontSave);
-                }
-                if ui.button("Cancel").clicked() {
-                    choice = Some(PromptChoice::Cancel);
-                }
-            });
+            Frame::NONE
+                .inner_margin(Margin::same(t.space.xl as i8))
+                .show(ui, |ui| {
+                    ui.heading("Unsaved changes");
+                    ui.add_space(t.space.sm);
+                    ui.label(format!("Save the changes to {name} {what}?"));
+                    ui.add_space(t.space.xl);
+                    ui.horizontal(|ui| {
+                        if ui.button("Save").clicked() {
+                            choice = Some(PromptChoice::Save);
+                        }
+                        if ui.button("Don't Save").clicked() {
+                            choice = Some(PromptChoice::DontSave);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            choice = Some(PromptChoice::Cancel);
+                        }
+                    });
+                });
         });
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             choice = Some(PromptChoice::Cancel);
