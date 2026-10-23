@@ -146,150 +146,171 @@ impl InbetweenApp {
             )
             .show(ctx, |ui| {
                 let over_bar = ui.rect_contains_pointer(ui.max_rect());
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = t.space.xs;
-                    let small = t.control.height - 4.0;
-                    if kit::icon_button(ui, Icon::First, "First frame", false, enabled, small)
-                        .clicked()
-                    {
-                        new_pos = 0;
-                        self.play_forward = true;
-                    }
-                    if kit::icon_button(ui, Icon::Previous, "Previous frame", false, enabled, small)
-                        .clicked()
-                    {
-                        new_pos = pos.saturating_sub(1);
-                    }
-                    let (glyph, label) = if self.state.playing {
-                        (Icon::Pause, "Pause")
-                    } else {
-                        (Icon::Play, "Play")
-                    };
-                    if kit::round_button(ui, glyph, label, enabled, t.control.height + 4.0)
-                        .clicked()
-                    {
-                        self.state.playing = !self.state.playing;
-                        self.play_forward = true;
-                    }
-                    if kit::icon_button(ui, Icon::Next, "Next frame", false, enabled, small)
-                        .clicked()
-                    {
-                        new_pos = (pos + 1).min(frames.saturating_sub(1));
-                    }
-                    if kit::icon_button(ui, Icon::Last, "Last frame", false, enabled, small)
-                        .clicked()
-                    {
-                        new_pos = frames.saturating_sub(1);
-                    }
-                    ui.add_space(t.space.md);
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // A fixed row height as tall as the play button, with every widget centred in
+                // it, so the smaller buttons line up with the round one.
+                let row = egui::vec2(ui.available_width(), (t.control.height + 4.0).max(28.0));
+                ui.allocate_ui_with_layout(
+                    row,
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
                         ui.spacing_mut().item_spacing.x = t.space.xs;
-                        let scopes = [
-                            Segment::text("Sequence").tip("Preview the selected sequence"),
-                            Segment::text("Movie").tip("Preview the whole movie"),
-                        ];
-                        scope_click = kit::segmented(
-                            ui,
-                            &scopes,
-                            usize::from(movie),
-                            has_sequences,
-                            t.control.compact_height,
-                        );
-                        ui.add_space(t.space.sm);
-                        let response = ui
-                            .add_sized(
-                                [72.0, t.control.compact_height],
-                                egui::DragValue::new(&mut fps)
-                                    .range(1.0..=60.0)
-                                    .speed(0.1)
-                                    .max_decimals(2)
-                                    .suffix(" fps"),
-                            )
-                            .on_hover_text("Frames per second: drag or type");
-                        if response.changed() && !response.dragged() {
-                            fps_commit = true;
-                        }
-                        if response.drag_stopped() || response.lost_focus() {
-                            fps_commit = true;
-                        }
-                        ui.add_space(t.space.sm);
-                        if kit::text_toggle(
-                            ui,
-                            "%",
-                            "Scrub in 1% steps instead of frames",
-                            self.state.scrub_percent,
-                            small,
-                        )
-                        .clicked()
+                        let small = t.control.height - 4.0;
+                        if kit::icon_button(ui, Icon::First, "First frame", false, enabled, small)
+                            .clicked()
                         {
-                            self.state.scrub_percent = !self.state.scrub_percent;
+                            new_pos = 0;
+                            self.play_forward = true;
                         }
                         if kit::icon_button(
                             ui,
-                            Icon::Swap,
-                            "Ping-pong: play forward, then back",
-                            self.state.ping_pong,
-                            true,
+                            Icon::Previous,
+                            "Previous frame",
+                            false,
+                            enabled,
                             small,
                         )
                         .clicked()
                         {
-                            self.state.ping_pong = !self.state.ping_pong;
+                            new_pos = pos.saturating_sub(1);
                         }
-                        if kit::icon_button(ui, Icon::Loop, "Loop", self.state.looping, true, small)
+                        let (glyph, label) = if self.state.playing {
+                            (Icon::Pause, "Pause")
+                        } else {
+                            (Icon::Play, "Play")
+                        };
+                        if kit::round_button(ui, glyph, label, enabled, t.control.height + 4.0)
                             .clicked()
                         {
-                            self.state.looping = !self.state.looping;
+                            self.state.playing = !self.state.playing;
+                            self.play_forward = true;
                         }
-                        ui.add_space(t.space.md);
-                        // Right to left: the timecode, then the frame counter. Each reserves the
-                        // width of its widest text, so the scrubber does not resize as they change.
-                        let total_seconds = f64::from(frames) / fps.max(1.0);
-                        fixed_width_label(
-                            ui,
-                            timecode(seconds),
-                            &timecode(total_seconds),
-                            t.text.small,
-                            c.text_tertiary,
-                        );
-                        ui.add_space(t.space.xs);
-                        let (counter, widest) = if self.state.scrub_percent {
-                            (
-                                format!("{}%", percent_for_frame(pos, frames)),
-                                "100%".to_owned(),
-                            )
-                        } else {
-                            (
-                                format!("{} / {frames}", pos + 1),
-                                format!("{frames} / {frames}"),
-                            )
-                        };
-                        let counter = fixed_width_label(
-                            ui,
-                            counter,
-                            &widest,
-                            t.text.body,
-                            if enabled { c.text } else { c.text_tertiary },
-                        );
-                        if let Some(name) = &movie_name {
-                            counter.on_hover_text(format!("In \u{201c}{name}\u{201d}"));
-                        }
-                        ui.add_space(t.space.md);
-                        if let Some(p) =
-                            scrubber(ui, pos, frames, enabled, self.state.scrub_percent)
+                        if kit::icon_button(ui, Icon::Next, "Next frame", false, enabled, small)
+                            .clicked()
                         {
-                            new_pos = p;
-                        }
-                    });
-                    if over_bar && enabled {
-                        let wheel = ui.input(|i| i.raw_scroll_delta.y);
-                        if wheel > 0.0 {
-                            new_pos = pos.saturating_sub(1);
-                        } else if wheel < 0.0 {
                             new_pos = (pos + 1).min(frames.saturating_sub(1));
                         }
-                    }
-                });
+                        if kit::icon_button(ui, Icon::Last, "Last frame", false, enabled, small)
+                            .clicked()
+                        {
+                            new_pos = frames.saturating_sub(1);
+                        }
+                        ui.add_space(t.space.md);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.spacing_mut().item_spacing.x = t.space.xs;
+                            let scopes = [
+                                Segment::text("Sequence").tip("Preview the selected sequence"),
+                                Segment::text("Movie").tip("Preview the whole movie"),
+                            ];
+                            scope_click = kit::segmented(
+                                ui,
+                                &scopes,
+                                usize::from(movie),
+                                has_sequences,
+                                t.control.compact_height,
+                            );
+                            ui.add_space(t.space.sm);
+                            let response = ui
+                                .add_sized(
+                                    [72.0, t.control.compact_height],
+                                    egui::DragValue::new(&mut fps)
+                                        .range(1.0..=60.0)
+                                        .speed(0.1)
+                                        .max_decimals(2)
+                                        .suffix(" fps"),
+                                )
+                                .on_hover_text("Frames per second: drag or type");
+                            if response.changed() && !response.dragged() {
+                                fps_commit = true;
+                            }
+                            if response.drag_stopped() || response.lost_focus() {
+                                fps_commit = true;
+                            }
+                            ui.add_space(t.space.sm);
+                            if kit::text_toggle(
+                                ui,
+                                "%",
+                                "Scrub in 1% steps instead of frames",
+                                self.state.scrub_percent,
+                                small,
+                            )
+                            .clicked()
+                            {
+                                self.state.scrub_percent = !self.state.scrub_percent;
+                            }
+                            if kit::icon_button(
+                                ui,
+                                Icon::Swap,
+                                "Ping-pong: play forward, then back",
+                                self.state.ping_pong,
+                                true,
+                                small,
+                            )
+                            .clicked()
+                            {
+                                self.state.ping_pong = !self.state.ping_pong;
+                            }
+                            if kit::icon_button(
+                                ui,
+                                Icon::Loop,
+                                "Loop",
+                                self.state.looping,
+                                true,
+                                small,
+                            )
+                            .clicked()
+                            {
+                                self.state.looping = !self.state.looping;
+                            }
+                            ui.add_space(t.space.md);
+                            // Right to left: the timecode, then the frame counter. Each reserves the
+                            // width of its widest text, so the scrubber does not resize as they change.
+                            let total_seconds = f64::from(frames) / fps.max(1.0);
+                            fixed_width_label(
+                                ui,
+                                timecode(seconds),
+                                &timecode(total_seconds),
+                                t.text.small,
+                                c.text_tertiary,
+                            );
+                            ui.add_space(t.space.xs);
+                            let (counter, widest) = if self.state.scrub_percent {
+                                (
+                                    format!("{}%", percent_for_frame(pos, frames)),
+                                    "100%".to_owned(),
+                                )
+                            } else {
+                                (
+                                    format!("{} / {frames}", pos + 1),
+                                    format!("{frames} / {frames}"),
+                                )
+                            };
+                            let counter = fixed_width_label(
+                                ui,
+                                counter,
+                                &widest,
+                                t.text.body,
+                                if enabled { c.text } else { c.text_tertiary },
+                            );
+                            if let Some(name) = &movie_name {
+                                counter.on_hover_text(format!("In \u{201c}{name}\u{201d}"));
+                            }
+                            ui.add_space(t.space.md);
+                            if let Some(p) =
+                                scrubber(ui, pos, frames, enabled, self.state.scrub_percent)
+                            {
+                                new_pos = p;
+                            }
+                        });
+                        if over_bar && enabled {
+                            let wheel = ui.input(|i| i.raw_scroll_delta.y);
+                            if wheel > 0.0 {
+                                new_pos = pos.saturating_sub(1);
+                            } else if wheel < 0.0 {
+                                new_pos = (pos + 1).min(frames.saturating_sub(1));
+                            }
+                        }
+                    },
+                );
             });
         if fps_commit && (fps - self.session.project().fps).abs() > f64::EPSILON {
             let _ = self.run_command("movie.fps", &json!({ "fps": fps }));
