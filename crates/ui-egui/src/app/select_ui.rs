@@ -11,10 +11,11 @@ impl InbetweenApp {
         match action {
             Action::Add { x, y, image, same } => {
                 if self.prepared().is_none() {
-                    self.status = Some(Status {
-                        text: "Load both images before placing dots.".to_string(),
-                        is_error: true,
-                    });
+                    self.announce(
+                        "Load both images before placing dots.".to_string(),
+                        ToastKind::Warning,
+                        false,
+                    );
                     return;
                 }
                 let (id, params) = if same {

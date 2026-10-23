@@ -23,6 +23,7 @@ pub(super) struct ExportJob {
     cancel: Arc<AtomicBool>,
     progress: Arc<AtomicU64>,
     total: Arc<AtomicU64>,
+    id: String,
     label: String,
     cancelling: bool,
 }
@@ -55,6 +56,7 @@ impl InbetweenApp {
         let cancel = session.cancel_handle();
         let (progress, total) = session.progress_handles();
         let id = id.to_string();
+        let job_id = id.clone();
         let handle = std::thread::spawn(move || {
             let mut session = session;
             let registry = Registry::standard();
@@ -66,6 +68,7 @@ impl InbetweenApp {
             cancel,
             progress,
             total,
+            id: job_id,
             label: spec.label.to_string(),
             cancelling: false,
         });
@@ -80,27 +83,27 @@ impl InbetweenApp {
         };
         if job.handle.as_ref().is_some_and(JoinHandle::is_finished) {
             let label = job.label.clone();
+            let id = job.id.clone();
             let handle = job.handle.take();
             self.export_job = None;
             match handle.map(JoinHandle::join) {
                 Some(Ok((session, result))) => {
                     self.session = session;
-                    self.status = Some(match result {
-                        Ok(_) => Status {
-                            text: format!("{label}: done"),
-                            is_error: false,
-                        },
-                        Err(e) => Status {
-                            text: format!("{label}: {e}"),
-                            is_error: true,
-                        },
-                    });
+                    match result {
+                        Ok(report) => {
+                            let text = feedback::describe(&id, &report)
+                                .map_or_else(|| format!("{label}: done"), |f| f.message);
+                            self.announce(text, ToastKind::Success, false);
+                        }
+                        Err(e) => self.announce(format!("{label}: {e}"), ToastKind::Error, false),
+                    }
                 }
                 _ => {
-                    self.status = Some(Status {
-                        text: format!("{label} stopped unexpectedly; the project was lost"),
-                        is_error: true,
-                    });
+                    self.announce(
+                        format!("{label} stopped unexpectedly; the project was lost"),
+                        ToastKind::Error,
+                        false,
+                    );
                 }
             }
             ctx.request_repaint();

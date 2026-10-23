@@ -16,13 +16,13 @@ fn always(_: &Session) -> bool {
 }
 
 fn undo(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
-    session.undo();
-    Ok(json!({ "can_undo": session.can_undo(), "can_redo": session.can_redo() }))
+    let done = session.undo();
+    Ok(json!({ "done": done, "can_undo": session.can_undo(), "can_redo": session.can_redo() }))
 }
 
 fn redo(session: &mut Session, _: &Params) -> Result<Value, CommandError> {
-    session.redo();
-    Ok(json!({ "can_undo": session.can_undo(), "can_redo": session.can_redo() }))
+    let done = session.redo();
+    Ok(json!({ "done": done, "can_undo": session.can_undo(), "can_redo": session.can_redo() }))
 }
 
 fn begin_group(session: &mut Session, _: &Params) -> Result<Value, CommandError> {

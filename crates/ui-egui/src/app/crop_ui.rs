@@ -56,10 +56,7 @@ impl InbetweenApp {
                 self.grabs.crop = None;
             }
             Err(e) => {
-                self.status = Some(Status {
-                    text: e.to_string(),
-                    is_error: true,
-                });
+                self.announce(e.to_string(), ToastKind::Error, false);
             }
         }
     }

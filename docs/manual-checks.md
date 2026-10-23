@@ -77,3 +77,5 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - Main window: in a real window, resize the sequence list narrow and wide (rows truncate, the footer summary wraps), drag the splitters (a handle shows on hover), click Recent entries on the start screen (a missing file is removed from the list), and check every segmented control and toggle with the keyboard (Tab and Space).
 
 - New From Image List: in a real window, drop several files from the desktop onto the main window (the dialog opens in drop order) and onto the open dialog (they join the end); drag a row by its handle above and below others and past the last row; scroll a list of 20 or more; pick several files at once with Add images; open the Morph type list.
+
+- Command feedback: in a real window, paste dots, run Auto-Match on a fully matched sequence, then export a frame. Check a toast appears above the transport bar with the right words, Undo takes the paste back, hovering holds the toast, a click dismisses it, and it fades by itself.

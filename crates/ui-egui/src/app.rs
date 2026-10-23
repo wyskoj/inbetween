@@ -7,6 +7,7 @@ use crate::curves::{self, CurveAction, CurveKind, CurveView};
 use crate::dragdrop::{self, DropAction, DropZone, Dropped};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
+use crate::kit::ToastKind;
 use crate::menus::{self, MenuNode};
 use crate::new_list::NewList;
 use crate::new_two::NewTwo;
@@ -22,6 +23,7 @@ use crate::shortcuts;
 use crate::state::{CameraTarget, CaptionScope, EffectScope, Panel, ViewState};
 use crate::view::View;
 use egui::{Context, Pos2, Rect, TextureHandle, TextureOptions, Vec2};
+use inbetween_engine::feedback::{self, Tone};
 use inbetween_engine::{
     CommandError, CommandSpec, ParamKind, PathUse, Prepared, Registry, Session,
 };
@@ -55,6 +57,7 @@ mod new_two_ui;
 mod prompt_ui;
 mod select_ui;
 mod start_ui;
+mod toast_ui;
 mod track_ui;
 mod transport_ui;
 mod visual_ui;
@@ -236,6 +239,7 @@ pub struct InbetweenApp {
     gpu: Option<GpuHandle>,
     form: Option<Form>,
     status: Option<Status>,
+    toast: Option<toast_ui::Toast>,
     prepared: Option<PreparedCache>,
     sources: [Option<SourceTexture>; 2],
     preview: Preview,
@@ -328,6 +332,7 @@ impl InbetweenApp {
             gpu,
             form: None,
             status: None,
+            toast: None,
             prepared: None,
             sources: [None, None],
             preview: Preview::default(),
@@ -483,24 +488,29 @@ impl InbetweenApp {
                     || self.state.face_library_window
                     || self.state.track_window
                     || self.state.effects_window.is_some();
-                if !curve_drag
-                    && !live_window
-                    && !matches!(
-                        id,
-                        "dots.move"
-                            | "dots.nudge"
-                            | "lines.drag"
-                            | "dots.select"
-                            | "dots.selectNone"
-                            | "edit.beginGroup"
-                            | "edit.endGroup"
-                    )
-                {
-                    if let Some(spec) = self.registry.get(id) {
-                        self.status = Some(Status {
-                            text: format!("{}: done", spec.label),
-                            is_error: false,
-                        });
+                if !curve_drag && !live_window && !feedback::is_quiet(id) {
+                    if let Some((label, edits)) = self.registry.get(id).map(|s| (s.label, s.edits))
+                    {
+                        match feedback::describe(id, done) {
+                            Some(f) => {
+                                let kind = match f.tone {
+                                    Tone::Success => ToastKind::Success,
+                                    Tone::Info => ToastKind::Info,
+                                    Tone::Warning => ToastKind::Warning,
+                                };
+                                // Undo offers to take back a change; it makes no sense on Undo.
+                                let undoable = edits
+                                    && f.tone != Tone::Warning
+                                    && !matches!(id, "edit.undo" | "edit.redo");
+                                self.announce(f.message, kind, undoable);
+                            }
+                            None => {
+                                self.status = Some(Status {
+                                    text: format!("{label}: done"),
+                                    is_error: false,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -511,10 +521,16 @@ impl InbetweenApp {
                     id,
                     "dots.move" | "dots.nudge" | "lines.drag" | "dots.selectNone"
                 ) {
-                    self.status = Some(Status {
-                        text: e.to_string(),
-                        is_error: true,
-                    });
+                    let text = e.to_string();
+                    if self.form.is_some() {
+                        // The form shows its own error; the status bar keeps a copy.
+                        self.status = Some(Status {
+                            text,
+                            is_error: true,
+                        });
+                    } else {
+                        self.announce(text, ToastKind::Error, false);
+                    }
                 }
             }
         }
@@ -1204,6 +1220,7 @@ impl InbetweenApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::CursorPosition(p));
         }
         self.status_bar(ctx);
+        self.toast_window(ctx);
         self.transport_bar(ctx);
         self.sequence_panel(ctx);
         self.canvases(ctx);

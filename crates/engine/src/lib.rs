@@ -32,6 +32,7 @@ mod face_cmds;
 mod face_detect;
 #[cfg(not(target_arch = "wasm32"))]
 mod face_media;
+pub mod feedback;
 #[cfg(not(target_arch = "wasm32"))]
 mod file_cmds;
 mod filter_cmds;

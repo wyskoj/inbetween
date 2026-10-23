@@ -81,6 +81,10 @@ Build redesigned windows from these, not from raw egui calls with styling:
 - **Disabled until valid.** The primary button stays disabled until the command can succeed.
 - **Metadata is small and tertiary.** Sizes, counts and formats use `text.small` in `text_tertiary`.
 
+### Command feedback
+
+A command says what it did in plain words: `engine::feedback::describe(id, result)` returns a sentence and a tone (success, info, warning), the same for the app, CLI and MCP. The shell shows it as a toast (`kit::toast`, `app/toast_ui.rs`) above the transport bar and keeps the last one in the status bar. Warnings mean "it ran but changed nothing or not everything" and stay up longer; errors toast too (unless a form is open and shows its own). Editing commands offer Undo on the toast. Drags, nudges and selection are quiet (`feedback::is_quiet`). To give a command a message, add an arm to `describe`; commands with none keep "<label>: done" in the status bar only.
+
 ## Workflow for redesigning a window
 
 1. Mock it up first (an HTML artboard using these tokens), iterate with the owner, then build.

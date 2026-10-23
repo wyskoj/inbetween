@@ -149,7 +149,7 @@ fn an_export_runs_on_its_thread_and_the_session_comes_back() {
     );
     let status = h.state().status().unwrap().clone();
     assert!(
-        !status.is_error && status.text.contains("done"),
+        !status.is_error && status.text.starts_with("Exported 12 frames"),
         "{status:?}"
     );
     assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 12);

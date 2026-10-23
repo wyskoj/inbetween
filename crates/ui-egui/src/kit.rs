@@ -3,7 +3,9 @@
 //! system without restating any colour or size.
 
 mod menu;
+mod toast;
 pub use menu::*;
+pub use toast::*;
 
 use crate::theme::{self, Theme};
 use egui::{

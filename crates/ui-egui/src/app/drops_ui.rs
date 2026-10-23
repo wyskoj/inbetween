@@ -81,10 +81,7 @@ impl InbetweenApp {
         for action in actions {
             match action {
                 DropAction::Unsupported(message) => {
-                    self.status = Some(Status {
-                        text: message,
-                        is_error: true,
-                    });
+                    self.announce(message, ToastKind::Error, false);
                 }
                 DropAction::OpenProject(path) => self.open_project(&path),
                 DropAction::ImportDots(path) => {
