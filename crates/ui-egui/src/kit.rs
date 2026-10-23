@@ -318,6 +318,10 @@ pub enum Icon {
     Morph,
     /// A check mark: an option that is on.
     Check,
+    /// A chevron pointing right: a collapsed section.
+    ChevronRight,
+    /// A chevron pointing down: an open section.
+    ChevronDown,
 }
 
 /// Draw an icon inside `rect` (drawn on a 24-unit grid), with strokes `width` wide.
@@ -539,6 +543,12 @@ pub fn icon(ui: &Ui, rect: Rect, which: Icon, color: Color32, width: f32) {
         Icon::Check => {
             p.add(line(&[(5.0, 12.5), (10.0, 17.0), (19.0, 7.0)]));
         }
+        Icon::ChevronRight => {
+            p.add(line(&[(9.0, 6.0), (15.0, 12.0), (9.0, 18.0)]));
+        }
+        Icon::ChevronDown => {
+            p.add(line(&[(6.0, 9.0), (12.0, 15.0), (18.0, 9.0)]));
+        }
         Icon::Close => {
             p.add(line(&[(6.0, 6.0), (18.0, 18.0)]));
             p.add(line(&[(18.0, 6.0), (6.0, 18.0)]));
@@ -627,9 +637,15 @@ fn segment_row(
     exclusive: bool,
     enabled: bool,
     height: f32,
+    fill: bool,
 ) -> Option<usize> {
     let t = theme::get(ui.ctx());
     let c = t.color;
+    // Equal widths across the column, inside the track's 2 px margins and gaps.
+    let equal = fill.then(|| {
+        let n = segments.len().max(1) as f32;
+        ((ui.available_width() - 4.0 - 2.0 * (n - 1.0)) / n).max(height)
+    });
     let size = if height < t.control.compact_height {
         t.text.small
     } else {
@@ -680,7 +696,8 @@ fn segment_row(
                         0.0
                     };
                     let pad = if text.is_some() { 10.0 } else { 7.0 };
-                    let width = (icon_w + gap + text_w + key_w + pad * 2.0).max(height);
+                    let width = equal
+                        .unwrap_or_else(|| (icon_w + gap + text_w + key_w + pad * 2.0).max(height));
                     let sense = if enabled {
                         Sense::click()
                     } else {
@@ -765,7 +782,26 @@ pub fn segmented(
     enabled: bool,
     height: f32,
 ) -> Option<usize> {
-    segment_row(ui, segments, |i| i == selected, true, enabled, height)
+    segment_row(
+        ui,
+        segments,
+        |i| i == selected,
+        true,
+        enabled,
+        height,
+        false,
+    )
+}
+
+/// A segmented control stretched across the column, every segment the same width.
+pub fn segmented_fill(
+    ui: &mut Ui,
+    segments: &[Segment<'_>],
+    selected: usize,
+    enabled: bool,
+    height: f32,
+) -> Option<usize> {
+    segment_row(ui, segments, |i| i == selected, true, enabled, height, true)
 }
 
 /// Independent on/off toggles drawn as one group. Returns the toggle clicked.
@@ -782,6 +818,7 @@ pub fn toggle_group(
         false,
         true,
         height,
+        false,
     )
 }
 
@@ -947,6 +984,80 @@ pub fn switch(ui: &mut Ui, label: &str, on: bool, height: f32) -> Response {
         rect.center().y - galley.size().y / 2.0,
     );
     ui.painter().galley(pos, galley, fg);
+    response
+}
+
+/// The small caps-style title over a group of fields in a dialog.
+pub fn group_title(ui: &mut Ui, text: &str) {
+    let t = theme::get(ui.ctx());
+    ui.label(
+        RichText::new(text.to_uppercase())
+            .font(t.medium(t.text.small - 1.0))
+            .color(t.color.text_tertiary),
+    );
+}
+
+/// A dialog's on/off row: the label and a line under it on the left, the switch at the right,
+/// the whole row clickable. The caller flips its value when it is clicked.
+pub fn switch_row(ui: &mut Ui, label: &str, sub: &str, on: bool) -> Response {
+    let t = theme::get(ui.ctx());
+    let c = t.color;
+    let pad = t.space.md;
+    let track = Vec2::new(32.0, 18.0);
+    let width = ui.available_width();
+    let text_w = (width - pad * 2.0 - track.x - t.space.md).max(40.0);
+    let title = ui
+        .painter()
+        .layout(label.to_string(), t.regular(t.text.body), c.text, text_w);
+    let line = (!sub.is_empty()).then(|| {
+        ui.painter().layout(
+            sub.to_string(),
+            t.regular(t.text.small),
+            c.text_tertiary,
+            text_w,
+        )
+    });
+    let text_h = title.size().y + line.as_ref().map_or(0.0, |g| g.size().y + 2.0);
+    let height = (text_h + t.space.sm * 2.0).max(44.0);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click());
+    response
+        .widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, label));
+    if response.hovered() {
+        ui.painter()
+            .rect_filled(rect, CornerRadius::same(t.radius.card), c.field);
+    }
+    let top = rect.center().y - text_h / 2.0;
+    let sub_y = top + title.size().y + 2.0;
+    ui.painter()
+        .galley(Pos2::new(rect.left() + pad, top), title, c.text);
+    if let Some(g) = line {
+        ui.painter()
+            .galley(Pos2::new(rect.left() + pad, sub_y), g, c.text_tertiary);
+    }
+    let track_rect = Rect::from_min_size(
+        Pos2::new(
+            rect.right() - pad - track.x,
+            rect.center().y - track.y / 2.0,
+        ),
+        track,
+    );
+    let (fill, knob, knob_x) = if on {
+        (c.accent, c.accent_text, track_rect.right() - 9.0)
+    } else {
+        (c.line, c.text_tertiary, track_rect.left() + 9.0)
+    };
+    ui.painter()
+        .rect_filled(track_rect, CornerRadius::same(9), fill);
+    ui.painter()
+        .circle_filled(Pos2::new(knob_x, track_rect.center().y), 6.0, knob);
+    if response.has_focus() {
+        ui.painter().rect_stroke(
+            rect,
+            CornerRadius::same(t.radius.card),
+            Stroke::new(2.0_f32, c.focus),
+            StrokeKind::Inside,
+        );
+    }
     response
 }
 

@@ -140,8 +140,9 @@ fn render(
             while let Some(rgba) = reader.next_frame()? {
                 session.check_cancel()?;
                 let image = Image::from_rgba8(width, height, &rgba)?;
-                each(*number, &finish.apply(image, progress)?)?;
-                session.tick();
+                let image = finish.apply(image, progress)?;
+                each(*number, &image)?;
+                session.tick_frame(&image);
                 *number += 1;
             }
             Ok(())

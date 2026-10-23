@@ -5,6 +5,7 @@
 use crate::crop::{CropTool, Handle};
 use crate::curves::{self, CurveAction, CurveKind, CurveView};
 use crate::dragdrop::{self, DropAction, DropZone, Dropped};
+use crate::export_dialog::{ExportDialog, Kind as ExportKind};
 use crate::form::Form;
 use crate::imaging::{content_mapping, to_color_image};
 use crate::kit::ToastKind;
@@ -44,7 +45,9 @@ mod curve_ui;
 mod drops_ui;
 mod effects_ui;
 mod export_job_ui;
+mod export_ui;
 pub use export_job_ui::LONG_EXPORTS;
+pub use export_ui::{export_file, export_folder, friendly_error};
 mod face_library_ui;
 pub use face_library_ui::LibraryDrag;
 mod face_mix_ui;
@@ -297,6 +300,11 @@ pub struct InbetweenApp {
     track_ui: track_ui::TrackUi,
     /// A long export running on its own thread (the session is away meanwhile).
     export_job: Option<export_job_ui::ExportJob>,
+    /// The Export dialog, when open.
+    export_dialog: Option<ExportDialog>,
+    /// The small picture of the frame the Export dialog's picker is on: the movie frame it
+    /// shows, its texture and size.
+    export_thumb: Option<(u64, TextureHandle, [usize; 2])>,
     play_clock: f32,
     /// Direction of playback; only ping-pong ever turns it around.
     play_forward: bool,
@@ -371,6 +379,8 @@ impl InbetweenApp {
             face: Default::default(),
             track_ui: Default::default(),
             export_job: None,
+            export_dialog: None,
+            export_thumb: None,
             play_clock: 0.0,
             play_forward: true,
             title: String::new(),
@@ -522,8 +532,8 @@ impl InbetweenApp {
                     "dots.move" | "dots.nudge" | "lines.drag" | "dots.selectNone"
                 ) {
                     let text = e.to_string();
-                    if self.form.is_some() {
-                        // The form shows its own error; the status bar keeps a copy.
+                    if self.form.is_some() || self.export_dialog.is_some() {
+                        // The form or dialog shows its own error; the status bar keeps a copy.
                         self.status = Some(Status {
                             text,
                             is_error: true,
@@ -628,6 +638,10 @@ impl InbetweenApp {
         };
         if curve.is_some() {
             self.state.curve_window = curve;
+            return;
+        }
+        if let Some(kind) = ExportKind::from_id(id) {
+            self.open_export(kind);
             return;
         }
         let focus = self.state.focus_image;
@@ -1083,6 +1097,7 @@ impl InbetweenApp {
     fn handle_keys(&mut self, ctx: &Context) {
         if self.form.is_some()
             || self.new_two.is_some()
+            || self.export_dialog.is_some()
             || self.new_list.is_some()
             || self.pending.is_some()
             || ctx.wants_keyboard_input()
@@ -1245,6 +1260,7 @@ impl InbetweenApp {
         self.track_window(ctx);
         self.form_window(ctx);
         self.new_two_window(ctx);
+        self.export_dialog_window(ctx);
         self.new_list_window(ctx);
         self.visual_window(ctx);
         self.drop_overlay(ctx);

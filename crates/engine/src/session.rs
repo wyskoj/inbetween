@@ -30,6 +30,40 @@ fn snapshot_cost(project: &Project) -> usize {
     })
 }
 
+/// Longest side of [`FramePreview`], in pixels.
+pub const FRAME_PREVIEW_SIDE: u32 = 192;
+
+/// A small straight-alpha RGBA copy of a frame, for showing progress.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FramePreview {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// Sample `image` down by a whole factor so its longer side is at most [`FRAME_PREVIEW_SIDE`].
+fn frame_preview(image: &Image) -> Option<FramePreview> {
+    let (w, h) = (image.width() as usize, image.height() as usize);
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let step = w.max(h).div_ceil(FRAME_PREVIEW_SIDE as usize).max(1);
+    let (ow, oh) = (w.div_ceil(step), h.div_ceil(step));
+    let full = image.to_rgba8();
+    let mut rgba = Vec::with_capacity(ow.saturating_mul(oh).saturating_mul(4));
+    for y in 0..oh {
+        for x in 0..ow {
+            let i = (y * step).saturating_mul(w).saturating_add(x * step) * 4;
+            rgba.extend_from_slice(full.get(i..i + 4)?);
+        }
+    }
+    Some(FramePreview {
+        width: ow as u32,
+        height: oh as u32,
+        rgba,
+    })
+}
+
 /// An open project plus the caches that make repeated commands cheap.
 ///
 /// Shells (the CLI, the GUI, MCP) hold one `Session` and change it only by running
@@ -68,6 +102,8 @@ pub struct Session {
     /// Frames the running export has produced, and how many it expects (0 when unknown).
     progress: Arc<std::sync::atomic::AtomicU64>,
     progress_total: Arc<std::sync::atomic::AtomicU64>,
+    /// A small copy of the frame the running export finished last, for a progress window.
+    latest_frame: Arc<std::sync::Mutex<Option<FramePreview>>>,
     /// The camera `camera.keyframes op=copy` took, for `op=paste`. Not part of undo.
     camera_clip: Option<inbetween_doc::Camera>,
     /// What `open_after` exports open their result with; `None` is the system's default.
@@ -198,6 +234,26 @@ impl Session {
         Arc<std::sync::atomic::AtomicU64>,
     ) {
         (Arc::clone(&self.progress), Arc::clone(&self.progress_total))
+    }
+
+    /// The frame the running export finished last, shrunk, for a progress window. Taking it
+    /// leaves nothing until the next frame is done.
+    pub fn take_frame_preview(&self) -> Option<FramePreview> {
+        self.latest_frame.lock().ok()?.take()
+    }
+
+    /// A handle to the same slot, for a thread that cannot hold the session.
+    pub fn frame_preview_handle(&self) -> Arc<std::sync::Mutex<Option<FramePreview>>> {
+        Arc::clone(&self.latest_frame)
+    }
+
+    /// [`Session::tick`] for a frame that was just produced: also keeps a small copy of it.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(crate) fn tick_frame(&self, image: &Image) {
+        self.tick();
+        if let (Some(preview), Ok(mut slot)) = (frame_preview(image), self.latest_frame.lock()) {
+            *slot = Some(preview);
+        }
     }
 
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]

@@ -77,6 +77,10 @@ pub struct Colors {
     pub danger_text: Color32,
     pub danger_text_strong: Color32,
     pub warn_text: Color32,
+    /// A warning card's tinted fill: warm text on it stays above 4.5:1.
+    pub warn_fill: Color32,
+    /// A warning card's border.
+    pub warn_line: Color32,
 }
 
 /// Text sizes in points. Geist, two weights only: regular and [`MEDIUM`].
@@ -168,6 +172,8 @@ impl Theme {
                 danger_text: grey(0xe0, 0xa3, 0x9c),
                 danger_text_strong: grey(0xf6, 0xd4, 0xcf),
                 warn_text: grey(0xe8, 0xb8, 0x6a),
+                warn_fill: grey(0x2b, 0x26, 0x1d),
+                warn_line: grey(0x7e, 0x64, 0x36),
             },
             text: TextSizes {
                 title: 18.0,
@@ -393,6 +399,9 @@ mod tests {
             ),
             ("focus ring on field", c.focus, c.field),
             ("danger text on danger fill", c.danger_text, c.danger_fill),
+            ("warn text on warn fill", c.warn_text, c.warn_fill),
+            ("secondary on warn fill", c.text_secondary, c.warn_fill),
+            ("warn text on surface", c.warn_text, c.surface),
         ] {
             assert!(ratio(fg, bg) >= 4.5, "{name}: {:.2}", ratio(fg, bg));
         }

@@ -237,6 +237,8 @@ pub struct ViewState {
     pub track_window: bool,
     /// The crop being drawn, when the crop tool is active.
     pub crop: Option<CropTool>,
+    /// What each Export dialog was last set to, by command id, so the next one starts there.
+    pub export_memory: std::collections::BTreeMap<String, crate::export_dialog::ExportMemory>,
 }
 
 /// How many recent projects are remembered.
@@ -280,6 +282,7 @@ impl Default for ViewState {
             face_library_window: false,
             track_window: false,
             crop: None,
+            export_memory: Default::default(),
         }
     }
 }

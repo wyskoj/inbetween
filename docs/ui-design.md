@@ -29,6 +29,7 @@ Every colour, text size, gap, radius, control height and shadow is a field of `T
 | Text | text `#E8EAEF`, text_secondary `#A3AAB8` (6.2:1 on field), text_tertiary `#8A92A2` (4.6:1 on field), text_disabled `#6A7282` |
 | Accent (olive and sage) | accent `#4D5640` (primary fill, selected rows, text selection; white text 7.7:1), accent_hover `#5A6449`, accent_text `#B5D390` (links on dark, 9.7:1), focus `#A5C57F` (focus rings, drop targets, the current item, active edges) |
 | Danger | danger_fill `#2E2127`, danger_soft `#47262C`, danger_line `#B4545A`, danger_text `#E0A39C`, danger_text_strong `#F6D4CF` |
+| Warning | warn_text `#E8B86A`, warn_fill `#2B261D`, warn_line `#7E6436` (a card for something the person can fix, such as a missing encoder: warm title, secondary body, secondary buttons) |
 | Type | Geist Regular and Medium only (Roboto Regular behind them for missing characters). title 18 medium, body 14, label 13 medium, small 12, mono 13 |
 | Space | xs 4, sm 8, md 12, lg 16, xl 24, xxl 32 |
 | Radius | small 4, control 6, card 8, window 12 |
@@ -65,6 +66,7 @@ Build redesigned windows from these, not from raw egui calls with styling:
   `kit::submenu` (draws a chevron icon). On/off options: a menu with any toggle (an engine option or an on/off shell action) draws every row with `kit::menu_row_check`, which adds a 24 px check gutter so labels line up; its `kit::Mark` is `Check(on)` for an on/off option (an outlined box when off, an accent box with a check when on, the colours of an on switch), `Radio(on)` for a pick-one group (View's layouts: rings, the current one filled), and `Empty` for a plain command, so a command and an option never look alike. Menu-bar titles get `sm` by `xs` padding so their hover fill has room. Headings in such a menu line up with the labels (`menu_heading(.., gutter)`). Clicking an option flips it and closes the menu; options never get an ellipsis, and their labels name what is on ("Show Lines", never "Toggle Lines"). The order and groups of every menu, shell actions (`!id`) included, come from
   `menus::LAYOUTS`, not from the drawing code. `menu_setup` makes menus at least `control.menu_width` wide. Shortcuts
   show short key names and symbols (`shortcuts::label`: Del, =, −, arrows).
+- Export-style dialogs: fields sit under small uppercase group titles (`kit::group_title`; 24 px between groups, 8 px inside); a card on the app colour holds a few `kit::switch_row`s (label and quiet line at the left, the switch at the right, the whole row clickable); segments of up to three options stretch across the column (`kit::segmented_fill`); a name field carries its extension inside the box and the folder sits on a line under it with a Change… link; a problem sits under its own field in the field's colour (danger border, warning border for "will be replaced"), and the primary button names the result ("Export PNG", "Replace"); a body that may outgrow the window scrolls only when last frame's content was taller (a scroll area always starts with an animating bar); a bare `with_layout(right_to_left)` claims the rest of the window's height, so wrap it in `ui.horizontal`.
 - Panel headers are `panels::Title { label, name, meta, badge, focused }`: a small role label
   (Start, End, Preview), the main text, quiet details at the right and an optional badge.
 
@@ -108,7 +110,7 @@ A command says what it did in plain words: `engine::feedback::describe(id, resul
 | Image menu (Filters submenu with headings, quick rotate and flip in the geometry group) | built | `menus.rs` (layout, `@n` quick items, `~id` to leave a command out), `app.rs` (`menu_items`), `tests/image_menu.rs` | https://claude.ai/artifact/RMvetQQYcj3noyAC3YHxzs |
 | Sequence, Effects, Movie, Face, View and Help menus (Project folded into Movie; Curves submenu; layout dot) | built | `menus.rs` (layouts, `MENU_ORDER`), `actions.rs`, `kit/menu.rs` (`Mark`), `app.rs` (`menu_items`), `tests/more_menus.rs` | https://claude.ai/artifact/MyK7w23FYYoYqja7jzdhvb |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
-| Export dialogs and progress | todo | | |
+| Export dialogs and progress (Image, Image With Dots, Image Sequence, This Sequence, Animated Image, Video, Contact Sheet; progress with frame preview and "Show in folder" toast) | built | `export_dialog.rs` (state), `app/export_ui.rs`, `app/export_job_ui.rs`, `kit/toast.rs`, `tests/export_dialogs.rs` | https://claude.ai/artifact/SpfRWUvPo3unTAeMi5LN7m |
 | Dot tools (select, crop, camera) | todo | | |
 | Effects, adjust, captions, curves, track | todo | | |
 | Face library, model, mix | todo | | |

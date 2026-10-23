@@ -30,6 +30,8 @@ impl ToastKind {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ToastOutcome {
     pub undo: bool,
+    /// The extra action (such as Show in folder) was clicked.
+    pub action: bool,
     pub dismissed: bool,
     /// The pointer is over the card, so the timer should wait.
     pub hovered: bool,
@@ -40,7 +42,14 @@ pub const FADE: f64 = 0.4;
 
 /// Draw the toast `age` seconds into its life. `age` past `kind.lifetime()` fades it out;
 /// the caller drops it once `age` passes `lifetime + FADE`.
-pub fn toast(ctx: &Context, text: &str, kind: ToastKind, undoable: bool, age: f64) -> ToastOutcome {
+pub fn toast(
+    ctx: &Context,
+    text: &str,
+    kind: ToastKind,
+    undoable: bool,
+    action: Option<&str>,
+    age: f64,
+) -> ToastOutcome {
     let t = theme::get(ctx);
     let fade = ((kind.lifetime() + FADE - age) / FADE).clamp(0.0, 1.0) as f32;
     let (accent, glyph) = match kind {
@@ -82,6 +91,19 @@ pub fn toast(ctx: &Context, text: &str, kind: ToastKind, undoable: bool, age: f6
                         )
                         .selectable(false),
                     );
+                    if let Some(label) = action {
+                        if button(
+                            ui,
+                            ButtonKind::Secondary,
+                            label,
+                            true,
+                            t.control.compact_height,
+                        )
+                        .clicked()
+                        {
+                            out.action = true;
+                        }
+                    }
                     if undoable
                         && button(
                             ui,

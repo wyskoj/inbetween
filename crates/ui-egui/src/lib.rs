@@ -18,6 +18,7 @@ pub mod camera_tool;
 pub mod crop;
 pub mod curves;
 pub mod dragdrop;
+pub mod export_dialog;
 pub mod fonts;
 pub mod form;
 pub mod hit;

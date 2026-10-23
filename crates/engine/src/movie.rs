@@ -182,7 +182,7 @@ fn render_frames(
             }
             session.check_cancel()?;
             each(n, &image)?;
-            session.tick();
+            session.tick_frame(&image);
             sent += 1;
         }
     }
@@ -245,7 +245,7 @@ fn render_layers(
         let Some(image) = stack else { continue };
         session.check_cancel()?;
         each(n, &image)?;
-        session.tick();
+        session.tick_frame(&image);
         sent += 1;
     }
     Ok(sent)

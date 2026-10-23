@@ -67,5 +67,5 @@ pub use error::CommandError;
 pub use movie_finish::MovieFinish;
 pub use params::{ParamKind, ParamSpec, Params, PathUse, MAX_LIST_ENTRIES, MAX_STRING_BYTES};
 pub use registry::{CommandInfo, CommandSpec, Registry};
-pub use session::{Prepared, Session};
+pub use session::{FramePreview, Prepared, Session, FRAME_PREVIEW_SIDE};
 pub use state::{DisplayPrefs, DotClip, DotColorMode, DotStyle};

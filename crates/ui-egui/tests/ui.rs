@@ -493,7 +493,7 @@ fn menu_commands_open_forms_and_run_through_the_engine() {
     h.state_mut().invoke("edit.undo");
     h.state_mut().invoke("export.frame");
     assert!(
-        h.state().form().is_none(),
+        h.state().form().is_none() && h.state().export_dialog().is_none(),
         "disabled commands must not open a form"
     );
 
@@ -520,7 +520,10 @@ fn menu_commands_open_forms_and_run_through_the_engine() {
 
     // A command that needs input still opens its form.
     h.state_mut().invoke("export.frame");
-    assert_eq!(h.state().form().map(|f| f.id), Some("export.frame"));
+    assert_eq!(
+        h.state().export_dialog().map(|d| d.kind.id()),
+        Some("export.frame")
+    );
 }
 
 #[test]
