@@ -66,7 +66,9 @@ claude mcp add inbetween -- ib mcp --project demo/demo.inbetween
 
 ## Contributing
 
-Run `cargo xtask ci` before sending a change. [`AGENTS.md`](AGENTS.md) has the ground rules, and it applies to people as well as AI agents.
+Inbetween is built almost entirely with AI coding agents (Claude Code), guided by the rules in [`AGENTS.md`](AGENTS.md) and held to its test suite.
+
+Run `cargo xtask ci` before sending a change. `AGENTS.md` has the ground rules for people and agents alike.
 
 ## License
 
