@@ -270,9 +270,9 @@ impl InbetweenApp {
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let show = [
-                            Segment::icon_only(Icon::Dots, "Show dots"),
-                            Segment::icon_only(Icon::Lines, "Show lines"),
-                            Segment::icon_only(Icon::Triangles, "Show triangles"),
+                            Segment::icon(Icon::Dots, "Dots").tip("Show dots"),
+                            Segment::icon(Icon::Lines, "Lines").tip("Show lines"),
+                            Segment::icon(Icon::Triangles, "Triangles").tip("Show triangles"),
                         ];
                         overlay_click =
                             kit::toggle_group(ui, &show, &overlays, t.control.compact_height);
