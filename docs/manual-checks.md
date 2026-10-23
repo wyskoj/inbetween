@@ -39,7 +39,7 @@ How to read the result: a check passes when the behaviour matches and nothing in
 - [ ] Scrub with the % box ticked and with the wheel over the transport bar.
 - [ ] Ctrl+=, Ctrl+-, Ctrl+0, Alt+Ctrl+0, Alt+Right and Alt+Down zoom the panel under the pointer; with the preview linked it follows.
 - [ ] F8 frame strip on a long sequence: scrolling stays smooth and thumbnails fill in.
-- [ ] Sequence > Movie Size: pick 1080p; the dots still sit on their features.
+- [ ] Movie > Movie Size: pick 1080p; the dots still sit on their features.
 
 ## M19: face detection
 

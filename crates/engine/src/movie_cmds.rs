@@ -204,7 +204,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "movie.size",
             label: "Movie Size",
-            menu: "Sequence/Movie Size...",
+            menu: "Movie/Movie Size...",
             shortcut: None,
             description: "Set (or report) the output frame size: width and height, a preset, or the size of an image. Dots move with their pictures, and sequence and movie captions scale with the height.",
             params: SIZE_PARAMS,
@@ -216,7 +216,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "movie.fps",
             label: "Movie Frame Rate",
-            menu: "Sequence/Frame Rate...",
+            menu: "Movie/Frame Rate...",
             shortcut: None,
             description: "Set (or report) the movie's frames per second, 1 to 60. Playback and exports default to it, and sequence.length converts seconds with it.",
             params: FPS_PARAMS,

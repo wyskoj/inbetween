@@ -35,7 +35,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec {
         id: "project.type",
         label: "Project Type",
-        menu: "Project/Type...",
+        menu: "Movie/Project Type...",
         shortcut: None,
         description: "Choose how sequences combine: one after another (sequence project) or all at once as stacked layers, the first in the list on top (layer project).",
         params: PARAMS,

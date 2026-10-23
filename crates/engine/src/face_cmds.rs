@@ -663,7 +663,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "face.model",
             label: "Face Model",
-            menu: "Face/Model...",
+            menu: "Face/Face Model...",
             shortcut: None,
             description: "Edit or report Inbetween's face dot model: which landmarks a face has, which are enabled or important, their place on the unit face box and the guide lines between them. Presets (standard, minimal) and model files (.inbetweenface) included.",
             params: MODEL_PARAMS,

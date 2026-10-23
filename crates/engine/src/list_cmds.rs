@@ -372,7 +372,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "sequence.reorder",
             label: "Move Sequence",
-            menu: "Sequence/Move Sequence",
+            menu: "Sequence/Move Sequence...",
             shortcut: None,
             description: "Move a sequence up, down, to the top or to the bottom of the list, or to a position.",
             params: REORDER_PARAMS,

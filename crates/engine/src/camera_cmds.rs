@@ -386,7 +386,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "effect.camera",
             label: "Effect Camera",
-            menu: "Sequence/Effect Camera...",
+            menu: "Effects/Effect Camera...",
             shortcut: None,
             description: "Edit (or report) the camera of one still-image effect (background, mask, foreground, transition or light): the same keyframes as the sequence camera, but moving only that effect's picture. A moving mask or light sweeps over a still morph. Takes `scope` movie for movie-wide effects.",
             params: EFFECT_PARAMS,

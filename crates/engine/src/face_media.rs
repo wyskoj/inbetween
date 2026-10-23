@@ -759,7 +759,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "face.library",
             label: "Face Library",
-            menu: "Face/Library...",
+            menu: "Face/Face Library...",
             shortcut: None,
             description: "A folder of images with their dots: list, add, remove, or use an entry in a sequence (its image and dots). Dots are stored in the picture's own pixels so they fit it in any project.",
             params: LIBRARY_PARAMS,

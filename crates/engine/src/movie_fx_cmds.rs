@@ -100,6 +100,11 @@ fn move_filter(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
     move_in(s, p, scope_of(p))
 }
 
+fn has_movie_filters(session: &Session) -> bool {
+    let project = session.project();
+    !project.filters.is_empty() || project.sequences.iter().any(|s| !s.filters.is_empty())
+}
+
 fn clear(s: &mut Session, p: &Params) -> Result<Value, CommandError> {
     clear_list(s, p, scope_of(p))
 }
@@ -216,7 +221,7 @@ const FILTERS: &[Row] = &[
     (
         "movie.filter.clear",
         "image.filter.clear",
-        "Movie/Filters/Remove All",
+        "Movie/Filters/Remove All Filters",
         "Remove every filter from the movie (or a sequence).",
         clear,
     ),
@@ -237,8 +242,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     };
     let mut out = vec![base(
         "movie.adjust",
-        "Adjust",
-        "Movie/Adjust...",
+        "Adjust Color",
+        "Movie/Adjust Color...",
         "Brightness, contrast, red/green/blue balance, hue, saturation, negative and grayscale for every finished frame of the movie.",
         derived(ADJUST_PARAMS, false, true),
         adjust,
@@ -256,6 +261,10 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
             derived(image.params, true, false),
             *run,
         ));
+    }
+    if let Some(clear) = out.iter_mut().find(|s| s.id == "movie.filter.clear") {
+        clear.enabled = has_movie_filters;
+        clear.disabled_reason = "neither the movie nor a sequence has filters";
     }
     out
 }

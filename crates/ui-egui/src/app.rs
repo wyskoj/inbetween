@@ -739,6 +739,7 @@ impl InbetweenApp {
             "view.toggle.triangles" => return Some(prefs.show_triangles),
             "view.toggle.track" => return Some(prefs.show_track),
             "view.toggle.grid" => return Some(prefs.show_grid),
+            "view.magnifier" => return Some(prefs.magnifier),
             "dots.option.autoPartner" => return Some(prefs.auto_partner),
             "dots.option.autoJump" => return Some(prefs.auto_jump),
             "face.option.smartDrag" => return Some(prefs.smart_drag),
@@ -1427,10 +1428,13 @@ impl InbetweenApp {
     fn menu_bar(&mut self, ctx: &Context) {
         let mut clicked: Option<&'static str> = None;
         let mut view_action: Option<&'static str> = None;
-        let entries = self.action_entries();
         let toggles: Vec<(&'static str, bool)> = TOGGLES
             .iter()
             .filter_map(|id| Some((*id, self.toggle_state(id)?)))
+            .collect();
+        let action_states: Vec<(&'static str, bool)> = crate::actions::ACTIONS
+            .iter()
+            .filter_map(|a| Some((a.id, self.action_checked(a.id)?)))
             .collect();
         let recent: Vec<(String, bool)> = self
             .state
@@ -1463,46 +1467,20 @@ impl InbetweenApp {
                         registry: &self.registry,
                         session: &self.session,
                         toggles: &toggles,
+                        actions: &action_states,
                         recent: &recent,
                     };
                     let mut clicks = MenuClicks::default();
                     for node in &self.menus {
                         if let MenuNode::Menu { name, children } = node {
-                            if name == "View" {
-                                continue;
-                            }
                             ui.menu_button(name, |ui| {
                                 crate::kit::menu_setup(ui);
                                 menu_items(ui, children, &menu, &mut clicks);
                             });
                         }
                     }
-                    ui.menu_button("View", |ui| {
-                        crate::kit::menu_setup(ui);
-                        for (id, label, shortcut, gap) in &entries {
-                            if *gap {
-                                crate::kit::menu_separator(ui);
-                            }
-                            if *id == "view.sequenceList" {
-                                // The engine's display commands sit between the layouts and the rest.
-                                for node in &self.menus {
-                                    if let MenuNode::Menu { name, children } = node {
-                                        if name == "View" {
-                                            menu_items(ui, children, &menu, &mut clicks);
-                                        }
-                                    }
-                                }
-                                crate::kit::menu_separator(ui);
-                            }
-                            let key = shortcut.map(shortcuts::label);
-                            if crate::kit::menu_row(ui, label, key.as_deref(), true).clicked() {
-                                view_action = Some(id);
-                                ui.close_menu();
-                            }
-                        }
-                    });
                     clicked = clicks.command;
-                    view_action = clicks.action.or(view_action);
+                    view_action = clicks.action;
                     recent_click = clicks.recent;
                     quick = clicks.quick;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1925,6 +1903,7 @@ const TOGGLES: &[&str] = &[
     "view.toggle.triangles",
     "view.toggle.track",
     "view.toggle.grid",
+    "view.magnifier",
     "dots.option.autoPartner",
     "dots.option.autoJump",
     "face.option.smartDrag",
@@ -1935,6 +1914,8 @@ struct MenuContext<'a> {
     registry: &'a Registry,
     session: &'a Session,
     toggles: &'a [(&'static str, bool)],
+    /// Shell actions that are on/off or pick-one, and whether each is on.
+    actions: &'a [(&'static str, bool)],
     recent: &'a [(String, bool)],
 }
 
@@ -1956,10 +1937,14 @@ fn menu_items(
     menu: &MenuContext<'_>,
     clicks: &mut MenuClicks,
 ) {
+    use crate::kit::Mark;
     // A menu with any on/off option gives every row a check gutter so the labels line up.
-    let gutter = nodes.iter().any(
-        |n| matches!(n, MenuNode::Command { id, .. } if menu.toggles.iter().any(|(t, _)| t == id)),
-    );
+    let gutter = nodes.iter().any(|n| match n {
+        MenuNode::Command { id, .. } => menu.toggles.iter().any(|(t, _)| t == id),
+        MenuNode::Action { id } => menu.actions.iter().any(|(a, _)| a == id),
+        _ => false,
+    });
+    let empty = gutter.then_some(Mark::Empty);
     for node in nodes {
         match node {
             MenuNode::Menu { name, children } => {
@@ -1990,8 +1975,11 @@ fn menu_items(
                 };
                 let key = spec.shortcut.map(shortcuts::label);
                 let hint = key.as_deref().or(*aside);
-                let check = gutter.then_some(on == Some(true));
-                let response = crate::kit::menu_row_check(ui, text, hint, enabled, check);
+                let mark = match on {
+                    Some(true) => Some(Mark::Check),
+                    _ => empty,
+                };
+                let response = crate::kit::menu_row_check(ui, text, hint, enabled, mark);
                 if !enabled {
                     response.on_hover_text(spec.disabled_reason);
                 } else if response.on_hover_text(spec.description).clicked() {
@@ -2004,8 +1992,14 @@ fn menu_items(
                     continue;
                 };
                 let key = action.shortcut.map(shortcuts::label);
-                let check = gutter.then_some(false);
-                if crate::kit::menu_row_check(ui, action.label, key.as_deref(), true, check)
+                let on = menu.actions.iter().any(|(a, on)| a == id && *on);
+                // The layouts are one choice of several, so the current one gets a dot.
+                let mark = match (on, id.starts_with("view.mode.")) {
+                    (true, true) => Some(Mark::Dot),
+                    (true, false) => Some(Mark::Check),
+                    (false, _) => empty,
+                };
+                if crate::kit::menu_row_check(ui, action.label, key.as_deref(), true, mark)
                     .clicked()
                 {
                     clicks.action = Some(action.id);
@@ -2017,14 +2011,12 @@ fn menu_items(
                     continue;
                 };
                 let enabled = menu.session.has_sequences();
-                if crate::kit::menu_row_check(ui, label, None, enabled, gutter.then_some(false))
-                    .clicked()
-                {
+                if crate::kit::menu_row_check(ui, label, None, enabled, empty).clicked() {
                     clicks.quick = Some(*i);
                     ui.close_menu();
                 }
             }
-            MenuNode::Heading(text) => crate::kit::menu_heading(ui, text),
+            MenuNode::Heading(text) => crate::kit::menu_heading(ui, text, gutter),
             MenuNode::Separator => crate::kit::menu_separator(ui),
         }
     }

@@ -31,12 +31,22 @@ fn capitalise(s: &str) -> String {
     }
 }
 
-/// How to show a shortcut in a menu: short key names, so "Delete" does not read like a label.
+/// How to show a shortcut in a menu: short key names and symbols ("Del", "=", arrows), so a key
+/// does not read like a label.
 pub fn label(text: &str) -> String {
-    match text {
-        "Delete" => "Del".to_string(),
-        other => other.to_string(),
-    }
+    text.split('+')
+        .map(|key| match key {
+            "Delete" => "Del",
+            "Equals" => "=",
+            "Minus" => "\u{2212}",
+            "ArrowLeft" => "\u{2190}",
+            "ArrowUp" => "\u{2191}",
+            "ArrowRight" => "\u{2192}",
+            "ArrowDown" => "\u{2193}",
+            other => other,
+        })
+        .collect::<Vec<_>>()
+        .join("+")
 }
 
 #[cfg(test)]
@@ -64,6 +74,8 @@ mod tests {
     fn menus_show_short_key_names() {
         assert_eq!(label("Delete"), "Del");
         assert_eq!(label("Ctrl+Shift+A"), "Ctrl+Shift+A");
+        assert_eq!(label("Ctrl+Equals"), "Ctrl+=");
+        assert_eq!(label("Alt+ArrowRight"), "Alt+\u{2192}");
     }
 
     #[test]

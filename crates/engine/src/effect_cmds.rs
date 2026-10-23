@@ -346,8 +346,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![
         spec(
             "effect.backColor",
-            "Back Colour",
-            "Effects/Back Colour...",
+            "Background Color",
+            "Effects/Background Color...",
             "Solid colour behind the morph (and behind the background image).",
             BACK_COLOR_PARAMS,
             back_color,
@@ -370,8 +370,8 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         ),
         spec(
             "effect.foreground",
-            "Foreground Overlay",
-            "Effects/Foreground Overlay...",
+            "Foreground Image",
+            "Effects/Foreground Image...",
             "Image laid over the morph, such as a frame or graphic.",
             FOREGROUND_PARAMS,
             foreground,

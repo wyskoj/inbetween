@@ -207,7 +207,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec {
         id: "curve.track",
         label: "Track Curve",
-        menu: "Sequence/Track Curve",
+        menu: "Sequence/Curves/Track Curve",
         shortcut: Some("Shift+Ctrl+T"),
         description: "Edit (or report) the track curve: the path every dot travels from Image 1 to Image 2, bent by control points in chord space (u along the straight line, v sideways). Tension 0 to 20 scales the bend; flips mirror it. The ends stay fixed, so the first and last frames still match the images.",
         params: PARAMS,

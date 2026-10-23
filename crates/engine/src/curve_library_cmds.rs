@@ -170,7 +170,7 @@ mod files {
         vec![CommandSpec {
             id: "curve.library",
             label: "Curve Library",
-            menu: "Sequence/Curve Library...",
+            menu: "Sequence/Curves/Curve Library...",
             shortcut: None,
             description: "A folder of named curves: list, save a sequence's feature, shape, master or camera curve under a name, load one back, or delete one.",
             params: PARAMS,

@@ -379,8 +379,8 @@ mod files {
             },
             CommandSpec {
                 id: "tools.benchmark",
-                label: "Benchmark",
-                menu: "Movie/Benchmark",
+                label: "Benchmark Rendering",
+                menu: "Help/Benchmark Rendering",
                 shortcut: None,
                 description: "Time rendering a sequence's frames the way the preview does and the way an export does (render plus PNG encoding), and report milliseconds and frames per second. Writes nothing and changes nothing.",
                 params: BENCH_PARAMS,

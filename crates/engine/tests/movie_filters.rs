@@ -210,3 +210,27 @@ fn a_saved_project_keeps_its_movie_filters() {
     run(&mut again, "project.open", json!({"path": file})).unwrap();
     assert_eq!(frame(&mut again), before);
 }
+
+#[test]
+fn remove_all_filters_needs_a_movie_or_sequence_filter() {
+    let registry = Registry::standard();
+    let enabled = |s: &Session| (registry.get("movie.filter.clear").unwrap().enabled)(s);
+    let (mut s, _d) = session("clear-enabled");
+    assert!(!enabled(&s));
+    run(
+        &mut s,
+        "movie.filter.blur",
+        json!({"scope": "sequence", "sequence": 0}),
+    )
+    .unwrap();
+    assert!(enabled(&s));
+    run(
+        &mut s,
+        "movie.filter.clear",
+        json!({"scope": "sequence", "sequence": 0}),
+    )
+    .unwrap();
+    assert!(!enabled(&s));
+    run(&mut s, "movie.filter.blur", json!({})).unwrap();
+    assert!(enabled(&s));
+}

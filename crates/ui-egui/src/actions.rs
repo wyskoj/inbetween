@@ -1,7 +1,7 @@
 //! Shell-only actions: zoom, layouts, fullscreen, preview scope, and Quit. They change view
 //! state or the window, never the project, so they are not engine commands. One table drives
-//! the menus and the keyboard, so a key and its menu entry cannot drift apart. The `view.*`
-//! actions make up the View menu; the File menu places Quit through its layout.
+//! the menus and the keyboard, so a key and its menu entry cannot drift apart. The menu
+//! layouts (`menus::LAYOUTS`) place them: most in View, Help in Help, Quit in File.
 
 /// One shell action. `id` follows the spec's command ids (`view.*`, `app.*`).
 #[derive(Clone, Copy, Debug)]
@@ -10,56 +10,46 @@ pub struct ShellAction {
     pub label: &'static str,
     /// Text like `Ctrl+0`, parsed by [`crate::shortcuts::parse`].
     pub shortcut: Option<&'static str>,
-    /// A blank line goes before this entry in the menu.
-    pub gap_before: bool,
 }
 
 const fn action(
     id: &'static str,
     label: &'static str,
     shortcut: Option<&'static str>,
-    gap_before: bool,
 ) -> ShellAction {
     ShellAction {
         id,
         label,
         shortcut,
-        gap_before,
     }
 }
 
 pub const ACTIONS: &[ShellAction] = &[
-    action("view.zoomIn", "Zoom In", Some("Ctrl+Equals"), false),
-    action("view.zoomOut", "Zoom Out", Some("Ctrl+Minus"), false),
-    action("view.fit", "Best Fit", Some("Ctrl+0"), false),
-    action(
-        "view.actualSize",
-        "Actual Size (100%)",
-        Some("Alt+Ctrl+0"),
-        false,
-    ),
-    action("view.fitWidth", "Fit Width", Some("Alt+ArrowRight"), false),
-    action("view.fitHeight", "Fit Height", Some("Alt+ArrowDown"), false),
-    action("view.syncSources", "Link the Two Image Views", None, true),
-    action("view.syncPreview", "Link the Preview View", None, false),
-    action("view.mode.full", "Full Layout", Some("F5"), true),
-    action("view.mode.edit", "Edit Layout", Some("F6"), false),
-    action("view.mode.preview", "Preview Layout", Some("F7"), false),
-    action("view.mode.frames", "Frame Sequence", Some("F8"), false),
-    action("view.mode.dual", "Dual Window", Some("F9"), false),
-    action("view.fullscreen", "Full Screen", Some("F11"), false),
-    action("view.sequenceList", "Sequence List", Some("F2"), true),
-    action("view.previewScope", "Preview the Whole Movie", None, false),
+    action("view.zoomIn", "Zoom In", Some("Ctrl+Equals")),
+    action("view.zoomOut", "Zoom Out", Some("Ctrl+Minus")),
+    action("view.fit", "Best Fit", Some("Ctrl+0")),
+    action("view.actualSize", "Actual Size", Some("Alt+Ctrl+0")),
+    action("view.fitWidth", "Fit Width", Some("Alt+ArrowRight")),
+    action("view.fitHeight", "Fit Height", Some("Alt+ArrowDown")),
+    action("view.syncSources", "Link Image Views", None),
+    action("view.syncPreview", "Link Preview View", None),
+    action("view.mode.full", "Full Layout", Some("F5")),
+    action("view.mode.edit", "Edit Layout", Some("F6")),
+    action("view.mode.preview", "Preview Layout", Some("F7")),
+    action("view.mode.frames", "Frame Sequence", Some("F8")),
+    action("view.mode.dual", "Dual Window", Some("F9")),
+    action("view.fullscreen", "Full Screen", Some("F11")),
+    action("view.sequenceList", "Sequence List", Some("F2")),
+    action("view.previewScope", "Preview Whole Movie", None),
     action(
         "view.toggle.checkerboard",
-        "Checkerboard Behind Transparency",
+        "Transparency Checkerboard",
         None,
-        false,
     ),
-    action("view.toggle.numbers", "Dot Numbers", None, false),
-    action("view.toggle.mute", "Mute Sound", None, false),
-    action("view.help", "Help", None, true),
-    action("app.quit", "Quit", Some("Ctrl+Q"), false),
+    action("view.toggle.numbers", "Dot Numbers", None),
+    action("view.toggle.mute", "Mute Sound", None),
+    action("view.help", "Inbetween Help", Some("F1")),
+    action("app.quit", "Quit", Some("Ctrl+Q")),
 ];
 
 /// Extra spellings of the same actions that the menu does not list.

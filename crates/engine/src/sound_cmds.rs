@@ -154,7 +154,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
     vec![CommandSpec {
         id: "effect.sound",
         label: "Sound",
-        menu: "Effects/Sound...",
+        menu: "Movie/Sound...",
         shortcut: None,
         description: "A WAV or MP3 file played under the movie, with looping, cutting and fades. Video exports mux it in.",
         params: PARAMS,

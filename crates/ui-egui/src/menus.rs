@@ -7,7 +7,9 @@
 use inbetween_engine::CommandSpec;
 
 /// Menus in the order they appear; any other top-level name follows, in registry order.
-const MENU_ORDER: &[&str] = &["File", "Edit", "Dots", "Image", "Sequence", "Effects"];
+const MENU_ORDER: &[&str] = &[
+    "File", "Edit", "View", "Dots", "Image", "Sequence", "Effects", "Movie", "Face", "Help",
+];
 
 /// The order of a menu's entries, by menu path. `-` is a separator, `# Text` a small heading,
 /// `> Name` a submenu, `!id` a shell action ([`crate::actions`]), `@n` item `n` of the Image
@@ -120,6 +122,160 @@ const LAYOUTS: &[(&str, &[&str])] = &[
             "dots.clearAll",
         ],
     ),
+    (
+        "Sequence",
+        &[
+            "sequence.addBlank",
+            "sequence.add",
+            "sequence.duplicate",
+            "-",
+            "sequence.rename",
+            "sequence.reorder",
+            "sequence.visibility",
+            "sequence.link",
+            "-",
+            "sequence.length",
+            "sequence.morphType",
+            "sequence.fit",
+            "morph.option.retriangulate",
+            "morph.option.dropCornerTris",
+            "-",
+            "> Curves",
+            "camera.keyframes",
+            "caption.sequence",
+            "-",
+            "sequence.delete",
+        ],
+    ),
+    (
+        "Sequence/Curves",
+        &[
+            "# Morph",
+            "curve.feature",
+            "curve.shape",
+            "curve.master",
+            "curve.track",
+            "-",
+            "# Camera",
+            "camera.curve",
+            "-",
+            "curve.library",
+        ],
+    ),
+    (
+        "Effects",
+        &[
+            "effect.backColor",
+            "effect.background",
+            "effect.foreground",
+            "-",
+            "effect.mask",
+            "effect.transition",
+            "effect.light",
+            "-",
+            "effect.trail",
+            "effect.radial",
+            "-",
+            "effect.camera",
+        ],
+    ),
+    (
+        "Movie",
+        &[
+            "project.type",
+            "movie.size",
+            "movie.fps",
+            "-",
+            "movie.adjust",
+            "> Filters",
+            "caption.movie",
+            "-",
+            "effect.sound",
+            "-",
+            "tools.sequencePacker",
+        ],
+    ),
+    (
+        "Movie/Filters",
+        &[
+            "# Blur",
+            "movie.filter.smooth",
+            "movie.filter.blur",
+            "movie.filter.gaussian",
+            "movie.filter.zoomBlur",
+            "movie.filter.radialBlur",
+            "-",
+            "movie.filter.sharpen",
+            "-",
+            "# Stylize",
+            "movie.filter.emboss",
+            "movie.filter.mosaic",
+            "movie.filter.oilPaint",
+            "movie.filter.splash",
+            "-",
+            "# Distort",
+            "movie.filter.cylinder",
+            "movie.filter.whirl",
+            "movie.filter.pinch",
+            "-",
+            "movie.filter.clear",
+        ],
+    ),
+    (
+        "Face",
+        &[
+            "face.locate",
+            "face.locateAll",
+            "face.detect",
+            "-",
+            "face.model",
+            "face.option.smartDrag",
+            "-",
+            "face.library",
+            "image.saveToLibrary",
+            "-",
+            "face.extract",
+            "face.mix",
+        ],
+    ),
+    (
+        "View",
+        &[
+            "!view.zoomIn",
+            "!view.zoomOut",
+            "!view.fit",
+            "!view.actualSize",
+            "!view.fitWidth",
+            "!view.fitHeight",
+            "-",
+            "!view.syncSources",
+            "!view.syncPreview",
+            "-",
+            "!view.mode.full",
+            "!view.mode.edit",
+            "!view.mode.preview",
+            "!view.mode.frames",
+            "!view.mode.dual",
+            "-",
+            "!view.sequenceList",
+            "!view.fullscreen",
+            "-",
+            "# Show",
+            "view.toggle.dots",
+            "view.toggle.lines",
+            "view.toggle.triangles",
+            "view.toggle.track",
+            "!view.toggle.numbers",
+            "view.toggle.grid",
+            "!view.toggle.checkerboard",
+            "view.magnifier",
+            "-",
+            "# Playback",
+            "!view.previewScope",
+            "!view.toggle.mute",
+        ],
+    ),
+    ("Help", &["!view.help", "-", "tools.benchmark"]),
     (
         "File/Export",
         &[
@@ -342,8 +498,162 @@ mod tests {
     #[test]
     fn standard_menus_come_in_order() {
         let menus = build(Registry::standard().specs());
-        assert_eq!(&names(&menus)[..2], ["File", "Edit"]);
-        assert!(names(&menus).contains(&"Dots") && names(&menus).contains(&"Sequence"));
+        assert_eq!(
+            names(&menus),
+            [
+                "File", "Edit", "View", "Dots", "Image", "Sequence", "Effects", "Movie", "Face",
+                "Help"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_sequence_menu_follows_its_layout() {
+        let menus = build(Registry::standard().specs());
+        let sequence = submenu(&menus, "Sequence");
+        assert_eq!(
+            names(sequence),
+            [
+                "Add Blank Sequence",
+                "Add Continued Sequence\u{2026}",
+                "Duplicate Sequence",
+                "-",
+                "Rename Sequence\u{2026}",
+                "Move Sequence\u{2026}",
+                "Show or Hide Sequence",
+                "Link to Previous",
+                "-",
+                "Length\u{2026}",
+                "Morph Type\u{2026}",
+                "Image Fit\u{2026}",
+                "Re-triangulate Every Frame",
+                "Drop Corner Triangles",
+                "-",
+                "Curves",
+                "Camera\u{2026}",
+                "Caption\u{2026}",
+                "-",
+                "Delete Sequence",
+            ]
+        );
+        assert_eq!(
+            names(submenu(sequence, "Curves")),
+            [
+                "Morph",
+                "Feature Curve",
+                "Shape Curve",
+                "Master Curve",
+                "Track Curve",
+                "-",
+                "Camera",
+                "Easing Curve",
+                "-",
+                "Curve Library\u{2026}",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_effects_movie_and_face_menus_follow_their_layouts() {
+        let menus = build(Registry::standard().specs());
+        assert_eq!(
+            names(submenu(&menus, "Effects")),
+            [
+                "Background Color\u{2026}",
+                "Background Image\u{2026}",
+                "Foreground Image\u{2026}",
+                "-",
+                "Mask\u{2026}",
+                "Transition\u{2026}",
+                "Light\u{2026}",
+                "-",
+                "Trail\u{2026}",
+                "Radial Rays\u{2026}",
+                "-",
+                "Effect Camera\u{2026}",
+            ]
+        );
+        let movie = submenu(&menus, "Movie");
+        assert_eq!(
+            names(movie),
+            [
+                "Project Type\u{2026}",
+                "Movie Size\u{2026}",
+                "Frame Rate\u{2026}",
+                "-",
+                "Adjust Color\u{2026}",
+                "Filters",
+                "Caption\u{2026}",
+                "-",
+                "Sound\u{2026}",
+                "-",
+                "Sequence Packer\u{2026}",
+            ]
+        );
+        let filters = names(submenu(movie, "Filters"));
+        assert_eq!(filters.first(), Some(&"Blur"));
+        assert_eq!(filters.last(), Some(&"Remove All Filters"));
+        assert_eq!(filters.iter().filter(|n| **n == "-").count(), 4);
+        assert_eq!(
+            names(submenu(&menus, "Face")),
+            [
+                "Locate Face\u{2026}",
+                "Locate All Faces",
+                "Detect Faces\u{2026}",
+                "-",
+                "Face Model\u{2026}",
+                "Smart Drag",
+                "-",
+                "Face Library\u{2026}",
+                "Save to Library\u{2026}",
+                "-",
+                "Extract Faces\u{2026}",
+                "Mix Faces\u{2026}",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_view_and_help_menus_follow_their_layouts() {
+        let menus = build(Registry::standard().specs());
+        let view = names(submenu(&menus, "View"));
+        let show = view.iter().position(|n| *n == "Show").unwrap();
+        assert_eq!(
+            &view[show..],
+            [
+                "Show",
+                "Dots",
+                "Lines",
+                "Triangles",
+                "Dot Tracks",
+                "view.toggle.numbers",
+                "Grid",
+                "view.toggle.checkerboard",
+                "Magnifier",
+                "-",
+                "Playback",
+                "view.previewScope",
+                "view.toggle.mute",
+            ]
+        );
+        assert_eq!(view.iter().filter(|n| **n == "-").count(), 5);
+        assert_eq!(
+            names(submenu(&menus, "Help")),
+            ["view.help", "-", "Benchmark Rendering"]
+        );
+    }
+
+    #[test]
+    fn every_shell_action_has_a_place_in_a_menu() {
+        for action in crate::actions::ACTIONS {
+            let entry = format!("!{}", action.id);
+            let places = LAYOUTS
+                .iter()
+                .flat_map(|(_, layout)| layout.iter())
+                .filter(|e| **e == entry)
+                .count();
+            assert_eq!(places, 1, "{}", action.id);
+        }
     }
 
     #[test]
@@ -528,8 +838,13 @@ mod tests {
                 })
                 .sum()
         }
+        let left_out = |id: &str| {
+            LAYOUTS
+                .iter()
+                .any(|(_, layout)| layout.iter().any(|e| e.strip_prefix('~') == Some(id)))
+        };
         for spec in registry.specs() {
-            let expected = usize::from(!spec.menu.is_empty());
+            let expected = usize::from(!spec.menu.is_empty() && !left_out(spec.id));
             assert_eq!(count(&menus, spec.id), expected, "{}", spec.id);
         }
     }
@@ -546,7 +861,12 @@ mod tests {
                     assert!(crate::actions::find(id).is_some(), "{id}");
                     continue;
                 }
-                let id = entry.split(" = ").next().unwrap();
+                if let Some(n) = entry.strip_prefix('@') {
+                    let n: usize = n.parse().unwrap();
+                    assert!(n < crate::app::QUICK_IMAGE.len(), "{entry}");
+                    continue;
+                }
+                let id = entry.trim_start_matches('~').split(" = ").next().unwrap();
                 assert!(registry.get(id).is_some(), "{id}");
             }
         }

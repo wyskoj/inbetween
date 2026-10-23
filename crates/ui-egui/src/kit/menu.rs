@@ -18,6 +18,7 @@ pub fn menu_setup(ui: &mut Ui) {
     s.item_spacing.y = 0.0;
     s.button_padding = Vec2::new(t.space.md, 0.0);
     s.interact_size.y = t.control.compact_height;
+    ui.set_min_width(t.control.menu_width);
 }
 
 /// One command row: the label at the left, a shortcut or hint (`hint`) at the right in a
@@ -26,15 +27,25 @@ pub fn menu_row(ui: &mut Ui, label: &str, hint: Option<&str>, enabled: bool) -> 
     menu_row_check(ui, label, hint, enabled, None)
 }
 
-/// A row in a menu that has on/off options. Every row of such a menu gets a check gutter at
-/// the left so the labels line up; `check` is `Some(true)` for an option that is on, `Some(false)`
-/// for one that is off or a plain command, and `None` for no gutter at all.
+/// What the check gutter of a menu row shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mark {
+    /// A plain command, or an option that is off.
+    Empty,
+    /// An on/off option that is on.
+    Check,
+    /// The current choice of a pick-one group (the layout).
+    Dot,
+}
+
+/// A row in a menu that has options. Every row of such a menu gets a check gutter at the left
+/// so the labels line up; `mark` is what the gutter shows, and `None` means no gutter at all.
 pub fn menu_row_check(
     ui: &mut Ui,
     label: &str,
     hint: Option<&str>,
     enabled: bool,
-    check: Option<bool>,
+    mark: Option<Mark>,
 ) -> Response {
     let t = theme::get(ui.ctx());
     let c = &t.color;
@@ -49,7 +60,7 @@ pub fn menu_row_check(
     });
     let hint_w = hint.as_ref().map_or(0.0, |g| t.space.xl + g.size().x);
     // The gutter replaces part of the left padding: the check sits at the usual inset.
-    let gutter = if check.is_some() {
+    let gutter = if mark.is_some() {
         t.space.xl - t.space.xs
     } else {
         0.0
@@ -68,13 +79,18 @@ pub fn menu_row_check(
             (true, true) => (c.text, c.text_secondary),
             (true, false) => (c.text, c.text_tertiary),
         };
-        if check == Some(true) {
-            let size = t.text.body;
-            let mark = Rect::from_center_size(
-                Pos2::new(inner.left() - t.space.xs + size / 2.0, inner.center().y),
-                Vec2::splat(size),
-            );
-            icon(ui, mark, Icon::Check, fg, 1.75);
+        let size = t.text.body;
+        let slot = Rect::from_center_size(
+            Pos2::new(inner.left() - t.space.xs + size / 2.0, inner.center().y),
+            Vec2::splat(size),
+        );
+        match mark {
+            Some(Mark::Check) => icon(ui, slot, Icon::Check, fg, 1.75),
+            Some(Mark::Dot) => {
+                ui.painter()
+                    .circle_filled(slot.center(), t.space.xs * 0.75, fg);
+            }
+            _ => {}
         }
         let p = ui.painter();
         p.galley(
@@ -161,8 +177,9 @@ pub fn menu_row_detail(
     response
 }
 
-/// A small heading over a group of rows ("Whole movie").
-pub fn menu_heading(ui: &mut Ui, text: &str) {
+/// A small heading over a group of rows ("Whole movie"). In a menu with a check gutter
+/// (`gutter`), it lines up with the row labels rather than the marks.
+pub fn menu_heading(ui: &mut Ui, text: &str, gutter: bool) {
     let t = theme::get(ui.ctx());
     let galley = ui.painter().layout_no_wrap(
         text.to_string(),
@@ -170,13 +187,18 @@ pub fn menu_heading(ui: &mut Ui, text: &str) {
         Color32::PLACEHOLDER,
     );
     let want = Vec2::new(
-        galley.size().x + t.space.md * 2.0,
+        galley.size().x + t.space.md * 2.0 + if gutter { t.space.xl } else { 0.0 },
         galley.size().y + t.space.sm + t.space.xs,
     );
     let (rect, response) = ui.allocate_at_least(want, Sense::hover());
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, text));
+    let inset = if gutter {
+        t.space.md + t.space.xl - t.space.xs
+    } else {
+        t.space.md
+    };
     let pos = Pos2::new(
-        rect.left() + t.space.md,
+        rect.left() + inset,
         rect.bottom() - t.space.xs - galley.size().y,
     );
     ui.painter().galley(pos, galley, t.color.text_tertiary);

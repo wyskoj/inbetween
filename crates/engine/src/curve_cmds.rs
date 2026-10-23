@@ -169,7 +169,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "curve.feature",
             label: "Feature Curve",
-            menu: "Sequence/Feature Curve",
+            menu: "Sequence/Curves/Feature Curve",
             shortcut: Some("Shift+Ctrl+F"),
             description: "Edit (or report) the feature curve, which remaps the colour-dissolve amount over time. Points run left to right; the ends stay at (0, 0) and (1, 1).",
             params: PARAMS,
@@ -181,7 +181,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "curve.shape",
             label: "Shape Curve",
-            menu: "Sequence/Shape Curve",
+            menu: "Sequence/Curves/Shape Curve",
             shortcut: Some("Shift+Ctrl+H"),
             description: "Edit (or report) the shape curve, which remaps how far the dots have moved over time. Points run left to right; the ends stay at (0, 0) and (1, 1).",
             params: PARAMS,
@@ -193,7 +193,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "curve.master",
             label: "Master Curve",
-            menu: "Sequence/Master Curve",
+            menu: "Sequence/Curves/Master Curve",
             shortcut: Some("Shift+Ctrl+M"),
             description: "Edit (or report) the master curve, the sequence's overall opacity over time (a fade in or out). Starts and ends at full opacity; move the end points up or down with `move`.",
             params: PARAMS,
@@ -205,7 +205,7 @@ pub(crate) fn specs() -> Vec<CommandSpec> {
         CommandSpec {
             id: "camera.curve",
             label: "Camera Easing Curve",
-            menu: "Sequence/Camera Easing Curve",
+            menu: "Sequence/Curves/Easing Curve",
             shortcut: None,
             description: "Edit (or report) the camera's easing curve, which remaps the time the camera keyframes are read at. The ends stay at (0, 0) and (1, 1).",
             params: PARAMS,

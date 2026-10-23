@@ -124,7 +124,8 @@ impl InbetweenApp {
         true
     }
 
-    /// Whether a toggle-like action is on, for its check mark in the menu.
+    /// Whether an on/off or pick-one action is on, for its mark in the menu. Plain actions
+    /// (zoom, Help) give `None`.
     pub(super) fn action_checked(&self, id: &str) -> Option<bool> {
         Some(match id {
             "view.syncSources" => self.state.link_sources,
@@ -140,7 +141,6 @@ impl InbetweenApp {
             "view.toggle.checkerboard" => self.state.checkerboard,
             "view.toggle.numbers" => self.state.show_numbers,
             "view.toggle.mute" => self.state.muted,
-            "view.help" => self.state.show_help,
             _ => return None,
         })
     }
@@ -179,22 +179,5 @@ impl InbetweenApp {
             self.fullscreen = on;
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(on));
         }
-    }
-
-    /// The menu entries of the action table in the View menu: the text, its shortcut and
-    /// whether it carries a check mark.
-    pub(super) fn action_entries(&self) -> Vec<(&'static str, String, Option<&'static str>, bool)> {
-        ACTIONS
-            .iter()
-            .filter(|a| a.id.starts_with("view."))
-            .map(|a| {
-                let label = match self.action_checked(a.id) {
-                    Some(true) => format!("[x] {}", a.label),
-                    Some(false) => format!("[  ] {}", a.label),
-                    None => a.label.to_string(),
-                };
-                (a.id, label, a.shortcut, a.gap_before)
-            })
-            .collect()
     }
 }

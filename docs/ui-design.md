@@ -62,8 +62,9 @@ Build redesigned windows from these, not from raw egui calls with styling:
 - Menus: every menu body starts with `kit::menu_setup`, then `kit::menu_row` (label, and a
   shortcut or hint at the right in tertiary), `kit::menu_row_detail` (a name over a quiet detail
   line, with an optional warning tag), `kit::menu_heading`, `kit::menu_separator` and
-  `kit::submenu` (draws a chevron icon). On/off options: a menu with any toggle draws every row with `kit::menu_row_check`, which adds a 24 px check gutter so labels line up; an option that is on shows `Icon::Check` there, one that is off shows nothing (no empty box). Clicking an option flips it and closes the menu; options never get an ellipsis, and their labels name what is on ("Show Lines", never "Toggle Lines"). Pick-one groups will use a filled dot in the same gutter. The order and groups of a menu come from
-  `menus::LAYOUTS`, not from the drawing code. Menus are at least `control.menu_width` wide.
+  `kit::submenu` (draws a chevron icon). On/off options: a menu with any toggle (an engine option or an on/off shell action) draws every row with `kit::menu_row_check`, which adds a 24 px check gutter so labels line up; its `kit::Mark` is `Check` for an option that is on, `Empty` for one that is off (no empty box), and `Dot` for the current choice of a pick-one group (View's layouts). Headings in such a menu line up with the labels (`menu_heading(.., gutter)`). Clicking an option flips it and closes the menu; options never get an ellipsis, and their labels name what is on ("Show Lines", never "Toggle Lines"). The order and groups of every menu, shell actions (`!id`) included, come from
+  `menus::LAYOUTS`, not from the drawing code. `menu_setup` makes menus at least `control.menu_width` wide. Shortcuts
+  show short key names and symbols (`shortcuts::label`: Del, =, −, arrows).
 - Panel headers are `panels::Title { label, name, meta, badge, focused }`: a small role label
   (Start, End, Preview), the main text, quiet details at the right and an optional badge.
 
@@ -101,7 +102,7 @@ Build redesigned windows from these, not from raw egui calls with styling:
 | Edit menu | built | `menus.rs` (layout), `shortcuts.rs` (`label`), `tests/edit_menu.rs` | https://claude.ai/artifact/LRgkaqEyBs6qiz4F6q3RXn |
 | Dots menu (and the on/off check pattern for all menus) | built | `menus.rs` (layout), `kit/menu.rs` (`menu_row_check`), `app.rs` (`menu_items`), `app/select_ui.rs` (toolbar switches) | https://claude.ai/artifact/2MmAZ5Ue4WgqK38p3tA9VT |
 | Image menu (Filters submenu with headings, quick rotate and flip in the geometry group) | built | `menus.rs` (layout, `@n` quick items, `~id` to leave a command out), `app.rs` (`menu_items`), `tests/image_menu.rs` | https://claude.ai/artifact/RMvetQQYcj3noyAC3YHxzs |
-| Other menus (Sequence, View): regroup | todo (menu style applied) | | |
+| Sequence, Effects, Movie, Face, View and Help menus (Project folded into Movie; Curves submenu; layout dot) | built | `menus.rs` (layouts, `MENU_ORDER`), `actions.rs`, `kit/menu.rs` (`Mark`), `app.rs` (`menu_items`), `tests/more_menus.rs` | https://claude.ai/artifact/MyK7w23FYYoYqja7jzdhvb |
 | Generic command form (`form_ui.rs`) | todo (global theme applied) | | |
 | Export dialogs and progress | todo | | |
 | Dot tools (select, crop, camera) | todo | | |
