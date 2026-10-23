@@ -1463,6 +1463,10 @@ impl InbetweenApp {
             )
             .show(ctx, |ui| {
                 egui::menu::bar(ui, |ui| {
+                    // The bar's own style hugs each title; give the hover fill room around it.
+                    let gap = ui.spacing().item_spacing.x;
+                    ui.spacing_mut().button_padding = egui::vec2(t.space.sm, t.space.xs);
+                    ui.spacing_mut().item_spacing.x = 0.0;
                     let menu = MenuContext {
                         registry: &self.registry,
                         session: &self.session,
@@ -1483,6 +1487,7 @@ impl InbetweenApp {
                     view_action = clicks.action;
                     recent_click = clicks.recent;
                     quick = clicks.quick;
+                    ui.spacing_mut().item_spacing.x = gap;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let segments: Vec<crate::kit::Segment<'_>> = LAYOUT_MODES
                             .iter()
@@ -1975,10 +1980,7 @@ fn menu_items(
                 };
                 let key = spec.shortcut.map(shortcuts::label);
                 let hint = key.as_deref().or(*aside);
-                let mark = match on {
-                    Some(true) => Some(Mark::Check),
-                    _ => empty,
-                };
+                let mark = on.map(Mark::Check).or(empty);
                 let response = crate::kit::menu_row_check(ui, text, hint, enabled, mark);
                 if !enabled {
                     response.on_hover_text(spec.disabled_reason);
@@ -1992,12 +1994,12 @@ fn menu_items(
                     continue;
                 };
                 let key = action.shortcut.map(shortcuts::label);
-                let on = menu.actions.iter().any(|(a, on)| a == id && *on);
-                // The layouts are one choice of several, so the current one gets a dot.
+                let on = menu.actions.iter().find(|(a, _)| a == id).map(|(_, on)| *on);
+                // The layouts are one choice of several, so they get radio rings.
                 let mark = match (on, id.starts_with("view.mode.")) {
-                    (true, true) => Some(Mark::Dot),
-                    (true, false) => Some(Mark::Check),
-                    (false, _) => empty,
+                    (Some(on), true) => Some(Mark::Radio(on)),
+                    (Some(on), false) => Some(Mark::Check(on)),
+                    (None, _) => empty,
                 };
                 if crate::kit::menu_row_check(ui, action.label, key.as_deref(), true, mark)
                     .clicked()

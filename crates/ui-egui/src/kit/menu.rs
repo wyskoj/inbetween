@@ -5,8 +5,8 @@ use super::{icon, Icon};
 use crate::theme;
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{
-    Color32, CornerRadius, FontId, Galley, InnerResponse, Pos2, Rect, Response, Sense, Stroke, Ui,
-    Vec2, WidgetInfo, WidgetType,
+    Color32, CornerRadius, FontId, Galley, InnerResponse, Pos2, Rect, Response, Sense, Stroke,
+    StrokeKind, Ui, Vec2, WidgetInfo, WidgetType,
 };
 use std::sync::Arc;
 
@@ -30,12 +30,12 @@ pub fn menu_row(ui: &mut Ui, label: &str, hint: Option<&str>, enabled: bool) -> 
 /// What the check gutter of a menu row shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mark {
-    /// A plain command, or an option that is off.
+    /// A plain command: the gutter stays blank.
     Empty,
-    /// An on/off option that is on.
-    Check,
-    /// The current choice of a pick-one group (the layout).
-    Dot,
+    /// An on/off option: a box, filled and checked when on.
+    Check(bool),
+    /// One choice of a pick-one group (the layout): a ring, filled when chosen.
+    Radio(bool),
 }
 
 /// A row in a menu that has options. Every row of such a menu gets a check gutter at the left
@@ -79,18 +79,10 @@ pub fn menu_row_check(
             (true, true) => (c.text, c.text_secondary),
             (true, false) => (c.text, c.text_tertiary),
         };
-        let size = t.text.body;
-        let slot = Rect::from_center_size(
-            Pos2::new(inner.left() - t.space.xs + size / 2.0, inner.center().y),
-            Vec2::splat(size),
-        );
-        match mark {
-            Some(Mark::Check) => icon(ui, slot, Icon::Check, fg, 1.75),
-            Some(Mark::Dot) => {
-                ui.painter()
-                    .circle_filled(slot.center(), t.space.xs * 0.75, fg);
-            }
-            _ => {}
+        if let Some(mark) = mark {
+            let size = t.text.body;
+            let centre = Pos2::new(inner.left() - t.space.xs + size / 2.0, inner.center().y);
+            paint_mark(ui, centre, mark, enabled);
         }
         let p = ui.painter();
         p.galley(
@@ -276,6 +268,42 @@ fn allocate(ui: &mut Ui, want: Vec2, enabled: bool, label: &str) -> (Rect, Respo
     let (rect, response) = ui.allocate_at_least(want, sense);
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, enabled, label));
     (rect, response)
+}
+
+/// A check box or radio ring centred on `centre`: an outline when off, an accent fill when on
+/// (the colours of an on [`super::switch`]).
+fn paint_mark(ui: &Ui, centre: Pos2, mark: Mark, enabled: bool) {
+    let t = theme::get(ui.ctx());
+    let c = &t.color;
+    let side = t.text.small;
+    let (ring, fill, ink) = if enabled {
+        (c.text_tertiary, c.accent, c.accent_text)
+    } else {
+        (c.text_disabled, c.text_disabled, c.surface)
+    };
+    let p = ui.painter();
+    match mark {
+        Mark::Empty => {}
+        Mark::Check(on) => {
+            let r = Rect::from_center_size(centre, Vec2::splat(side));
+            let corner = CornerRadius::same(t.radius.small.saturating_sub(1));
+            if on {
+                p.rect_filled(r, corner, fill);
+                icon(ui, r.shrink(1.0), Icon::Check, ink, 1.75);
+            } else {
+                p.rect_stroke(r.shrink(0.5), corner, Stroke::new(1.0_f32, ring), StrokeKind::Inside);
+            }
+        }
+        Mark::Radio(on) => {
+            let radius = side / 2.0;
+            if on {
+                p.circle_filled(centre, radius, fill);
+                p.circle_filled(centre, radius * 0.4, ink);
+            } else {
+                p.circle_stroke(centre, radius - 0.5, Stroke::new(1.0_f32, ring));
+            }
+        }
+    }
 }
 
 fn paint_hover(ui: &Ui, rect: Rect, hot: bool) {
