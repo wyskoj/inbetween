@@ -291,7 +291,12 @@ fn paint_mark(ui: &Ui, centre: Pos2, mark: Mark, enabled: bool) {
                 p.rect_filled(r, corner, fill);
                 icon(ui, r.shrink(1.0), Icon::Check, ink, 1.75);
             } else {
-                p.rect_stroke(r.shrink(0.5), corner, Stroke::new(1.0_f32, ring), StrokeKind::Inside);
+                p.rect_stroke(
+                    r.shrink(0.5),
+                    corner,
+                    Stroke::new(1.0_f32, ring),
+                    StrokeKind::Inside,
+                );
             }
         }
         Mark::Radio(on) => {

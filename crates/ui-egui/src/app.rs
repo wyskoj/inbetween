@@ -1994,7 +1994,11 @@ fn menu_items(
                     continue;
                 };
                 let key = action.shortcut.map(shortcuts::label);
-                let on = menu.actions.iter().find(|(a, _)| a == id).map(|(_, on)| *on);
+                let on = menu
+                    .actions
+                    .iter()
+                    .find(|(a, _)| a == id)
+                    .map(|(_, on)| *on);
                 // The layouts are one choice of several, so they get radio rings.
                 let mark = match (on, id.starts_with("view.mode.")) {
                     (Some(on), true) => Some(Mark::Radio(on)),
