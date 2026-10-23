@@ -31,25 +31,24 @@ impl InbetweenApp {
             _ => "before replacing it",
         };
         let mut choice = None;
-        egui::Window::new("Unsaved changes")
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
-                ui.label(format!("Save the changes to {name} {what}?"));
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Save").clicked() {
-                        choice = Some(PromptChoice::Save);
-                    }
-                    if ui.button("Don't Save").clicked() {
-                        choice = Some(PromptChoice::DontSave);
-                    }
-                    if ui.button("Cancel").clicked() {
-                        choice = Some(PromptChoice::Cancel);
-                    }
-                });
+        // A modal rather than a window: it is drawn after the other dialogs, so it stacks above
+        // them. A plain window sat underneath an open dialog such as New from two images.
+        egui::Modal::new(egui::Id::new("unsaved_changes")).show(ctx, |ui| {
+            ui.heading("Unsaved changes");
+            ui.label(format!("Save the changes to {name} {what}?"));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() {
+                    choice = Some(PromptChoice::Save);
+                }
+                if ui.button("Don't Save").clicked() {
+                    choice = Some(PromptChoice::DontSave);
+                }
+                if ui.button("Cancel").clicked() {
+                    choice = Some(PromptChoice::Cancel);
+                }
             });
+        });
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             choice = Some(PromptChoice::Cancel);
         }
