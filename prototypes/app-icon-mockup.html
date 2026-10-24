@@ -1,0 +1,159 @@
+<title>Inbetween Icon Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: three direction cards in a responsive grid, each with a master, true-size ladder, and context strips; spec table below. Tokens copied from docs/ui-design.md. */
+:root{
+  --bg:#F3F4EF; --surface:#FFFFFF; --line:#D9DCD0; --text:#1E2118; --text2:#565C4B;
+  --accent:#4D5640; --accent-text:#4F6B2C; --strip-light:#E9EBE2; --strip-dark:#15171C;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171C;--surface:#1E2128;--line:#333844;--text:#E8EAEF;--text2:#A3AAB8;--accent-text:#B5D390;--strip-light:#D8DBCF;--strip-dark:#0E1013;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15171C;--surface:#1E2128;--line:#333844;--text:#E8EAEF;--text2:#A3AAB8;--accent-text:#B5D390;--strip-light:#D8DBCF;--strip-dark:#0E1013;color-scheme:dark}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;padding-block:32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:32px}
+h1{font-size:26px;line-height:1.2;margin:0 0 6px;text-wrap:balance}
+h2{font-size:18px;margin:0;text-wrap:balance}
+p{margin:0}
+.lead{color:var(--text2);max-width:65ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-text);font-weight:600}
+.master{display:flex;justify-content:center;padding:8px 0}
+.master svg{width:min(100%,240px);height:auto}
+.ladder{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.ladder figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+.ladder figcaption,.cap{font-family:var(--mono);font-size:11px;color:var(--text2)}
+.strips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.strip{border-radius:6px;padding:10px;display:flex;gap:10px;align-items:center;justify-content:center}
+.strip.l{background:var(--strip-light)}.strip.d{background:var(--strip-dark)}
+.why{color:var(--text2);font-size:13px}
+.why b{color:var(--text)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
+td code{font-family:var(--mono);font-size:12px}
+.wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+</style>
+
+<main>
+<header>
+  <h1>Inbetween icon directions</h1>
+  <p class="lead">Round two. A and B are your picks, kept as the reference. M1 to M4 mix them: the ring, in-between dot and solid dot from A, set on the triangle mesh from B. Each is shown at 240 px, then at true pixel size (128, 64, 32, 16) on a light and a dark strip.</p>
+</header>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5A6449"/><stop offset="1" stop-color="#3B4331"/></linearGradient>
+
+    <!-- A: Midpoint. Two key dots and the frame between them. -->
+    <symbol id="iconA" viewBox="0 0 1024 1024">
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <path d="M284 740 L740 284" stroke="#A5C57F" stroke-opacity=".45" stroke-width="40" stroke-linecap="round" stroke-dasharray="1 96"/>
+      <circle cx="284" cy="740" r="132" fill="none" stroke="#E8EAEF" stroke-width="56"/>
+      <circle cx="740" cy="284" r="132" fill="#E8EAEF"/>
+      <circle cx="512" cy="512" r="104" fill="#B5D390"/>
+    </symbol>
+
+    <!-- B: Mesh. One triangle, its interior dot pulled off the ghost position. -->
+    <symbol id="iconB" viewBox="0 0 1024 1024">
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <path d="M512 196 L216 760 L808 760 Z" fill="#A5C57F" fill-opacity=".14"/>
+      <path d="M512 196 L650 560 L808 760 Z" fill="#B5D390" fill-opacity=".9"/>
+      <path d="M512 196 L216 760 L808 760 Z M650 560 L216 760 M650 560 L512 196 M650 560 L808 760" fill="none" stroke="#E8EAEF" stroke-width="40" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="512" cy="196" r="64" fill="#E8EAEF"/><circle cx="216" cy="760" r="64" fill="#E8EAEF"/><circle cx="808" cy="760" r="64" fill="#E8EAEF"/>
+      <circle cx="480" cy="580" r="44" fill="none" stroke="#B5D390" stroke-width="24" stroke-dasharray="26 22"/>
+      <circle cx="650" cy="560" r="76" fill="#3B4331" stroke="#E8EAEF" stroke-width="40"/>
+    </symbol>
+
+    <!-- C: Crossfade. A circle becomes a square; the overlap is the in-between. -->
+    <symbol id="iconC" viewBox="0 0 1024 1024">
+      <clipPath id="cc"><circle cx="400" cy="512" r="250"/></clipPath>
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <circle cx="400" cy="512" r="250" fill="#B5D390"/>
+      <rect x="400" y="262" width="500" height="500" rx="64" fill="#E8EAEF"/>
+      <rect x="400" y="262" width="500" height="500" rx="64" fill="#8FAE6A" clip-path="url(#cc)"/>
+    </symbol>
+    <!-- M1: Facet. One triangle; the A trail runs along its long edge. -->
+    <symbol id="iconM1" viewBox="0 0 1024 1024">
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <path d="M256 744 L768 280 L800 780 Z" fill="#B5D390" fill-opacity=".22" stroke="#E8EAEF" stroke-opacity=".6" stroke-width="36" stroke-linejoin="round"/>
+      <path d="M256 744 L768 280" stroke="#E8EAEF" stroke-width="44" stroke-linecap="round"/>
+      <circle cx="800" cy="780" r="56" fill="#E8EAEF"/>
+      <circle cx="256" cy="744" r="120" fill="#44503A" stroke="#E8EAEF" stroke-width="52"/>
+      <circle cx="768" cy="280" r="120" fill="#E8EAEF"/>
+      <circle cx="512" cy="512" r="96" fill="#B5D390"/>
+    </symbol>
+
+    <!-- M2: Three triangles. Outline, in-between, solid: the dissolve drawn with mesh cells. -->
+    <symbol id="iconM2" viewBox="0 0 1024 1024">
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <path transform="translate(318 700)" d="M0 -190 L180 140 L-180 140 Z" fill="none" stroke="#E8EAEF" stroke-width="52" stroke-linejoin="round"/>
+      <path transform="translate(706 324)" d="M0 -190 L180 140 L-180 140 Z" fill="#E8EAEF" stroke="#E8EAEF" stroke-width="52" stroke-linejoin="round"/>
+      <path transform="translate(512 512)" d="M0 -130 L124 96 L-124 96 Z" fill="#B5D390" stroke="#B5D390" stroke-width="44" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- M3: Quad. Two mesh cells; the shared edge carries ring, in-between, solid. -->
+    <symbol id="iconM3" viewBox="0 0 1024 1024">
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <path d="M250 250 L774 250 L774 774 L250 774 Z" fill="none" stroke="#E8EAEF" stroke-opacity=".55" stroke-width="36" stroke-linejoin="round"/>
+      <path d="M250 250 L774 250 L774 774 Z" fill="#B5D390" fill-opacity=".3"/>
+      <path d="M250 774 L774 250" stroke="#E8EAEF" stroke-width="40" stroke-linecap="round"/>
+      <circle cx="250" cy="250" r="54" fill="#E8EAEF" fill-opacity=".8"/>
+      <circle cx="774" cy="774" r="54" fill="#E8EAEF" fill-opacity=".8"/>
+      <circle cx="250" cy="774" r="122" fill="#44503A" stroke="#E8EAEF" stroke-width="52"/>
+      <circle cx="774" cy="250" r="122" fill="#E8EAEF"/>
+      <circle cx="512" cy="512" r="92" fill="#B5D390"/>
+    </symbol>
+
+    <!-- M4: Dragged dot. B's triangle, with the moved dot shown as ring, in-between and solid. -->
+    <symbol id="iconM4" viewBox="0 0 1024 1024">
+      <rect x="32" y="32" width="960" height="960" rx="216" fill="url(#bg)"/>
+      <path d="M512 170 L180 790 L844 790 Z" fill="#B5D390" fill-opacity=".14"/>
+      <path d="M624 560 L512 170 M624 560 L180 790 M624 560 L844 790" fill="none" stroke="#E8EAEF" stroke-opacity=".55" stroke-width="30" stroke-linecap="round"/>
+      <path d="M512 170 L180 790 L844 790 Z" fill="none" stroke="#E8EAEF" stroke-width="40" stroke-linejoin="round"/>
+      <circle cx="512" cy="170" r="62" fill="#E8EAEF"/><circle cx="180" cy="790" r="62" fill="#E8EAEF"/><circle cx="844" cy="790" r="62" fill="#E8EAEF"/>
+      <circle cx="386" cy="640" r="72" fill="#44503A" stroke="#E8EAEF" stroke-width="32"/>
+      <circle cx="505" cy="600" r="54" fill="#B5D390"/>
+      <circle cx="624" cy="560" r="72" fill="#E8EAEF"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="grid" id="cards"></div>
+
+<section style="display:flex;flex-direction:column;gap:12px">
+  <h2>Proposed source and sizes</h2>
+  <p class="lead">Whichever direction wins, the answer to the ticket would be: one hand-written SVG as the source of truth, rasterised by a small xtask into every platform format and checked in, so building needs no extra tools.</p>
+  <div class="wrap"><table>
+    <tr><th>Platform</th><th>File</th><th>Sizes</th><th>Notes</th></tr>
+    <tr><td>Source</td><td><code>assets/icon/inbetween.svg</code></td><td>1024 viewBox</td><td>Rounded-square plate baked in. Simple shapes only, so 16 px stays legible.</td></tr>
+    <tr><td>Windows</td><td><code>inbetween.ico</code></td><td>16, 24, 32, 48, 64, 256</td><td>Embedded in the .exe and used by the installer. 16 and 24 use a slightly thickened variant if the drawing needs it.</td></tr>
+    <tr><td>macOS</td><td><code>inbetween.icns</code></td><td>16, 32, 128, 256, 512 plus @2x (up to 1024)</td><td>The plate already has the rounded-square shape with a small margin, as the OS expects.</td></tr>
+    <tr><td>Linux</td><td><code>hicolor/&lt;n&gt;x&lt;n&gt;/apps/inbetween.png</code></td><td>16, 32, 48, 64, 128, 256, 512 plus the SVG</td><td>Referenced by the .desktop file. Window icon at runtime is the 256 PNG.</td></tr>
+  </table></div>
+</section>
+</main>
+
+<script>
+const dirs=[
+ {id:'iconM1',tag:'Mix M1',name:'Facet',why:'<b>Idea:</b> A\'s diagonal trail laid along one edge of a single mesh triangle. The cleanest merge: A stays recognisable, the triangle adds "mesh". <b>At 16 px:</b> trail dominates, triangle is a soft shadow.'},
+ {id:'iconM2',tag:'Mix M2',name:'Three triangles',why:'<b>Idea:</b> A\'s ring, sage and solid roles, but each is a triangle: outline, in-between, filled. No dots at all. <b>At 16 px:</b> three clear shapes, though it reads less like "key points".'},
+ {id:'iconM3',tag:'Mix M3',name:'Quad',why:'<b>Idea:</b> two mesh cells sharing a diagonal edge; the ring, in-between and solid sit on that edge. Reads as a warp grid and a dot trail at once. <b>At 16 px:</b> square plus diagonal and big dots; the faint corner dots are lost.'},
+ {id:'iconM4',tag:'Mix M4',name:'Dragged dot',why:'<b>Idea:</b> B\'s triangle, where the dragged interior dot is drawn as ring, sage and solid so the motion is explicit. Most detailed. <b>At 16 px:</b> triangle and one blob; the three-step trail merges.'},
+ {id:'iconA',tag:'Direction A',name:'Midpoint',why:'<b>Idea:</b> the two key dots you place, and the frame that appears between them. Ring is image 1, solid dot is image 2, sage dot is the in-between. <b>At 16 px:</b> three dots on a diagonal still read.'},
+ {id:'iconB',tag:'Direction B',name:'Mesh',why:'<b>Idea:</b> the triangle mesh that does the warping, with one dot dragged away from its ghost position. Most literally "morphing". <b>At 16 px:</b> the outline triangle and one filled facet survive; the dashed ghost drops out.'},
+ {id:'iconC',tag:'Direction C',name:'Crossfade',why:'<b>Idea:</b> a circle turning into a square, the overlap is the blended frame. Simplest shapes, strongest at tiny sizes. <b>Trade-off:</b> says "dissolve" more than "warp".'}
+];
+const use=(id,s)=>`<svg width="${s}" height="${s}" viewBox="0 0 1024 1024" aria-hidden="true"><use href="#${id}"/></svg>`;
+document.getElementById('cards').innerHTML=dirs.map(d=>`
+<article class="card">
+  <div><div class="tag">${d.tag}</div><h2>${d.name}</h2></div>
+  <div class="master">${use(d.id,240)}</div>
+  <div class="ladder">${[128,64,32,16].map(s=>`<figure>${use(d.id,s)}<figcaption>${s}</figcaption></figure>`).join('')}</div>
+  <div class="strips">
+    <div class="strip l">${use(d.id,32)}${use(d.id,16)}</div>
+    <div class="strip d">${use(d.id,32)}${use(d.id,16)}</div>
+  </div>
+  <p class="why">${d.why}</p>
+</article>`).join('');
+</script>
